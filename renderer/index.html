@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Font Layout Editor</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="toolbar">
+    <div class="toolbar-group">
+      <label for="input-text">テキスト</label>
+      <input id="input-text" type="text" placeholder="文字を入力..." maxlength="80" />
+      <button id="btn-add">追加</button>
+    </div>
+
+    <div class="toolbar-group">
+      <label for="font-family">フォント</label>
+      <select id="font-family">
+        <option value="Arial">Arial</option>
+        <option value="Georgia">Georgia</option>
+        <option value="Courier New">Courier New</option>
+        <option value="Times New Roman">Times New Roman</option>
+        <option value="Verdana">Verdana</option>
+        <option value="Impact">Impact</option>
+      </select>
+    </div>
+
+    <div class="toolbar-group">
+      <label for="font-size">サイズ</label>
+      <input id="font-size" type="number" value="72" min="8" max="400" step="1" />
+    </div>
+
+    <div class="toolbar-group">
+      <label for="font-color">カラー</label>
+      <input id="font-color" type="color" value="#ffffff" />
+    </div>
+
+    <div class="toolbar-group">
+      <label for="rotation">回転 (°)</label>
+      <input id="rotation" type="number" value="0" min="-360" max="360" step="1" />
+      <button id="btn-apply-rotation">適用</button>
+    </div>
+
+    <div class="toolbar-group">
+      <button id="btn-select-all">全選択</button>
+      <button id="btn-clear">クリア</button>
+    </div>
+
+    <div class="toolbar-group">
+      <button id="btn-export" class="btn-primary">PNG書き出し</button>
+    </div>
+  </div>
+
+  <div id="canvas-container">
+    <canvas id="main-canvas"></canvas>
+  </div>
+
+  <script src="../node_modules/fabric/dist/fabric.js"></script>
+  <script src="../dist/renderer/app.js"></script>
+</body>
+</html>

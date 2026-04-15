@@ -1,0 +1,173 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg:      #1e1e1e;
+  --surface: #2d2d2d;
+  --border:  #444;
+  --text:    #e0e0e0;
+  --accent:  #5b9cf6;
+  --accent-h:#3b7de8;
+  --danger:  #e05555;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+
+#toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  min-height: 48px;
+  user-select: none;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 10px;
+  border-right: 1px solid var(--border);
+}
+
+.toolbar-group:last-child {
+  border-right: none;
+}
+
+label {
+  color: #999;
+  white-space: nowrap;
+}
+
+input[type="text"],
+input[type="number"],
+select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 4px 7px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+select:focus {
+  border-color: var(--accent);
+}
+
+input[type="text"]   { width: 180px; }
+input[type="number"] { width: 68px; }
+select               { width: 140px; }
+
+input[type="color"] {
+  width: 36px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+
+button:hover {
+  background: #3a3a3a;
+  border-color: #666;
+}
+
+button.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+button.btn-primary:hover {
+  background: var(--accent-h);
+  border-color: var(--accent-h);
+}
+
+/* ── Canvas area ─────────────────────────────────────────────────────────── */
+
+#canvas-container {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 48px);
+  /* Checkerboard to visualise transparency */
+  background-color: #333;
+  background-image:
+    linear-gradient(45deg, #2a2a2a 25%, transparent 25%),
+    linear-gradient(-45deg, #2a2a2a 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #2a2a2a 75%),
+    linear-gradient(-45deg, transparent 75%, #2a2a2a 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  overflow: hidden;
+}
+
+#main-canvas {
+  display: block;
+}
+
+/* Fabric.js injects a wrapper div */
+#canvas-container > .canvas-container {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ── Toast ───────────────────────────────────────────────────────────────── */
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 6px;
+  color: #e0e0e0;
+  padding: 8px 18px;
+  font-size: 13px;
+  z-index: 9999;
+  pointer-events: none;
+  animation: fade-in-up 0.2s ease;
+}
+
+.toast.toast-error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
