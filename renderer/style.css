@@ -5,13 +5,13 @@
 }
 
 :root {
-  --bg:      #1e1e1e;
-  --surface: #2d2d2d;
-  --border:  #444;
-  --text:    #e0e0e0;
-  --accent:  #5b9cf6;
-  --accent-h:#3b7de8;
-  --danger:  #e05555;
+  --bg:      #f4f4f5;
+  --surface: #ffffff;
+  --border:  #d4d4d8;
+  --text:    #18181b;
+  --accent:  #2563eb;
+  --accent-h:#1d4ed8;
+  --danger:  #dc2626;
 }
 
 html, body {
@@ -50,7 +50,7 @@ html, body {
 }
 
 label {
-  color: #999;
+  color: #71717a;
   white-space: nowrap;
 }
 
@@ -100,8 +100,8 @@ button {
 }
 
 button:hover {
-  background: #3a3a3a;
-  border-color: #666;
+  background: #e4e4e7;
+  border-color: #a1a1aa;
 }
 
 button.btn-primary {
@@ -116,6 +116,43 @@ button.btn-primary:hover {
   border-color: var(--accent-h);
 }
 
+button.mode-btn {
+  font-size: 13px;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+}
+
+button.mode-btn.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ツールアイコン SVG */
+.tool-icon {
+  width: 14px;
+  height: 18px;
+  display: block;
+  fill: currentColor;
+}
+
+/* 白矢印: アウトラインのみ */
+.outline-arrow path {
+  fill: var(--surface);
+  stroke: currentColor;
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+}
+
+/* 白矢印ボタンがアクティブな時 */
+.mode-btn.is-active .outline-arrow path {
+  fill: var(--accent);
+  stroke: #fff;
+}
+
 /* ── Canvas area ─────────────────────────────────────────────────────────── */
 
 #canvas-container {
@@ -123,12 +160,12 @@ button.btn-primary:hover {
   width: 100%;
   height: calc(100vh - 48px);
   /* Checkerboard to visualise transparency */
-  background-color: #333;
+  background-color: #ffffff;
   background-image:
-    linear-gradient(45deg, #2a2a2a 25%, transparent 25%),
-    linear-gradient(-45deg, #2a2a2a 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, #2a2a2a 75%),
-    linear-gradient(-45deg, transparent 75%, #2a2a2a 75%);
+    linear-gradient(45deg, #e0e0e0 25%, transparent 25%),
+    linear-gradient(-45deg, #e0e0e0 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e0e0e0 75%),
+    linear-gradient(-45deg, transparent 75%, #e0e0e0 75%);
   background-size: 20px 20px;
   background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
   overflow: hidden;
@@ -151,14 +188,15 @@ button.btn-primary:hover {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: #333;
-  border: 1px solid #555;
+  background: #ffffff;
+  border: 1px solid #d4d4d8;
   border-radius: 6px;
-  color: #e0e0e0;
+  color: #18181b;
   padding: 8px 18px;
   font-size: 13px;
   z-index: 9999;
   pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
   animation: fade-in-up 0.2s ease;
 }
 

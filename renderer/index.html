@@ -9,20 +9,27 @@
 <body>
   <div id="toolbar">
     <div class="toolbar-group">
-      <label for="input-text">テキスト</label>
-      <input id="input-text" type="text" placeholder="文字を入力..." maxlength="80" />
-      <button id="btn-add">追加</button>
+      <button id="btn-mode-select-group" class="mode-btn is-active" title="グループ選択/移動 (黒矢印)">
+        <svg class="tool-icon" viewBox="0 0 14 18" xmlns="http://www.w3.org/2000/svg">
+          <path d="M2,1 L2,14 L5,11 L7.5,16.5 L9.5,15.5 L7,10 L12,10 Z"/>
+        </svg>
+      </button>
+      <button id="btn-mode-select-char" class="mode-btn" title="文字選択/カーニング (白矢印)">
+        <svg class="tool-icon outline-arrow" viewBox="0 0 14 18" xmlns="http://www.w3.org/2000/svg">
+          <path d="M2,1 L2,14 L5,11 L7.5,16.5 L9.5,15.5 L7,10 L12,10 Z"/>
+        </svg>
+      </button>
+      <button id="btn-mode-text" class="mode-btn" title="文字入力 (T)" style="font-weight:700;font-size:15px;">T</button>
     </div>
 
     <div class="toolbar-group">
       <label for="font-family">フォント</label>
       <select id="font-family">
         <option value="Arial">Arial</option>
-        <option value="Georgia">Georgia</option>
-        <option value="Courier New">Courier New</option>
-        <option value="Times New Roman">Times New Roman</option>
-        <option value="Verdana">Verdana</option>
-        <option value="Impact">Impact</option>
+      </select>
+      <label for="font-style">スタイル</label>
+      <select id="font-style">
+        <option value="400|normal">Regular</option>
       </select>
     </div>
 
@@ -33,7 +40,7 @@
 
     <div class="toolbar-group">
       <label for="font-color">カラー</label>
-      <input id="font-color" type="color" value="#ffffff" />
+      <input id="font-color" type="color" value="#000000" />
     </div>
 
     <div class="toolbar-group">
@@ -42,9 +49,22 @@
       <button id="btn-apply-rotation">適用</button>
     </div>
 
+    <div class="toolbar-group" title="白矢印モードでの移動時、グリッドに吸着します (Alt で一時バイパス)">
+      <label for="snap-enabled">スナップ</label>
+      <input id="snap-enabled" type="checkbox" checked />
+      <label for="snap-pitch">グリッド</label>
+      <input id="snap-pitch" type="number" value="8" min="1" max="64" step="1" />
+      <label for="snap-threshold">閾値</label>
+      <input id="snap-threshold" type="number" value="5" min="1" max="32" step="1" />
+    </div>
+
     <div class="toolbar-group">
       <button id="btn-select-all">全選択</button>
       <button id="btn-clear">クリア</button>
+    </div>
+
+    <div class="toolbar-group">
+      <button id="btn-outline" title="選択中の文字をパス化 (Cmd/Ctrl+Shift+O)">アウトライン化</button>
     </div>
 
     <div class="toolbar-group">
@@ -57,6 +77,8 @@
   </div>
 
   <script src="../node_modules/fabric/dist/fabric.js"></script>
+  <script src="vendor/fontkit.js"></script>
+  <script src="../dist/renderer/outline-position.js"></script>
   <script src="../dist/renderer/app.js"></script>
 </body>
 </html>

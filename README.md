@@ -26,6 +26,46 @@ npm test
 
 > 現在テストは未実装です。将来的に [Vitest](https://vitest.dev/) + [Spectron](https://github.com/electron-userland/spectron) によるユニットテスト・E2Eテストを追加予定です。
 
+## Windows向けバイナリのビルド
+
+[electron-builder](https://www.electron.build/) を使って Portable .exe (x64) を生成します。
+
+### 1. WSL2/Linux に wine をインストール
+
+実行ファイルのメタデータ書き換えに `wine` が必要です（Ubuntu/Debian の例）。
+
+```bash
+sudo apt update
+sudo apt install -y wine64
+```
+
+### 2. ビルド
+
+```bash
+npm run dist:win
+```
+
+成果物は以下に生成されます。
+
+```
+release/mojiplay-1.0.0-portable-x64.exe
+```
+
+これを Windows PC にコピーするだけで起動します（インストール不要）。
+
+### 動作確認のみ（wine不要）
+
+```bash
+npm run pack
+```
+
+`release/win-unpacked/` に展開済みの実行ディレクトリが生成されます。
+中の `mojiplay.exe` を実機に持っていけば起動可能です。
+
+### アイコンの差し替え
+
+`build/icon.ico` (256×256以上) を置けば自動でアプリのアイコンになります。詳細は [`build/README.md`](./build/README.md) を参照。
+
 ## 機能
 
 - テキストを入力すると一文字ずつ独立したオブジェクトとしてキャンバスに配置
