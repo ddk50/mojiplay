@@ -25,6 +25,94 @@
     },
   };
 
+  // ── Custom menu bar (Claude Desktop 風 HTML メニュー) ──────────────────
+
+  function initMenuBar(): void {
+    const menuItems = document.querySelectorAll('#menu-bar .menu-item');
+
+    function closeAll(): void {
+      menuItems.forEach(mi => mi.classList.remove('is-open'));
+    }
+
+    menuItems.forEach(item => {
+      const label = item.querySelector('.menu-label');
+      if (!label) return;
+
+      label.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const wasOpen = item.classList.contains('is-open');
+        closeAll();
+        if (!wasOpen) item.classList.add('is-open');
+      });
+
+      // ホバーで切り替え (他メニューが開いている時)
+      label.addEventListener('mouseenter', () => {
+        const anyOpen = document.querySelector('#menu-bar .menu-item.is-open');
+        if (anyOpen && anyOpen !== item) {
+          closeAll();
+          item.classList.add('is-open');
+        }
+      });
+    });
+
+    // 外クリックで閉じる
+    document.addEventListener('click', closeAll);
+
+    // アクション実行
+    document.querySelectorAll('#menu-bar .menu-dropdown button[data-action]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = (btn as HTMLElement).dataset.action;
+        closeAll();
+        handleMenuAction(action || '');
+      });
+    });
+  }
+
+  // メニューアクション → 後で canvas 初期化後に使う関数を参照するため
+  // handleMenuAction は関数宣言 (hoisted) で定義し、canvas 依存部分は
+  // そこから呼ぶ。initMenuBar() はここで即実行。
+  function handleMenuAction(action: string): void {
+    switch (action) {
+      case 'copy':
+        // doCopy は後段で定義 (hoisted function)
+        if (typeof doCopy === 'function') doCopy();
+        break;
+      case 'undo':
+        document.execCommand('undo');
+        break;
+      case 'redo':
+        document.execCommand('redo');
+        break;
+      case 'paste':
+        document.execCommand('paste');
+        break;
+      case 'delete':
+        menuDeleteSelection();
+        break;
+      case 'select-all':
+        menuSelectAll();
+        break;
+      case 'devtools':
+        void window.electronAPI?.toggleDevTools();
+        break;
+      case 'zoom-in':
+        void window.electronAPI?.zoomIn();
+        break;
+      case 'zoom-out':
+        void window.electronAPI?.zoomOut();
+        break;
+      case 'zoom-reset':
+        void window.electronAPI?.zoomReset();
+        break;
+      case 'fullscreen':
+        void window.electronAPI?.toggleFullscreen();
+        break;
+    }
+  }
+
+  initMenuBar();
+
   // ── Canvas setup ──────────────────────────────────────────────────────────
 
   const container = document.getElementById('canvas-container') as HTMLDivElement;
@@ -196,6 +284,7 @@
       o.evented    = isSelectMode;
     });
 
+    clearAnchorState();
     if (!isSelectMode) canvas.discardActiveObject();
     canvas.requestRenderAll();
   }
@@ -360,15 +449,9 @@
     canvas.requestRenderAll();
   }
 
-  canvas.on('selection:created', () => {
-    if (currentMode === 'select-group') expandSelectionToGroup();
-    syncToolbarToSelection();
-  });
-
-  canvas.on('selection:updated', () => {
-    if (currentMode === 'select-group') expandSelectionToGroup();
-    syncToolbarToSelection();
-  });
+  // selection:created / selection:updated は後段のアンカー編集セクションで
+  // clearAnchorState + expandSelectionToGroup + syncToolbarToSelection を
+  // まとめて登録している。
 
   // ── Apply property to selected objects ───────────────────────────────────
 
@@ -486,16 +569,26 @@
     rotationInput.value = String(Math.round(active.angle ?? 0));
   }
 
-  // ── Select all ────────────────────────────────────────────────────────────
+  // ── Select all / Delete (メニューとツールバーの両方から呼ばれる) ─────────
 
-  (document.getElementById('btn-select-all') as HTMLButtonElement).addEventListener('click', () => {
+  function menuSelectAll(): void {
     canvas.discardActiveObject();
     const all = canvas.getObjects();
     if (!all.length) return;
     const sel = new fabric.ActiveSelection(all, { canvas });
     canvas.setActiveObject(sel);
     canvas.requestRenderAll();
-  });
+  }
+
+  function menuDeleteSelection(): void {
+    const selected = canvas.getActiveObjects();
+    if (!selected.length) return;
+    selected.forEach(obj => canvas.remove(obj));
+    canvas.discardActiveObject();
+    canvas.renderAll();
+  }
+
+  (document.getElementById('btn-select-all') as HTMLButtonElement).addEventListener('click', menuSelectAll);
 
   // ── Clear canvas ──────────────────────────────────────────────────────────
 
@@ -785,19 +878,321 @@
     void outlineSelection();
   });
 
+  // ── アンカー編集オーバーレイ (Phase 2a) ──────────────────────────────────
+  //
+  // select-char (白矢印) モードで outline 化済み fabric.Path が選択されているとき、
+  // パスのアンカーポイント (セグメント端点) を正方形マーカーで表示し、
+  // ドラッグで個別アンカー + 付属ベジェハンドルを剛体移動する。
+
+  const ANCHOR_MARKER_PX  = 7;
+  const ANCHOR_HIT_RADIUS = 6;
+  const ANCHOR_FILL       = '#ffffff';
+  const ANCHOR_STROKE     = '#0066ff';
+
+  interface AnchorScreenPos { anchorIndex: number; sx: number; sy: number }
+  let anchorScreenCache: AnchorScreenPos[] = [];
+
+  interface AnchorDragState {
+    pathObj: fabric.Path;
+    anchorIndex: number;
+    startPath: any[];
+    lastPointer: { x: number; y: number };
+  }
+  let anchorDrag: AnchorDragState | null = null;
+
+  function getEditablePath(): fabric.Path | null {
+    if (currentMode !== 'select-char') return null;
+    const obj = canvas.getActiveObject();
+    if (!obj || obj.type !== 'path') return null;
+    if (!(obj as any).data?.outlined) return null;
+    return obj as fabric.Path;
+  }
+
+  function anchorLocalToScreen(
+    ax: number, ay: number, path: fabric.Path,
+  ): { sx: number; sy: number } {
+    const po = (path as any).pathOffset as { x: number; y: number };
+    const mat = path.calcTransformMatrix();
+    const vt = canvas.viewportTransform!;
+    const world = fabric.util.transformPoint(
+      { x: ax - po.x, y: ay - po.y } as fabric.Point,
+      mat,
+    );
+    const screen = fabric.util.transformPoint(world, vt);
+    return { sx: screen.x, sy: screen.y };
+  }
+
+  function drawAnchorOverlay(): void {
+    const ctx = (canvas as any).contextTop as CanvasRenderingContext2D;
+    if (ctx) canvas.clearContext(ctx);
+
+    const path = getEditablePath();
+    if (!path || !ctx) {
+      anchorScreenCache = [];
+      return;
+    }
+
+    const cmds = (path as any).path as any[];
+    if (!cmds) { anchorScreenCache = []; return; }
+
+    const anchors = extractAnchors(cmds);
+    const half = ANCHOR_MARKER_PX / 2;
+    const cache: AnchorScreenPos[] = [];
+
+    ctx.save();
+    // ── DPI スケーリング補正 ──────────────────────────────────────
+    // fabric の contextTop (オーバーレイ用 Canvas) は高 DPI 環境では
+    // 物理ピクセルサイズが CSS ピクセルの devicePixelRatio (dpr) 倍に
+    // なっている。anchorLocalToScreen() が返す座標は CSS ピクセル空間
+    // なので、setTransform で dpr を掛けないと dpr 倍ずれて描画される。
+    //
+    // force-device-scale-factor: 1 を使っていた時は dpr=1 のため
+    // 問題が顕在化しなかったが、OS スケーリングに従うようにした
+    // (dpr>1) ことで顕在化した。
+    const retina = (canvas as any).getRetinaScaling?.() ?? window.devicePixelRatio ?? 1;
+    ctx.setTransform(retina, 0, 0, retina, 0, 0);
+    ctx.strokeStyle = ANCHOR_STROKE;
+    ctx.lineWidth = 1;
+    ctx.fillStyle = ANCHOR_FILL;
+
+    for (let i = 0; i < anchors.length; i++) {
+      const a = anchors[i];
+      const { sx, sy } = anchorLocalToScreen(a.x, a.y, path);
+      cache.push({ anchorIndex: i, sx, sy });
+      ctx.fillRect(sx - half, sy - half, ANCHOR_MARKER_PX, ANCHOR_MARKER_PX);
+      ctx.strokeRect(sx - half, sy - half, ANCHOR_MARKER_PX, ANCHOR_MARKER_PX);
+    }
+    ctx.restore();
+
+    anchorScreenCache = cache;
+  }
+
+  canvas.on('after:render', drawAnchorOverlay);
+
+  function hitTestAnchor(screenX: number, screenY: number): number {
+    let bestIdx = -1;
+    let bestDist = ANCHOR_HIT_RADIUS + 1;
+    for (const a of anchorScreenCache) {
+      const dx = screenX - a.sx;
+      const dy = screenY - a.sy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = a.anchorIndex;
+      }
+    }
+    return bestIdx;
+  }
+
+  function clearAnchorState(): void {
+    anchorDrag = null;
+    anchorScreenCache = [];
+    const ctx = (canvas as any).contextTop as CanvasRenderingContext2D;
+    if (ctx) canvas.clearContext(ctx);
+  }
+
+  // DOM capture で fabric の mousedown より先にアンカーヒットテストを行う。
+  // ヒットした場合は stopImmediatePropagation で fabric に渡さない。
+  const upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement;
+
+  upperCanvas.addEventListener('mousedown', (e: MouseEvent) => {
+    const path = getEditablePath();
+    if (!path) return;
+
+    const rect = upperCanvas.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    const aidx = hitTestAnchor(screenX, screenY);
+    if (aidx < 0) return;
+
+    e.stopImmediatePropagation();
+    e.preventDefault();
+
+    const cmds = (path as any).path as any[];
+    anchorDrag = {
+      pathObj: path,
+      anchorIndex: aidx,
+      startPath: cmds.map((c: any[]) => c.slice()),
+      lastPointer: canvas.getPointer(e),
+    };
+
+    const onMove = (me: MouseEvent) => {
+      if (!anchorDrag) return;
+
+      const pointer = canvas.getPointer(me);
+      const worldDx = pointer.x - anchorDrag.lastPointer.x;
+      const worldDy = pointer.y - anchorDrag.lastPointer.y;
+
+      // world delta → path-local delta (逆行列の線形部分のみ使用)
+      const mat = anchorDrag.pathObj.calcTransformMatrix();
+      const inv = fabric.util.invertTransform(mat);
+      // 線形部分 (回転・スケール) だけ適用。並進成分を除去
+      const localDx = inv[0] * worldDx + inv[2] * worldDy;
+      const localDy = inv[1] * worldDx + inv[3] * worldDy;
+
+      const curPath = (anchorDrag.pathObj as any).path as any[];
+      const newPath = moveAnchorRigid(curPath, anchorDrag.anchorIndex, localDx, localDy);
+      (anchorDrag.pathObj as any).path = newPath;
+      (anchorDrag.pathObj as any).dirty = true;
+      anchorDrag.lastPointer = pointer;
+      canvas.requestRenderAll();
+    };
+
+    const onUp = (_ue: MouseEvent) => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (anchorDrag) {
+        const p = anchorDrag.pathObj;
+
+        // ── bbox 再計算 ────────────────────────────────────────────
+        // アンカー移動で path コマンドが変わったため、width/height/pathOffset
+        // を再計算する。_setPositionDimensions は pathOffset を更新するが、
+        // left/top を明示指定しているため上書きされない。
+        // pathOffset の変化分を left/top に反映して視覚位置を維持する。
+        const oldPO = { x: (p as any).pathOffset.x, y: (p as any).pathOffset.y };
+        (fabric.Polyline.prototype as any)._setPositionDimensions.call(p, {
+          left: p.left,
+          top: p.top,
+        });
+        const newPO = (p as any).pathOffset as { x: number; y: number };
+        const dxLocal = oldPO.x - newPO.x;
+        const dyLocal = oldPO.y - newPO.y;
+        const sx = (p.scaleX as number) ?? 1;
+        const sy = (p.scaleY as number) ?? 1;
+        const rad = ((p.angle as number) ?? 0) * Math.PI / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        p.left = (p.left ?? 0) + dxLocal * sx * cos - dyLocal * sy * sin;
+        p.top  = (p.top  ?? 0) + dxLocal * sx * sin + dyLocal * sy * cos;
+
+        p.setCoords();
+        canvas.fire('object:modified', { target: p } as any);
+        anchorDrag = null;
+      }
+      canvas.requestRenderAll();
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, true);
+
+  // ホバー時のカーソル変更
+  upperCanvas.addEventListener('mousemove', (e: MouseEvent) => {
+    if (anchorDrag) return;
+    const path = getEditablePath();
+    if (!path) {
+      upperCanvas.style.cursor = '';
+      return;
+    }
+    const rect = upperCanvas.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    const aidx = hitTestAnchor(screenX, screenY);
+    upperCanvas.style.cursor = aidx >= 0 ? 'move' : '';
+  }, true);
+
+  // モード・選択変更時のクリーンアップ
+  canvas.on('selection:cleared', clearAnchorState);
+  canvas.on('selection:created', () => {
+    clearAnchorState();
+    if (currentMode === 'select-group') expandSelectionToGroup();
+    syncToolbarToSelection();
+  });
+  canvas.on('selection:updated', () => {
+    clearAnchorState();
+    if (currentMode === 'select-group') expandSelectionToGroup();
+    syncToolbarToSelection();
+  });
+  canvas.on('object:removed', (e: fabric.IEvent) => {
+    if (anchorDrag && e.target === anchorDrag.pathObj) clearAnchorState();
+  });
+
+  // ── 選択オブジェクトを透過 PNG としてクリップボードにコピー ────────────
+  //
+  // Electron のデフォルトメニュー Edit > Copy (role:'copy') は Ctrl+C を
+  // ネイティブ側で捕捉し document.execCommand('copy') を呼ぶ。
+  // この結果 DOM に copy イベントが dispatch される（keydown は届かない）。
+  // そのため copy イベントで捕捉するのが正しいルート。
+  //
+  // IText 編集中は fabric 自身のテキストコピーに任せる。
+
+  async function copySelectionAsPng(): Promise<void> {
+    logger.debug('[copy] copySelectionAsPng called');
+    const active = canvas.getActiveObject();
+    if (!active) {
+      logger.debug('[copy] no active object, skipping');
+      return;
+    }
+    logger.debug(`[copy] active type=${active.type}`);
+
+    try {
+      // exportObjectToPngDataUrl は typed wrapper で、toCanvasElement に
+      // options オブジェクト ({ multiplier }) を正しく渡すことを型で保証する。
+      // 詳細は src/renderer/copy-export.ts の経緯コメント参照。
+      const result = exportObjectToPngDataUrl(active as any, 10);
+      const dataUrl = result.dataUrl;
+      logger.debug(`[copy] dataUrl length=${dataUrl.length} canvas=${result.width}x${result.height}`);
+
+      if (window.electronAPI) {
+        await window.electronAPI.copyImageToClipboard(dataUrl);
+        showToast('クリップボードにコピーしました');
+        logger.info('[copy] image copied to clipboard');
+      } else {
+        logger.warn('[copy] electronAPI not available');
+      }
+    } catch (err) {
+      logger.error('[copy] failed', err);
+      showToast('コピーに失敗しました', true);
+    }
+  }
+
+  // メインプロセスのカスタムメニュー Edit > Copy から IPC で通知される
+  let lastCopyTime = 0;
+
+  function doCopy(): void {
+    const now = Date.now();
+    if (now - lastCopyTime < 200) return;
+    lastCopyTime = now;
+    void copySelectionAsPng();
+  }
+
+  if (window.electronAPI) {
+    window.electronAPI.onMenuCopy(() => {
+      logger.debug('[copy] menu-copy IPC received');
+      const active = canvas.getActiveObject() as any;
+      if (active && !active.isEditing) {
+        doCopy();
+      }
+    });
+  }
+
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
+
+  function isToolbarInput(): boolean {
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+  }
 
   document.addEventListener('keydown', (e: KeyboardEvent) => {
     // IText 編集中は Fabric に任せる
     const active = canvas.getActiveObject() as any;
     if (active && active.isEditing) return;
 
+    // Ctrl+C / Cmd+C: 選択オブジェクトを透過 PNG でクリップボードにコピー
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey &&
+        (e.key === 'c' || e.key === 'C')) {
+      if (!isToolbarInput() && canvas.getActiveObject()) {
+        e.preventDefault();
+        doCopy();
+      }
+      return;
+    }
+
     if ((e.key === 'Delete' || e.key === 'Backspace') &&
-        document.activeElement === document.body) {
-      const selected = canvas.getActiveObjects();
-      selected.forEach(obj => canvas.remove(obj));
-      canvas.discardActiveObject();
-      canvas.renderAll();
+        !isToolbarInput()) {
+      menuDeleteSelection();
     }
 
     // Cmd/Ctrl+Shift+O: 選択中テキストをアウトライン化 (Illustrator 慣例)

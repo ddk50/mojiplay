@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, session } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, session, Menu, clipboard, nativeImage } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import log from 'electron-log';
@@ -43,10 +43,11 @@ log.info(`[startup] isPackaged=${app.isPackaged}, execPath=${process.execPath}, 
 log.info(`[startup] PORTABLE_EXECUTABLE_DIR=${process.env.PORTABLE_EXECUTABLE_DIR ?? '(unset)'}`);
 log.info(`[startup] log dir resolved to: ${LOG_DIR}`);
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
+    show: false,
     backgroundColor: '#1e1e1e',
     webPreferences: {
       nodeIntegration: false,
@@ -55,7 +56,9 @@ function createWindow(): void {
     }
   });
 
+  win.once('ready-to-show', () => win.show());
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  return win;
 }
 
 // IPC handler: renderer sends base64 PNG data URL → main writes file
@@ -84,7 +87,36 @@ ipcMain.handle('log', (_event, level: string, message: string) => {
   (log as any)[level]?.(message);
 });
 
-app.commandLine.appendSwitch('force-device-scale-factor', '1');
+// IPC handler: 透過 PNG dataURL → クリップボードに画像として書き込み
+// clipboard / nativeImage はメインプロセスでのみ利用可能
+// (サンドボックス有効の preload では使えない)
+ipcMain.handle('copy-image', (_event, dataUrl: string) => {
+  const img = nativeImage.createFromDataURL(dataUrl);
+  clipboard.writeImage(img);
+  log.info('[copy-image] image written to clipboard');
+});
+
+// IPC handlers: HTML カスタムメニューの View 系アクション
+ipcMain.handle('toggle-devtools', (event) => {
+  event.sender.toggleDevTools();
+});
+ipcMain.handle('zoom-in', (event) => {
+  const level = event.sender.getZoomLevel();
+  event.sender.setZoomLevel(level + 0.5);
+});
+ipcMain.handle('zoom-out', (event) => {
+  const level = event.sender.getZoomLevel();
+  event.sender.setZoomLevel(level - 0.5);
+});
+ipcMain.handle('zoom-reset', (event) => {
+  event.sender.setZoomLevel(0);
+});
+ipcMain.handle('toggle-fullscreen', () => {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) win.setFullScreen(!win.isFullScreen());
+});
+
+
 
 app.whenReady().then(() => {
   // Local Font Access API (window.queryLocalFonts) は local-fonts 権限を要求する。
@@ -97,7 +129,11 @@ app.whenReady().then(() => {
     return (permission as string) === 'local-fonts';
   });
 
-  createWindow();
+  // ネイティブメニューバーを非表示にし、HTML カスタムメニューに置き換える
+  Menu.setApplicationMenu(null);
+
+  const win = createWindow();
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

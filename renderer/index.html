@@ -7,6 +7,34 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div id="menu-bar">
+    <div class="menu-item" data-menu="edit">
+      <span class="menu-label">Edit</span>
+      <div class="menu-dropdown">
+        <button data-action="undo">元に戻す<span class="shortcut">Ctrl+Z</span></button>
+        <button data-action="redo">やり直し<span class="shortcut">Ctrl+Shift+Z</span></button>
+        <div class="menu-separator"></div>
+        <button data-action="copy">コピー (PNG)<span class="shortcut">Ctrl+C</span></button>
+        <button data-action="paste">貼り付け<span class="shortcut">Ctrl+V</span></button>
+        <button data-action="delete">削除<span class="shortcut">Delete</span></button>
+        <div class="menu-separator"></div>
+        <button data-action="select-all">すべて選択<span class="shortcut">Ctrl+A</span></button>
+      </div>
+    </div>
+    <div class="menu-item" data-menu="view">
+      <span class="menu-label">View</span>
+      <div class="menu-dropdown">
+        <button data-action="devtools">開発者ツール<span class="shortcut">F12</span></button>
+        <div class="menu-separator"></div>
+        <button data-action="zoom-in">拡大<span class="shortcut">Ctrl+=</span></button>
+        <button data-action="zoom-out">縮小<span class="shortcut">Ctrl+-</span></button>
+        <button data-action="zoom-reset">リセット<span class="shortcut">Ctrl+0</span></button>
+        <div class="menu-separator"></div>
+        <button data-action="fullscreen">全画面表示<span class="shortcut">F11</span></button>
+      </div>
+    </div>
+  </div>
+
   <div id="toolbar">
     <div class="toolbar-group">
       <button id="btn-mode-select-group" class="mode-btn is-active" title="グループ選択/移動 (黒矢印)">
@@ -19,7 +47,7 @@
           <path d="M2,1 L2,14 L5,11 L7.5,16.5 L9.5,15.5 L7,10 L12,10 Z"/>
         </svg>
       </button>
-      <button id="btn-mode-text" class="mode-btn" title="文字入力 (T)" style="font-weight:700;font-size:15px;">T</button>
+      <button id="btn-mode-text" class="mode-btn" title="文字入力 (T)" style="font-weight:700;font-size:12px;">T</button>
     </div>
 
     <div class="toolbar-group">
@@ -76,9 +104,11 @@
     <canvas id="main-canvas"></canvas>
   </div>
 
-  <script src="../node_modules/fabric/dist/fabric.js"></script>
+  <script src="vendor/fabric.min.js"></script>
   <script src="vendor/fontkit.js"></script>
   <script src="../dist/renderer/outline-position.js"></script>
+  <script src="../dist/renderer/path-anchors.js"></script>
+  <script src="../dist/renderer/copy-export.js"></script>
   <script src="../dist/renderer/app.js"></script>
 </body>
 </html>

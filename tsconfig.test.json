@@ -7,7 +7,7 @@
     "skipLibCheck": true,
     "outDir": "dist-test",
     "rootDir": ".",
-    "types": ["node"]
+    "types": ["node", "jest"]
   },
-  "include": ["src/renderer/outline-position.ts", "test/**/*.ts"]
+  "include": ["test/**/*.ts"]
 }

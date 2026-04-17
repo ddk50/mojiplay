@@ -51,9 +51,6 @@
 //
 // ──────────────────────────────────────────────────────────────────────────
 
-import { test } from 'node:test';
-import { strict as assert } from 'node:assert';
-
 const { computeOutlinePathPosition } =
   require('../src/renderer/outline-position') as {
     computeOutlinePathPosition: (
@@ -65,77 +62,59 @@ const { computeOutlinePathPosition } =
     ) => { left: number; top: number };
   };
 
-const EPS = 1e-6;
+describe('computeOutlinePathPosition', () => {
+  test('fabric デフォルト定数 (_fontSizeMult=1.13, _fontSizeFraction=0.222) を使う', () => {
+    const r = computeOutlinePathPosition(
+      { left: 100, top: 200, fontSize: 72 },
+      { minX: 5, minY: -50 },
+    );
+    expect(r.left).toBe(105);
+    expect(r.top).toBeCloseTo(213.29808, 3);
+  });
 
-test('fabric デフォルト定数 (_fontSizeMult=1.13, _fontSizeFraction=0.222) を使う', () => {
-  // baseline = 200 + 72 * 1.13 * (1 - 0.222)
-  //          = 200 + 72 * 0.87914
-  //          = 200 + 63.29808 = 263.29808
-  // path.top = 263.29808 + (-50) = 213.29808
-  const r = computeOutlinePathPosition(
-    { left: 100, top: 200, fontSize: 72 },
-    { minX: 5, minY: -50 },
-  );
-  assert.equal(r.left, 105);
-  assert.ok(Math.abs(r.top - 213.29808) < 1e-4, `expected top ≈ 213.29808, got ${r.top}`);
+  test('明示的な fontSizeMult / fontSizeFraction はデフォルトを上書きする', () => {
+    const r = computeOutlinePathPosition(
+      { left: 0, top: 0, fontSize: 100, fontSizeMult: 1, fontSizeFraction: 0 },
+      { minX: 10, minY: -40 },
+    );
+    expect(r.left).toBe(10);
+    expect(r.top).toBe(60);
+  });
+
+  test('リグレッション: ft=(198,143), fontSize=72, "H" グリフ (production log 由来)', () => {
+    const r = computeOutlinePathPosition(
+      { left: 198, top: 143, fontSize: 72 },
+      { minX: 5.77, minY: -51.54 },
+    );
+    expect(r.left).toBeCloseTo(203.77, 1);
+    expect(r.top).toBeCloseTo(154.76, 1);
+  });
+
+  test('descender のみのグリフ (bb.minY >= 0) でも baseline 計算は同じ', () => {
+    const r = computeOutlinePathPosition(
+      { left: 100, top: 100, fontSize: 72 },
+      { minX: 5, minY: 0 },
+    );
+    expect(r.top).toBeCloseTo(163.29808, 3);
+  });
+
+  test('負の座標 (post-drag world coord) でも正しく計算される', () => {
+    const r = computeOutlinePathPosition(
+      { left: -262.55, top: -41.18, fontSize: 72 },
+      { minX: 5.77, minY: -51.54 },
+    );
+    expect(r.left).toBeCloseTo(-256.78, 1);
+    expect(r.top).toBeCloseTo(-29.42192, 1);
+  });
+
+  test('fontSize=0 の degenerate ケースでも NaN/例外を出さない', () => {
+    const r = computeOutlinePathPosition(
+      { left: 50, top: 50, fontSize: 0 },
+      { minX: 0, minY: 0 },
+    );
+    expect(r.left).toBe(50);
+    expect(r.top).toBe(50);
+  });
 });
 
-test('明示的な fontSizeMult / fontSizeFraction はデフォルトを上書きする', () => {
-  // mult=1, frac=0 → baseline = top + fontSize (素朴計算)
-  const r = computeOutlinePathPosition(
-    { left: 0, top: 0, fontSize: 100, fontSizeMult: 1, fontSizeFraction: 0 },
-    { minX: 10, minY: -40 },
-  );
-  assert.equal(r.left, 10);
-  assert.equal(r.top, 60);
-});
-
-test('リグレッション: ft=(198,143), fontSize=72, "H" グリフ (production log 由来)', () => {
-  // Bug 2 の直接的なリグレッションテスト。
-  // 誤式 (ft.top + fontSize) で計算すると 163.46 (= 143 + 72 - 51.54)、
-  // 正しくは 154.76 (= 143 + 63.30 - 51.54)。差 8.7px = Bug 2 の症状そのもの。
-  const r = computeOutlinePathPosition(
-    { left: 198, top: 143, fontSize: 72 },
-    { minX: 5.77, minY: -51.54 },
-  );
-  assert.ok(Math.abs(r.left - 203.77) < 0.01, `expected left ≈ 203.77, got ${r.left}`);
-  assert.ok(Math.abs(r.top  - 154.76) < 0.01, `expected top ≈ 154.76, got ${r.top}`);
-});
-
-test('descender のみのグリフ (bb.minY >= 0) でも baseline 計算は同じ', () => {
-  // "." や "," のような baseline より下にしかインクが無いグリフ。
-  // bb.minY = 0 なら path.top = baseline。
-  const r = computeOutlinePathPosition(
-    { left: 100, top: 100, fontSize: 72 },
-    { minX: 5, minY: 0 },
-  );
-  // baseline = 100 + 72 * 0.87914 = 100 + 63.29808 = 163.29808
-  assert.ok(Math.abs(r.top - 163.29808) < 1e-4, `expected top ≈ 163.29808, got ${r.top}`);
-});
-
-test('負の座標 (post-drag world coord) でも正しく計算される', () => {
-  // Bug 1 修正後は、アウトライン化時点で子の .left/.top が world 座標に
-  // 戻されている前提。world 座標なので負値も普通に扱える (画面外だが数値的
-  // には有効)。
-  // かつてはドラッグ後の "group-relative" 座標がそのまま渡され、純粋関数を
-  // 通したあとも負座標で画面左上へ出るという「Bug 1 の症状」を起こしていた。
-  // このテストは「純粋関数自体は world 座標の負値を正しく扱える」ことを確認する。
-  const r = computeOutlinePathPosition(
-    { left: -262.55, top: -41.18, fontSize: 72 },
-    { minX: 5.77, minY: -51.54 },
-  );
-  // baseline = -41.18 + 63.29808 = 22.11808
-  // path.top = 22.11808 - 51.54 = -29.42192
-  assert.ok(Math.abs(r.left - (-256.78))  < 0.01, `expected left ≈ -256.78, got ${r.left}`);
-  assert.ok(Math.abs(r.top  - (-29.42192)) < 0.01, `expected top ≈ -29.42192, got ${r.top}`);
-});
-
-test('fontSize=0 の degenerate ケースでも NaN/例外を出さない', () => {
-  // 入力 validation は呼び出し側の責務だが、数学的に壊れないことは保証する。
-  const r = computeOutlinePathPosition(
-    { left: 50, top: 50, fontSize: 0 },
-    { minX: 0, minY: 0 },
-  );
-  assert.equal(r.left, 50);
-  assert.equal(r.top, 50);
-});
+export {};

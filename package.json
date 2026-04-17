@@ -7,22 +7,26 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json",
     "bundle:vendor": "esbuild node_modules/fontkit/dist/browser-module.mjs --bundle --format=iife --global-name=fontkit --outfile=renderer/vendor/fontkit.js --platform=browser --minify",
+    "bundle:fabric": "cp node_modules/fabric/dist/fabric.min.js renderer/vendor/fabric.min.js",
     "start": "npm run build && electron .",
     "pack": "npm run build && electron-builder --win --dir",
     "dist:win": "npm run build && electron-builder --win --x64",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/test/*.test.js"
+    "test": "jest"
   },
   "dependencies": {
-    "electron-log": "^5.4.3",
-    "fabric": "5.3.0"
+    "electron-log": "^5.4.3"
   },
   "devDependencies": {
     "@types/fabric": "^5.3.11",
+    "@types/jest": "^30.0.0",
     "@types/node": "^25.6.0",
     "electron": "^29.0.0",
     "electron-builder": "^24.13.3",
     "esbuild": "^0.28.0",
+    "fabric": "5.3.0",
     "fontkit": "^2.0.4",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.9",
     "typescript": "^6.0.2"
   },
   "build": {

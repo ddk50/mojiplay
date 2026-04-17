@@ -5,6 +5,13 @@ type SaveResult =
 interface Window {
   electronAPI?: {
     savePng(base64Data: string): Promise<SaveResult>;
+    copyImageToClipboard(dataUrl: string): Promise<void>;
+    onMenuCopy(callback: () => void): void;
+    toggleDevTools(): Promise<void>;
+    zoomIn(): Promise<void>;
+    zoomOut(): Promise<void>;
+    zoomReset(): Promise<void>;
+    toggleFullscreen(): Promise<void>;
     log?: {
       debug(msg: string): Promise<void>;
       info(msg: string):  Promise<void>;
