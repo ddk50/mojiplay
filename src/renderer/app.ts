@@ -1336,10 +1336,74 @@
       e.preventDefault();
 
       const cmds = (path as any).path as any[];
+      const origCmdType = cmds[hit.cmdIndex][0] as string;
       const newPath = splitSegment(cmds, hit.cmdIndex, hit.t);
       (path as any).path = newPath;
       (path as any).dirty = true;
-      finalizeDrag(path);
+
+      logger.debug(`[pen-add] origCmdType=${origCmdType} cmdIndex=${hit.cmdIndex} t=${hit.t}`);
+
+      // 新アンカーの位置 (分割で生成された first half の終点)
+      const firstCmd = newPath[hit.cmdIndex] as any[];
+      let anchorX: number, anchorY: number;
+      if (origCmdType === 'C') { anchorX = firstCmd[5]; anchorY = firstCmd[6]; }
+      else if (origCmdType === 'Q') { anchorX = firstCmd[3]; anchorY = firstCmd[4]; }
+      else { anchorX = firstCmd[1]; anchorY = firstCmd[2]; } // L
+      const secondIdx = hit.cmdIndex + 1;
+
+      // L→C 変換用: 前後のアンカー位置を記録
+      const prevPt = getSegmentStart(newPath, hit.cmdIndex);
+      const nextCmd = newPath[secondIdx] as any[];
+      const prevX = prevPt ? prevPt[0] : anchorX;
+      const prevY = prevPt ? prevPt[1] : anchorY;
+      const nextX = origCmdType === 'C' ? nextCmd[5] : origCmdType === 'Q' ? nextCmd[3] : nextCmd[1];
+      const nextY = origCmdType === 'C' ? nextCmd[6] : origCmdType === 'Q' ? nextCmd[4] : nextCmd[2];
+
+      logger.debug(`[pen-add] drag mode. anchor=(${anchorX.toFixed(1)},${anchorY.toFixed(1)}) prev=(${prevX.toFixed(1)},${prevY.toFixed(1)}) next=(${nextX.toFixed(1)},${nextY.toFixed(1)})`);
+
+      const onMove = (me: MouseEvent) => {
+        const r = upperCanvas.getBoundingClientRect();
+        const mx = me.clientX - r.left;
+        const my = me.clientY - r.top;
+        const local = screenToPathLocal(mx, my, path);
+        const dx = local.x - anchorX;
+        const dy = local.y - anchorY;
+        logger.debug(`[pen-add:onMove] delta=(${dx.toFixed(1)},${dy.toFixed(1)})`);
+
+        const curPath = (path as any).path as any[];
+        const updated = new Array(curPath.length);
+        for (let k = 0; k < curPath.length; k++) updated[k] = curPath[k];
+
+        // 全セグメントタイプ共通: C コマンドでハンドルを設定
+        // L/Q の場合は C に変換してからハンドルを付与
+        updated[hit.cmdIndex] = ['C',
+          origCmdType === 'C' ? (curPath[hit.cmdIndex] as any[])[1] : prevX + (anchorX - prevX) / 3,
+          origCmdType === 'C' ? (curPath[hit.cmdIndex] as any[])[2] : prevY + (anchorY - prevY) / 3,
+          anchorX - dx, anchorY - dy,
+          anchorX, anchorY,
+        ] as any;
+        updated[secondIdx] = ['C',
+          anchorX + dx, anchorY + dy,
+          origCmdType === 'C' ? (curPath[secondIdx] as any[])[3] : anchorX + 2 * (nextX - anchorX) / 3,
+          origCmdType === 'C' ? (curPath[secondIdx] as any[])[4] : anchorY + 2 * (nextY - anchorY) / 3,
+          nextX, nextY,
+        ] as any;
+
+        (path as any).path = updated;
+        (path as any).dirty = true;
+        canvas.requestRenderAll();
+      };
+
+      const onUp = () => {
+        logger.debug('[pen-add:onUp] mouseup fired');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        finalizeDrag(path);
+        canvas.requestRenderAll();
+      };
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
       canvas.requestRenderAll();
 
     } else {
