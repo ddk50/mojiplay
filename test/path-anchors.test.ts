@@ -42,11 +42,16 @@ interface PathAnchor {
   readonly subpathStart: boolean;
 }
 
-const { extractAnchors, moveAnchorRigid, moveHandle } =
+const { extractAnchors, moveAnchorRigid, moveHandle, evalCubicAt, evalQuadAt, getSegmentStart, splitSegment, removeAnchor } =
   require('../src/renderer/path-anchors') as {
     extractAnchors: (path: PathCommand[]) => PathAnchor[];
     moveAnchorRigid: (path: ReadonlyArray<PathCommand>, anchorIndex: number, dx: number, dy: number) => PathCommand[];
     moveHandle: (path: ReadonlyArray<PathCommand>, handle: HandleRef, dx: number, dy: number) => PathCommand[];
+    evalCubicAt: (p0x: number, p0y: number, c1x: number, c1y: number, c2x: number, c2y: number, p3x: number, p3y: number, t: number) => [number, number];
+    evalQuadAt: (p0x: number, p0y: number, c1x: number, c1y: number, p2x: number, p2y: number, t: number) => [number, number];
+    getSegmentStart: (path: ReadonlyArray<PathCommand>, cmdIndex: number) => [number, number] | null;
+    splitSegment: (path: ReadonlyArray<PathCommand>, cmdIndex: number, t: number) => PathCommand[];
+    removeAnchor: (path: ReadonlyArray<PathCommand>, anchorIndex: number) => PathCommand[];
   };
 
 // ── extractAnchors ──────────────────────────────────────────────────────
@@ -334,6 +339,191 @@ describe('moveHandle', () => {
     const result = moveHandle(path, handle, 5, 5);
     expect(result).toEqual(path);
     expect(result).not.toBe(path);
+  });
+});
+
+// ── evalCubicAt / evalQuadAt ────────────────────────────────────────────
+
+describe('evalCubicAt', () => {
+  test('t=0 → 始点, t=1 → 終点', () => {
+    expect(evalCubicAt(0, 0, 10, 20, 30, 40, 50, 50, 0)).toEqual([0, 0]);
+    expect(evalCubicAt(0, 0, 10, 20, 30, 40, 50, 50, 1)).toEqual([50, 50]);
+  });
+
+  test('t=0.5 の直線 → 中点', () => {
+    // 制御点が始点-終点の直線上にある場合、曲線も直線
+    const [x, y] = evalCubicAt(0, 0, 10, 0, 20, 0, 30, 0, 0.5);
+    expect(x).toBeCloseTo(15);
+    expect(y).toBeCloseTo(0);
+  });
+});
+
+describe('evalQuadAt', () => {
+  test('t=0 → 始点, t=1 → 終点', () => {
+    expect(evalQuadAt(0, 0, 5, 10, 10, 0, 0)).toEqual([0, 0]);
+    expect(evalQuadAt(0, 0, 5, 10, 10, 0, 1)).toEqual([10, 0]);
+  });
+});
+
+// ── getSegmentStart ─────────────────────────────────────────────────────
+
+describe('getSegmentStart', () => {
+  test('C コマンドの始点 = 直前の M', () => {
+    const path: PathCommand[] = [['M', 10, 20], ['C', 1, 2, 3, 4, 5, 6], ['Z']];
+    expect(getSegmentStart(path, 1)).toEqual([10, 20]);
+  });
+
+  test('2番目の C の始点 = 直前の C の終点', () => {
+    const path: PathCommand[] = [
+      ['M', 0, 0], ['C', 1, 2, 3, 4, 5, 5], ['C', 6, 7, 8, 9, 10, 10], ['Z'],
+    ];
+    expect(getSegmentStart(path, 2)).toEqual([5, 5]);
+  });
+
+  test('M の前 → null', () => {
+    const path: PathCommand[] = [['M', 0, 0]];
+    expect(getSegmentStart(path, 0)).toBeNull();
+  });
+});
+
+// ── splitSegment ────────────────────────────────────────────────────────
+
+describe('splitSegment', () => {
+  test('C を t=0.5 で分割 → コマンド数が 1 増加', () => {
+    const path: PathCommand[] = [
+      ['M', 0, 0],
+      ['C', 30, 0, 70, 100, 100, 100],
+      ['Z'],
+    ];
+    const result = splitSegment(path, 1, 0.5);
+    expect(result).toHaveLength(4); // M, C, C, Z
+
+    // 分割点は元の曲線の t=0.5 上にある
+    const [sx, sy] = evalCubicAt(0, 0, 30, 0, 70, 100, 100, 100, 0.5);
+    expect((result[1] as any)[5]).toBeCloseTo(sx);
+    expect((result[1] as any)[6]).toBeCloseTo(sy);
+    // 第2セグメントの終点は元の終点
+    expect((result[2] as any)[5]).toBe(100);
+    expect((result[2] as any)[6]).toBe(100);
+  });
+
+  test('C を t=0 / t=1 で分割 → 退化 (始点/終点に新アンカー)', () => {
+    const path: PathCommand[] = [
+      ['M', 0, 0], ['C', 10, 0, 20, 0, 30, 0], ['Z'],
+    ];
+    const r0 = splitSegment(path, 1, 0);
+    expect(r0).toHaveLength(4);
+    expect((r0[1] as any)[5]).toBeCloseTo(0);
+    expect((r0[1] as any)[6]).toBeCloseTo(0);
+
+    const r1 = splitSegment(path, 1, 1);
+    expect(r1).toHaveLength(4);
+    expect((r1[1] as any)[5]).toBeCloseTo(30);
+    expect((r1[1] as any)[6]).toBeCloseTo(0);
+  });
+
+  test('L を t=0.5 で分割 → 2 つの L', () => {
+    const path: PathCommand[] = [['M', 0, 0], ['L', 10, 10], ['Z']];
+    const result = splitSegment(path, 1, 0.5);
+    expect(result).toHaveLength(4);
+    expect(result[1]).toEqual(['L', 5, 5]);
+    expect(result[2]).toEqual(['L', 10, 10]);
+  });
+
+  test('Q を t=0.5 で分割 → 2 つの Q', () => {
+    const path: PathCommand[] = [['M', 0, 0], ['Q', 5, 10, 10, 0], ['Z']];
+    const result = splitSegment(path, 1, 0.5);
+    expect(result).toHaveLength(4);
+    expect(result[1][0]).toBe('Q');
+    expect(result[2][0]).toBe('Q');
+    // 第2セグメントの終点は元の終点
+    expect((result[2] as any)[3]).toBe(10);
+    expect((result[2] as any)[4]).toBe(0);
+  });
+
+  test('他のコマンドは不変', () => {
+    const cmd0: PathCommand = ['M', 0, 0];
+    const cmd2: PathCommand = ['Z'];
+    const path = [cmd0, ['L', 10, 10] as PathCommand, cmd2];
+    const result = splitSegment(path, 1, 0.5);
+    expect(result[0]).toBe(cmd0);
+    expect(result[3]).toBe(cmd2);
+  });
+});
+
+// ── removeAnchor ────────────────────────────────────────────────────────
+
+describe('removeAnchor', () => {
+  test('中間アンカー削除 → 直線 L に置換', () => {
+    const path: PathCommand[] = [
+      ['M', 0, 0],
+      ['C', 1, 2, 3, 4, 5, 5],
+      ['C', 6, 7, 8, 9, 10, 10],
+      ['Z'],
+    ];
+    const result = removeAnchor(path, 1); // anchor (5,5) を削除
+    expect(result).toHaveLength(3); // M, L, Z
+    expect(result[0]).toEqual(['M', 0, 0]);
+    expect(result[1]).toEqual(['L', 10, 10]); // 直線化
+    expect(result[2]).toEqual(['Z']);
+  });
+
+  test('最後のアンカー削除 (Z 直前) → コマンド除去のみ', () => {
+    const path: PathCommand[] = [
+      ['M', 0, 0],
+      ['C', 1, 2, 3, 4, 5, 5],
+      ['C', 6, 7, 8, 9, 10, 10],
+      ['C', 11, 12, 13, 14, 15, 15],
+      ['Z'],
+    ];
+    const result = removeAnchor(path, 3); // 最後の (15,15) を削除
+    expect(result).toHaveLength(4); // M, C, C, Z
+    expect(result[0]).toEqual(['M', 0, 0]);
+    expect(result[2]).toEqual(path[2]); // 2番目の C は不変
+    expect(result[3]).toEqual(['Z']);
+  });
+
+  test('M アンカー削除 → 次のアンカーが新 M', () => {
+    const path: PathCommand[] = [
+      ['M', 0, 0],
+      ['C', 1, 2, 3, 4, 5, 5],
+      ['C', 6, 7, 8, 9, 10, 10],
+      ['Z'],
+    ];
+    const result = removeAnchor(path, 0);
+    expect(result).toHaveLength(3); // M, C, Z
+    expect(result[0]).toEqual(['M', 5, 5]); // 新 M は次のアンカー位置
+    expect(result[2]).toEqual(['Z']);
+  });
+
+  test('サブパスのアンカーが 2 以下 → 操作拒否', () => {
+    const path: PathCommand[] = [['M', 0, 0], ['L', 10, 10], ['Z']];
+    const result = removeAnchor(path, 0);
+    expect(result).toEqual(path);
+    expect(result).not.toBe(path);
+  });
+
+  test('範囲外 → 元配列コピー', () => {
+    const path: PathCommand[] = [['M', 0, 0], ['L', 10, 10], ['Z']];
+    const result = removeAnchor(path, 99);
+    expect(result).toEqual(path);
+  });
+
+  test('擬似 O グリフから中間アンカー削除', () => {
+    const path: PathCommand[] = [
+      ['M', 50, 0],
+      ['C', 77.6, 0, 100, 22.4, 100, 50],
+      ['C', 100, 77.6, 77.6, 100, 50, 100],
+      ['C', 22.4, 100, 0, 77.6, 0, 50],
+      ['C', 0, 22.4, 22.4, 0, 50, 0],
+      ['Z'],
+    ];
+    const result = removeAnchor(path, 2); // (50, 100) を削除
+    expect(result).toHaveLength(5); // M, C, L, C, Z
+    expect(result[0]).toEqual(['M', 50, 0]);
+    expect(result[1]).toEqual(path[1]); // 第1 C は不変
+    expect(result[2]).toEqual(['L', 0, 50]); // (50,100)→(0,50) が直線化
+    expect(result[3]).toEqual(path[4]); // 最後の C は不変
   });
 });
 

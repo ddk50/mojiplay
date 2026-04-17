@@ -142,6 +142,8 @@
   const btnModeSelectGroup = document.getElementById('btn-mode-select-group') as HTMLButtonElement;
   const btnModeSelectChar  = document.getElementById('btn-mode-select-char')  as HTMLButtonElement;
   const btnModeText        = document.getElementById('btn-mode-text')         as HTMLButtonElement;
+  const btnModePenAdd      = document.getElementById('btn-mode-pen-add')      as HTMLButtonElement;
+  const btnModePenRemove   = document.getElementById('btn-mode-pen-remove')   as HTMLButtonElement;
   const snapEnabledInput   = document.getElementById('snap-enabled')          as HTMLInputElement;
   const snapPitchInput     = document.getElementById('snap-pitch')            as HTMLInputElement;
   const snapThresholdInput = document.getElementById('snap-threshold')        as HTMLInputElement;
@@ -259,13 +261,15 @@
 
   // ── Mode management ───────────────────────────────────────────────────────
 
-  type Mode = 'select-group' | 'select-char' | 'text';
+  type Mode = 'select-group' | 'select-char' | 'text' | 'pen-add' | 'pen-remove';
   let currentMode: Mode = 'select-group';
 
   const modeButtons: Record<Mode, HTMLButtonElement> = {
     'select-group': btnModeSelectGroup,
     'select-char':  btnModeSelectChar,
     'text':         btnModeText,
+    'pen-add':      btnModePenAdd,
+    'pen-remove':   btnModePenRemove,
   };
 
   function setMode(m: Mode): void {
@@ -275,6 +279,7 @@
     });
 
     const isSelectMode = m === 'select-group' || m === 'select-char';
+    const isPenMode    = m === 'pen-add' || m === 'pen-remove';
     canvas.selection     = isSelectMode;
     canvas.defaultCursor = m === 'text' ? 'text' : 'default';
     canvas.hoverCursor   = m === 'text' ? 'text' : 'move';
@@ -285,13 +290,16 @@
     });
 
     clearAnchorState();
-    if (!isSelectMode) canvas.discardActiveObject();
+    // ペンモードでは選択中パスを維持する
+    if (!isSelectMode && !isPenMode) canvas.discardActiveObject();
     canvas.requestRenderAll();
   }
 
   btnModeSelectGroup.addEventListener('click', () => setMode('select-group'));
   btnModeSelectChar.addEventListener('click',  () => setMode('select-char'));
   btnModeText.addEventListener('click',        () => setMode('text'));
+  btnModePenAdd.addEventListener('click',      () => setMode('pen-add'));
+  btnModePenRemove.addEventListener('click',   () => setMode('pen-remove'));
 
   // ── IText 確定: 1文字ずつ fabric.Text に分割 ──────────────────────────────
 
@@ -925,7 +933,7 @@
   let handleDrag: HandleDragState | null = null;
 
   function getEditablePath(): fabric.Path | null {
-    if (currentMode !== 'select-char') return null;
+    if (currentMode !== 'select-char' && currentMode !== 'pen-add' && currentMode !== 'pen-remove') return null;
     const obj = canvas.getActiveObject();
     if (!obj || obj.type !== 'path') return null;
     if (!(obj as any).data?.outlined) return null;
@@ -1113,6 +1121,9 @@
   const upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement;
 
   upperCanvas.addEventListener('mousedown', (e: MouseEvent) => {
+    // ペンモードではドラッグではなくペンツール側で処理する
+    if (currentMode === 'pen-add' || currentMode === 'pen-remove') return;
+
     const path = getEditablePath();
     if (!path) return;
 
@@ -1222,6 +1233,157 @@
     if (hHit) { upperCanvas.style.cursor = 'pointer'; return; }
     const aidx = hitTestAnchor(screenX, screenY);
     upperCanvas.style.cursor = aidx >= 0 ? 'move' : '';
+  }, true);
+
+  // ── +/- ペンツール ──────────────────────────────────────────────────────
+
+  const PEN_HIT_THRESHOLD = 8; // セグメントヒットの画面ピクセル閾値
+  const PEN_SAMPLES       = 50; // セグメントあたりのサンプル数
+
+  /** スクリーン座標 → パスローカル座標 */
+  function screenToPathLocal(
+    screenX: number, screenY: number, path: fabric.Path,
+  ): { x: number; y: number } {
+    const vt = canvas.viewportTransform!;
+    const invVt = fabric.util.invertTransform(vt);
+    const world = fabric.util.transformPoint(
+      { x: screenX, y: screenY } as fabric.Point, invVt,
+    );
+    const mat = path.calcTransformMatrix();
+    const invMat = fabric.util.invertTransform(mat);
+    const local = fabric.util.transformPoint(world, invMat);
+    const po = (path as any).pathOffset as { x: number; y: number };
+    return { x: local.x + po.x, y: local.y + po.y };
+  }
+
+  interface SegmentHit {
+    cmdIndex: number;
+    t: number;
+    dist: number;
+  }
+
+  /** パス上の最近傍セグメントを探索 (スクリーン座標ベースの距離比較) */
+  function findClosestSegment(
+    path: fabric.Path, screenX: number, screenY: number,
+  ): SegmentHit | null {
+    const cmds = (path as any).path as any[];
+    if (!cmds) return null;
+
+    let best: SegmentHit | null = null;
+    let curX = 0, curY = 0;
+
+    for (let i = 0; i < cmds.length; i++) {
+      const cmd = cmds[i];
+
+      if (cmd[0] === 'M') {
+        curX = cmd[1]; curY = cmd[2];
+        continue;
+      }
+
+      if (cmd[0] === 'Z') {
+        // Z closure は現在スキップ
+        continue;
+      }
+
+      for (let s = 0; s <= PEN_SAMPLES; s++) {
+        const t = s / PEN_SAMPLES;
+        let px: number, py: number;
+
+        if (cmd[0] === 'C') {
+          [px, py] = evalCubicAt(curX, curY, cmd[1], cmd[2], cmd[3], cmd[4], cmd[5], cmd[6], t);
+        } else if (cmd[0] === 'Q') {
+          [px, py] = evalQuadAt(curX, curY, cmd[1], cmd[2], cmd[3], cmd[4], t);
+        } else if (cmd[0] === 'L') {
+          px = curX + t * (cmd[1] - curX);
+          py = curY + t * (cmd[2] - curY);
+        } else {
+          continue;
+        }
+
+        const scr = anchorLocalToScreen(px, py, path);
+        const d = Math.hypot(scr.sx - screenX, scr.sy - screenY);
+        if (d < PEN_HIT_THRESHOLD && (!best || d < best.dist)) {
+          best = { cmdIndex: i, t, dist: d };
+        }
+      }
+
+      // 現在点を更新
+      if (cmd[0] === 'C') { curX = cmd[5]; curY = cmd[6]; }
+      else if (cmd[0] === 'Q') { curX = cmd[3]; curY = cmd[4]; }
+      else if (cmd[0] === 'L') { curX = cmd[1]; curY = cmd[2]; }
+    }
+
+    return best;
+  }
+
+  // +ペンツール: セグメント上クリックでアンカー追加
+  // -ペンツール: アンカー上クリックでアンカー削除
+  upperCanvas.addEventListener('mousedown', (e: MouseEvent) => {
+    if (currentMode !== 'pen-add' && currentMode !== 'pen-remove') return;
+
+    const path = getEditablePath();
+    if (!path) return;
+
+    const rect = upperCanvas.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+
+    if (currentMode === 'pen-add') {
+      const hit = findClosestSegment(path, screenX, screenY);
+      if (!hit) return;
+
+      e.stopImmediatePropagation();
+      e.preventDefault();
+
+      const cmds = (path as any).path as any[];
+      const newPath = splitSegment(cmds, hit.cmdIndex, hit.t);
+      (path as any).path = newPath;
+      (path as any).dirty = true;
+      finalizeDrag(path);
+      canvas.requestRenderAll();
+
+    } else {
+      // pen-remove: アンカーのヒットテスト
+      const aidx = hitTestAnchor(screenX, screenY);
+      if (aidx < 0) return;
+
+      e.stopImmediatePropagation();
+      e.preventDefault();
+
+      const cmds = (path as any).path as any[];
+      const newPath = removeAnchor(cmds, aidx);
+
+      // removeAnchor が操作を拒否した場合 (アンカー数不足) は長さが同じ
+      if (newPath.length === cmds.length) return;
+
+      (path as any).path = newPath;
+      (path as any).dirty = true;
+      finalizeDrag(path);
+      canvas.requestRenderAll();
+    }
+  }, true);
+
+  // ペンモードのホバーカーソル
+  upperCanvas.addEventListener('mousemove', (e: MouseEvent) => {
+    if (currentMode !== 'pen-add' && currentMode !== 'pen-remove') return;
+
+    const path = getEditablePath();
+    if (!path) {
+      upperCanvas.style.cursor = '';
+      return;
+    }
+
+    const rect = upperCanvas.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+
+    if (currentMode === 'pen-add') {
+      const hit = findClosestSegment(path, screenX, screenY);
+      upperCanvas.style.cursor = hit ? 'copy' : '';
+    } else {
+      const aidx = hitTestAnchor(screenX, screenY);
+      upperCanvas.style.cursor = aidx >= 0 ? 'pointer' : '';
+    }
   }, true);
 
   // モード・選択変更時のクリーンアップ
