@@ -1,14 +1,14 @@
-# Font Layout Editor
+# mojiplay
 
-デザイナーがフォントのアウトライン化なしに、一文字ずつ自由に配置・調整して透過PNGとして書き出すためのデスクトップアプリ。
+文字を一文字ずつ自由に配置・アウトライン化・ベジェ編集して透過PNGとして書き出すためのデスクトップアプリ。
 
 ## インストール
 
-Node.js（v18以上）が必要です。
+Node.js（v20以上）が必要です。
 
 ```bash
 git clone <このリポジトリのURL>
-cd myfonteditor
+cd mojiplay
 npm install
 ```
 
@@ -24,7 +24,7 @@ npm start
 npm test
 ```
 
-> 現在テストは未実装です。将来的に [Vitest](https://vitest.dev/) + [Spectron](https://github.com/electron-userland/spectron) によるユニットテスト・E2Eテストを追加予定です。
+[Jest](https://jestjs.io/) + [ts-jest](https://kulshekhar.github.io/ts-jest/) でユニットテストを実行します。
 
 ## Windows向けバイナリのビルド
 
@@ -71,16 +71,22 @@ npm run pack
 - テキストを入力すると一文字ずつ独立したオブジェクトとしてキャンバスに配置
 - 各文字をマウスでドラッグして自由に移動・回転・拡大縮小
 - フォント・サイズ・色を選択中の文字にリアルタイム適用
+- アウトライン化 (Ctrl+Shift+O): テキストをベジェパスに変換
+- 白矢印ツールでアンカーポイントをドラッグしてパスを編集
+- 選択オブジェクトを透過PNGとしてクリップボードにコピー (Ctrl+C / Edit > Copy)
 - 透過PNGとしてローカルに書き出し
-- `Delete` / `Backspace` で選択中の文字を削除
+- `Delete` / `Backspace` で選択中のオブジェクトを削除
+- Alt + マウスホイールでズーム (カーソル位置中心)
+- グリッドスナップ (白矢印モード、Alt で一時バイパス)
 
 ## 技術スタック
 
 | 用途 | ライブラリ |
 |------|-----------|
 | デスクトップフレームワーク | [Electron](https://www.electronjs.org/) v29 |
-| 文字オブジェクト操作 | [Fabric.js](http://fabricjs.com/) v5.3 |
-| フォントパス解析（将来用） | [opentype.js](https://opentype.js.org/) |
+| キャンバス操作 | [Fabric.js](http://fabricjs.com/) v5.3 |
+| フォントパス解析 | [fontkit](https://github.com/foliojs/fontkit) v2 |
+| テスト | [Jest](https://jestjs.io/) + [ts-jest](https://kulshekhar.github.io/ts-jest/) |
 
 ## ライセンス
 
