@@ -42,10 +42,11 @@ interface PathAnchor {
   readonly subpathStart: boolean;
 }
 
-const { extractAnchors, moveAnchorRigid } =
+const { extractAnchors, moveAnchorRigid, moveHandle } =
   require('../src/renderer/path-anchors') as {
     extractAnchors: (path: PathCommand[]) => PathAnchor[];
     moveAnchorRigid: (path: ReadonlyArray<PathCommand>, anchorIndex: number, dx: number, dy: number) => PathCommand[];
+    moveHandle: (path: ReadonlyArray<PathCommand>, handle: HandleRef, dx: number, dy: number) => PathCommand[];
   };
 
 // ── extractAnchors ──────────────────────────────────────────────────────
@@ -244,6 +245,95 @@ describe('回帰: 擬似「O」グリフ (4点閉曲線)', () => {
     // C[2], C[3] 完全不変
     expect(result[2]).toBe(path[2]);
     expect(result[3]).toBe(path[3]);
+  });
+});
+
+// ── moveHandle ──────────────────────────────────────────────────────────
+
+describe('moveHandle', () => {
+  test('C コマンドの incoming ハンドル移動 → params [3,4] のみ変化', () => {
+    const path: PathCommand[] = [
+      ['M', 0, 0],
+      ['C', 1, 2, 3, 4, 5, 5],
+      ['Z'],
+    ];
+    const handle: HandleRef = { cmdIndex: 1, paramIndices: [3, 4] };
+    const result = moveHandle(path, handle, 10, -5);
+
+    expect(result[1]).toEqual(['C', 1, 2, 13, -1, 5, 5]);
+  });
+
+  test('C コマンドの outgoing ハンドル移動 → params [1,2] のみ変化', () => {
+    const path: PathCommand[] = [
+      ['M', 0, 0],
+      ['C', 1, 2, 3, 4, 5, 5],
+      ['C', 6, 7, 8, 9, 10, 10],
+      ['Z'],
+    ];
+    const handle: HandleRef = { cmdIndex: 2, paramIndices: [1, 2] };
+    const result = moveHandle(path, handle, -3, 4);
+
+    expect(result[2]).toEqual(['C', 3, 11, 8, 9, 10, 10]);
+    // アンカー・他コマンド不変
+    expect(result[0]).toEqual(['M', 0, 0]);
+    expect(result[1]).toEqual(['C', 1, 2, 3, 4, 5, 5]);
+  });
+
+  test('Q コマンドの共有制御点移動', () => {
+    const path: PathCommand[] = [
+      ['M', 0, 0],
+      ['Q', 5, 10, 10, 0],
+      ['Z'],
+    ];
+    const handle: HandleRef = { cmdIndex: 1, paramIndices: [1, 2] };
+    const result = moveHandle(path, handle, 2, -3);
+
+    expect(result[1]).toEqual(['Q', 7, 7, 10, 0]);
+  });
+
+  test('immutability — 変更タプルだけ新規、他は同一参照', () => {
+    const cmd0: PathCommand = ['M', 0, 0];
+    const cmd1: PathCommand = ['C', 1, 2, 3, 4, 5, 5];
+    const cmd2: PathCommand = ['Z'];
+    const path = [cmd0, cmd1, cmd2];
+
+    const handle: HandleRef = { cmdIndex: 1, paramIndices: [3, 4] };
+    const result = moveHandle(path, handle, 1, 1);
+
+    expect(result).not.toBe(path);
+    expect(result[0]).toBe(cmd0);   // 同一参照
+    expect(result[2]).toBe(cmd2);   // 同一参照
+    expect(result[1]).not.toBe(cmd1); // 新規タプル
+    expect(result[1]).toEqual(['C', 1, 2, 4, 5, 5, 5]);
+  });
+
+  test('アンカー座標は不変', () => {
+    const path: PathCommand[] = [
+      ['M', 0, 0],
+      ['C', 1, 2, 3, 4, 5, 5],
+      ['C', 6, 7, 8, 9, 10, 10],
+      ['Z'],
+    ];
+    const anchorsBefore = extractAnchors(path);
+
+    // incoming ハンドルを移動
+    const handle: HandleRef = { cmdIndex: 1, paramIndices: [3, 4] };
+    const result = moveHandle(path, handle, 100, 100);
+    const anchorsAfter = extractAnchors(result);
+
+    // アンカー座標は全て同一
+    for (let i = 0; i < anchorsBefore.length; i++) {
+      expect(anchorsAfter[i].x).toBe(anchorsBefore[i].x);
+      expect(anchorsAfter[i].y).toBe(anchorsBefore[i].y);
+    }
+  });
+
+  test('範囲外の cmdIndex → 元配列のコピーを返す', () => {
+    const path: PathCommand[] = [['M', 0, 0], ['L', 10, 0]];
+    const handle: HandleRef = { cmdIndex: 99, paramIndices: [1, 2] };
+    const result = moveHandle(path, handle, 5, 5);
+    expect(result).toEqual(path);
+    expect(result).not.toBe(path);
   });
 });
 

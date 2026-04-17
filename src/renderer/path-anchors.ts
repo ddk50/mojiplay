@@ -191,6 +191,37 @@ function moveAnchorRigid(
   return result;
 }
 
+// ── 個別ハンドル (制御点) 移動 ──────────────────────────────────────────
+//
+// HandleRef が指す制御点のみを (dx, dy) 移動する。
+// アンカー本体や反対側ハンドルには一切触れない。
+// moveAnchorRigid と同じイミュータビリティ契約:
+//   変更したタプルだけ新規配列、他は参照維持。
+
+function moveHandle(
+  path: ReadonlyArray<PathCommand>,
+  handle: HandleRef,
+  dx: number,
+  dy: number,
+): PathCommand[] {
+  const result: PathCommand[] = new Array(path.length);
+  for (let i = 0; i < path.length; i++) {
+    result[i] = path[i] as PathCommand;
+  }
+
+  const ci = handle.cmdIndex;
+  if (ci < 0 || ci >= path.length) return result;
+
+  const [xi, yi] = handle.paramIndices;
+  const old = path[ci] as any[];
+  const cmd = old.slice() as PathCommand;
+  (cmd as any[])[xi] = (old[xi] as number) + dx;
+  (cmd as any[])[yi] = (old[yi] as number) + dy;
+  result[ci] = cmd;
+
+  return result;
+}
+
 // Dual-mode export
 // @ts-ignore
 if (typeof module !== 'undefined' && module.exports) {
@@ -198,4 +229,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports.extractAnchors = extractAnchors;
   // @ts-ignore
   module.exports.moveAnchorRigid = moveAnchorRigid;
+  // @ts-ignore
+  module.exports.moveHandle = moveHandle;
 }

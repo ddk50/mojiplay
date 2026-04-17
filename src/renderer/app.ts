@@ -889,8 +889,24 @@
   const ANCHOR_FILL       = '#ffffff';
   const ANCHOR_STROKE     = '#0066ff';
 
+  const HANDLE_LINE_COLOR = '#0066ff';
+  const HANDLE_LINE_WIDTH = 1;
+  const HANDLE_CIRCLE_R   = 4;
+  const HANDLE_FILL       = '#ffffff';
+  const HANDLE_STROKE     = '#0066ff';
+  const HANDLE_HIT_RADIUS = 5;
+
   interface AnchorScreenPos { anchorIndex: number; sx: number; sy: number }
   let anchorScreenCache: AnchorScreenPos[] = [];
+
+  interface HandleScreenPos {
+    anchorIndex: number;
+    which: 'in' | 'out';
+    handle: { cmdIndex: number; paramIndices: readonly [number, number] };
+    sx: number;
+    sy: number;
+  }
+  let handleScreenCache: HandleScreenPos[] = [];
 
   interface AnchorDragState {
     pathObj: fabric.Path;
@@ -899,6 +915,14 @@
     lastPointer: { x: number; y: number };
   }
   let anchorDrag: AnchorDragState | null = null;
+
+  interface HandleDragState {
+    pathObj: fabric.Path;
+    handle: { cmdIndex: number; paramIndices: readonly [number, number] };
+    startPath: any[];
+    lastPointer: { x: number; y: number };
+  }
+  let handleDrag: HandleDragState | null = null;
 
   function getEditablePath(): fabric.Path | null {
     if (currentMode !== 'select-char') return null;
@@ -929,42 +953,83 @@
     const path = getEditablePath();
     if (!path || !ctx) {
       anchorScreenCache = [];
+      handleScreenCache = [];
       return;
     }
 
     const cmds = (path as any).path as any[];
-    if (!cmds) { anchorScreenCache = []; return; }
+    if (!cmds) { anchorScreenCache = []; handleScreenCache = []; return; }
 
     const anchors = extractAnchors(cmds);
     const half = ANCHOR_MARKER_PX / 2;
-    const cache: AnchorScreenPos[] = [];
+    const aCache: AnchorScreenPos[] = [];
+    const hCache: HandleScreenPos[] = [];
 
-    ctx.save();
-    // ── DPI スケーリング補正 ──────────────────────────────────────
-    // fabric の contextTop (オーバーレイ用 Canvas) は高 DPI 環境では
-    // 物理ピクセルサイズが CSS ピクセルの devicePixelRatio (dpr) 倍に
-    // なっている。anchorLocalToScreen() が返す座標は CSS ピクセル空間
-    // なので、setTransform で dpr を掛けないと dpr 倍ずれて描画される。
-    //
-    // force-device-scale-factor: 1 を使っていた時は dpr=1 のため
-    // 問題が顕在化しなかったが、OS スケーリングに従うようにした
-    // (dpr>1) ことで顕在化した。
-    const retina = (canvas as any).getRetinaScaling?.() ?? window.devicePixelRatio ?? 1;
-    ctx.setTransform(retina, 0, 0, retina, 0, 0);
-    ctx.strokeStyle = ANCHOR_STROKE;
-    ctx.lineWidth = 1;
-    ctx.fillStyle = ANCHOR_FILL;
-
+    // アンカーのスクリーン座標を先に全計算
     for (let i = 0; i < anchors.length; i++) {
       const a = anchors[i];
       const { sx, sy } = anchorLocalToScreen(a.x, a.y, path);
-      cache.push({ anchorIndex: i, sx, sy });
-      ctx.fillRect(sx - half, sy - half, ANCHOR_MARKER_PX, ANCHOR_MARKER_PX);
-      ctx.strokeRect(sx - half, sy - half, ANCHOR_MARKER_PX, ANCHOR_MARKER_PX);
+      aCache.push({ anchorIndex: i, sx, sy });
     }
+
+    // ハンドルのスクリーン座標を計算
+    for (let i = 0; i < anchors.length; i++) {
+      const a = anchors[i];
+      if (a.incomingHandle) {
+        const h = a.incomingHandle;
+        const hx = cmds[h.cmdIndex][h.paramIndices[0]] as number;
+        const hy = cmds[h.cmdIndex][h.paramIndices[1]] as number;
+        const { sx, sy } = anchorLocalToScreen(hx, hy, path);
+        hCache.push({ anchorIndex: i, which: 'in', handle: h, sx, sy });
+      }
+      if (a.outgoingHandle) {
+        const h = a.outgoingHandle;
+        const hx = cmds[h.cmdIndex][h.paramIndices[0]] as number;
+        const hy = cmds[h.cmdIndex][h.paramIndices[1]] as number;
+        const { sx, sy } = anchorLocalToScreen(hx, hy, path);
+        hCache.push({ anchorIndex: i, which: 'out', handle: h, sx, sy });
+      }
+    }
+
+    ctx.save();
+    const retina = (canvas as any).getRetinaScaling?.() ?? window.devicePixelRatio ?? 1;
+    ctx.setTransform(retina, 0, 0, retina, 0, 0);
+
+    // Pass 1: ハンドル線 (最背面)
+    ctx.strokeStyle = HANDLE_LINE_COLOR;
+    ctx.lineWidth = HANDLE_LINE_WIDTH;
+    for (const h of hCache) {
+      const anchor = aCache[h.anchorIndex];
+      ctx.beginPath();
+      ctx.moveTo(anchor.sx, anchor.sy);
+      ctx.lineTo(h.sx, h.sy);
+      ctx.stroke();
+    }
+
+    // Pass 2: ハンドル円
+    ctx.fillStyle = HANDLE_FILL;
+    ctx.strokeStyle = HANDLE_STROKE;
+    ctx.lineWidth = 1;
+    for (const h of hCache) {
+      ctx.beginPath();
+      ctx.arc(h.sx, h.sy, HANDLE_CIRCLE_R, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Pass 3: アンカー四角 (最前面)
+    ctx.fillStyle = ANCHOR_FILL;
+    ctx.strokeStyle = ANCHOR_STROKE;
+    ctx.lineWidth = 1;
+    for (const a of aCache) {
+      ctx.fillRect(a.sx - half, a.sy - half, ANCHOR_MARKER_PX, ANCHOR_MARKER_PX);
+      ctx.strokeRect(a.sx - half, a.sy - half, ANCHOR_MARKER_PX, ANCHOR_MARKER_PX);
+    }
+
     ctx.restore();
 
-    anchorScreenCache = cache;
+    anchorScreenCache = aCache;
+    handleScreenCache = hCache;
   }
 
   canvas.on('after:render', drawAnchorOverlay);
@@ -984,14 +1049,66 @@
     return bestIdx;
   }
 
+  function hitTestHandle(screenX: number, screenY: number): HandleScreenPos | null {
+    let best: HandleScreenPos | null = null;
+    let bestDist = HANDLE_HIT_RADIUS + 1;
+    for (const h of handleScreenCache) {
+      const dx = screenX - h.sx;
+      const dy = screenY - h.sy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = h;
+      }
+    }
+    return best;
+  }
+
   function clearAnchorState(): void {
     anchorDrag = null;
+    handleDrag = null;
     anchorScreenCache = [];
+    handleScreenCache = [];
     const ctx = (canvas as any).contextTop as CanvasRenderingContext2D;
     if (ctx) canvas.clearContext(ctx);
   }
 
-  // DOM capture で fabric の mousedown より先にアンカーヒットテストを行う。
+  // ── 共通ヘルパー ────────────────────────────────────────────────────
+
+  /** ワールド座標デルタ → パスローカル座標デルタ変換 */
+  function worldToLocalDelta(
+    pathObj: fabric.Path, worldDx: number, worldDy: number,
+  ): { dx: number; dy: number } {
+    const mat = pathObj.calcTransformMatrix();
+    const inv = fabric.util.invertTransform(mat);
+    return {
+      dx: inv[0] * worldDx + inv[2] * worldDy,
+      dy: inv[1] * worldDx + inv[3] * worldDy,
+    };
+  }
+
+  /** ドラッグ終了時の bbox 再計算 + pathOffset 補正 */
+  function finalizeDrag(p: fabric.Path): void {
+    const oldPO = { x: (p as any).pathOffset.x, y: (p as any).pathOffset.y };
+    (fabric.Polyline.prototype as any)._setPositionDimensions.call(p, {
+      left: p.left,
+      top: p.top,
+    });
+    const newPO = (p as any).pathOffset as { x: number; y: number };
+    const dxLocal = oldPO.x - newPO.x;
+    const dyLocal = oldPO.y - newPO.y;
+    const sx = (p.scaleX as number) ?? 1;
+    const sy = (p.scaleY as number) ?? 1;
+    const rad = ((p.angle as number) ?? 0) * Math.PI / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    p.left = (p.left ?? 0) + dxLocal * sx * cos - dyLocal * sy * sin;
+    p.top  = (p.top  ?? 0) + dxLocal * sx * sin + dyLocal * sy * cos;
+    p.setCoords();
+    canvas.fire('object:modified', { target: p } as any);
+  }
+
+  // DOM capture で fabric の mousedown より先にヒットテストを行う。
   // ヒットした場合は stopImmediatePropagation で fabric に渡さない。
   const upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement;
 
@@ -1002,83 +1119,97 @@
     const rect = upperCanvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
-    const aidx = hitTestAnchor(screenX, screenY);
-    if (aidx < 0) return;
+
+    // ヒットテスト: ハンドル優先 → アンカー
+    const hitHandle = hitTestHandle(screenX, screenY);
+    const hitAnchor = hitHandle ? -1 : hitTestAnchor(screenX, screenY);
+    if (!hitHandle && hitAnchor < 0) return;
 
     e.stopImmediatePropagation();
     e.preventDefault();
 
     const cmds = (path as any).path as any[];
-    anchorDrag = {
-      pathObj: path,
-      anchorIndex: aidx,
-      startPath: cmds.map((c: any[]) => c.slice()),
-      lastPointer: canvas.getPointer(e),
-    };
+    const startPath = cmds.map((c: any[]) => c.slice());
+    const lastPointer = canvas.getPointer(e);
 
-    const onMove = (me: MouseEvent) => {
-      if (!anchorDrag) return;
+    if (hitHandle) {
+      // ── ハンドル (制御点) ドラッグ ──────────────────────────────
+      handleDrag = {
+        pathObj: path,
+        handle: hitHandle.handle,
+        startPath,
+        lastPointer,
+      };
 
-      const pointer = canvas.getPointer(me);
-      const worldDx = pointer.x - anchorDrag.lastPointer.x;
-      const worldDy = pointer.y - anchorDrag.lastPointer.y;
+      const onMove = (me: MouseEvent) => {
+        if (!handleDrag) return;
+        const pointer = canvas.getPointer(me);
+        const worldDx = pointer.x - handleDrag.lastPointer.x;
+        const worldDy = pointer.y - handleDrag.lastPointer.y;
+        const local = worldToLocalDelta(handleDrag.pathObj, worldDx, worldDy);
 
-      // world delta → path-local delta (逆行列の線形部分のみ使用)
-      const mat = anchorDrag.pathObj.calcTransformMatrix();
-      const inv = fabric.util.invertTransform(mat);
-      // 線形部分 (回転・スケール) だけ適用。並進成分を除去
-      const localDx = inv[0] * worldDx + inv[2] * worldDy;
-      const localDy = inv[1] * worldDx + inv[3] * worldDy;
+        const curPath = (handleDrag.pathObj as any).path as any[];
+        const newPath = moveHandle(curPath, handleDrag.handle, local.dx, local.dy);
+        (handleDrag.pathObj as any).path = newPath;
+        (handleDrag.pathObj as any).dirty = true;
+        handleDrag.lastPointer = pointer;
+        canvas.requestRenderAll();
+      };
 
-      const curPath = (anchorDrag.pathObj as any).path as any[];
-      const newPath = moveAnchorRigid(curPath, anchorDrag.anchorIndex, localDx, localDy);
-      (anchorDrag.pathObj as any).path = newPath;
-      (anchorDrag.pathObj as any).dirty = true;
-      anchorDrag.lastPointer = pointer;
-      canvas.requestRenderAll();
-    };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        if (handleDrag) {
+          finalizeDrag(handleDrag.pathObj);
+          handleDrag = null;
+        }
+        canvas.requestRenderAll();
+      };
 
-    const onUp = (_ue: MouseEvent) => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      if (anchorDrag) {
-        const p = anchorDrag.pathObj;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    } else {
+      // ── アンカードラッグ (既存) ────────────────────────────────
+      anchorDrag = {
+        pathObj: path,
+        anchorIndex: hitAnchor,
+        startPath,
+        lastPointer,
+      };
 
-        // ── bbox 再計算 ────────────────────────────────────────────
-        // アンカー移動で path コマンドが変わったため、width/height/pathOffset
-        // を再計算する。_setPositionDimensions は pathOffset を更新するが、
-        // left/top を明示指定しているため上書きされない。
-        // pathOffset の変化分を left/top に反映して視覚位置を維持する。
-        const oldPO = { x: (p as any).pathOffset.x, y: (p as any).pathOffset.y };
-        (fabric.Polyline.prototype as any)._setPositionDimensions.call(p, {
-          left: p.left,
-          top: p.top,
-        });
-        const newPO = (p as any).pathOffset as { x: number; y: number };
-        const dxLocal = oldPO.x - newPO.x;
-        const dyLocal = oldPO.y - newPO.y;
-        const sx = (p.scaleX as number) ?? 1;
-        const sy = (p.scaleY as number) ?? 1;
-        const rad = ((p.angle as number) ?? 0) * Math.PI / 180;
-        const cos = Math.cos(rad);
-        const sin = Math.sin(rad);
-        p.left = (p.left ?? 0) + dxLocal * sx * cos - dyLocal * sy * sin;
-        p.top  = (p.top  ?? 0) + dxLocal * sx * sin + dyLocal * sy * cos;
+      const onMove = (me: MouseEvent) => {
+        if (!anchorDrag) return;
+        const pointer = canvas.getPointer(me);
+        const worldDx = pointer.x - anchorDrag.lastPointer.x;
+        const worldDy = pointer.y - anchorDrag.lastPointer.y;
+        const local = worldToLocalDelta(anchorDrag.pathObj, worldDx, worldDy);
 
-        p.setCoords();
-        canvas.fire('object:modified', { target: p } as any);
-        anchorDrag = null;
-      }
-      canvas.requestRenderAll();
-    };
+        const curPath = (anchorDrag.pathObj as any).path as any[];
+        const newPath = moveAnchorRigid(curPath, anchorDrag.anchorIndex, local.dx, local.dy);
+        (anchorDrag.pathObj as any).path = newPath;
+        (anchorDrag.pathObj as any).dirty = true;
+        anchorDrag.lastPointer = pointer;
+        canvas.requestRenderAll();
+      };
 
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        if (anchorDrag) {
+          finalizeDrag(anchorDrag.pathObj);
+          anchorDrag = null;
+        }
+        canvas.requestRenderAll();
+      };
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    }
   }, true);
 
   // ホバー時のカーソル変更
   upperCanvas.addEventListener('mousemove', (e: MouseEvent) => {
-    if (anchorDrag) return;
+    if (anchorDrag || handleDrag) return;
     const path = getEditablePath();
     if (!path) {
       upperCanvas.style.cursor = '';
@@ -1087,6 +1218,8 @@
     const rect = upperCanvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
+    const hHit = hitTestHandle(screenX, screenY);
+    if (hHit) { upperCanvas.style.cursor = 'pointer'; return; }
     const aidx = hitTestAnchor(screenX, screenY);
     upperCanvas.style.cursor = aidx >= 0 ? 'move' : '';
   }, true);
@@ -1104,7 +1237,10 @@
     syncToolbarToSelection();
   });
   canvas.on('object:removed', (e: fabric.IEvent) => {
-    if (anchorDrag && e.target === anchorDrag.pathObj) clearAnchorState();
+    if ((anchorDrag && e.target === anchorDrag.pathObj) ||
+        (handleDrag && e.target === handleDrag.pathObj)) {
+      clearAnchorState();
+    }
   });
 
   // ── 選択オブジェクトを透過 PNG としてクリップボードにコピー ────────────
