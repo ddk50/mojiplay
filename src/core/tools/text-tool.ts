@@ -9,13 +9,19 @@
 // pointer 系イベントは全て no-op (DOM capture 段階では何もしない)。
 
 import type {
-  Tool, ToolHost, TextCreateProps, PointerInput, PointerHandled,
+  Tool, ToolDescriptor, ToolHost, TextCreateProps, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
 
 type FontPropsProvider = () => TextCreateProps;
 
 export class TextTool implements Tool {
+  readonly descriptor: ToolDescriptor = {
+    id:    'text',
+    label: '文字入力 (T)',
+    iconSvg: '<span style="font-weight:700;font-size:12px;">T</span>',
+  };
+
   constructor(private getFontProps: FontPropsProvider) {}
 
   onActivate(_host: ToolHost): void { /* no-op */ }

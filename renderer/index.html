@@ -36,34 +36,9 @@
   </div>
 
   <div id="toolbar">
-    <div class="toolbar-group">
-      <button id="btn-mode-select-group" class="mode-btn is-active" title="グループ選択/移動 (黒矢印)">
-        <svg class="tool-icon" viewBox="0 0 14 18" xmlns="http://www.w3.org/2000/svg">
-          <path d="M2,1 L2,14 L5,11 L7.5,16.5 L9.5,15.5 L7,10 L12,10 Z"/>
-        </svg>
-      </button>
-      <button id="btn-mode-select-char" class="mode-btn" title="文字選択/カーニング (白矢印)">
-        <svg class="tool-icon outline-arrow" viewBox="0 0 14 18" xmlns="http://www.w3.org/2000/svg">
-          <path d="M2,1 L2,14 L5,11 L7.5,16.5 L9.5,15.5 L7,10 L12,10 Z"/>
-        </svg>
-      </button>
-      <button id="btn-mode-text" class="mode-btn" title="文字入力 (T)" style="font-weight:700;font-size:12px;">T</button>
-      <button id="btn-mode-pen-add" class="mode-btn" title="アンカーポイント追加 (+ペン)">
-        <svg class="tool-icon pen-icon" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
-          <path class="pen-nib" d="M9,1 L13,5.5 L11.5,10.5 L9,16 L6.5,10.5 L5,5.5 Z"/>
-          <circle class="pen-dot" cx="9" cy="6.5" r="1.6"/>
-          <line class="pen-sign" x1="14.5" y1="12" x2="14.5" y2="17" stroke-width="1.8" stroke-linecap="round"/>
-          <line class="pen-sign" x1="12" y1="14.5" x2="17" y2="14.5" stroke-width="1.8" stroke-linecap="round"/>
-        </svg>
-      </button>
-      <button id="btn-mode-pen-remove" class="mode-btn" title="アンカーポイント削除 (-ペン)">
-        <svg class="tool-icon pen-icon" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
-          <path class="pen-nib" d="M9,1 L13,5.5 L11.5,10.5 L9,16 L6.5,10.5 L5,5.5 Z"/>
-          <circle class="pen-dot" cx="9" cy="6.5" r="1.6"/>
-          <line class="pen-sign" x1="12" y1="14.5" x2="17" y2="14.5" stroke-width="1.8" stroke-linecap="round"/>
-        </svg>
-      </button>
-    </div>
+    <!-- モード切替ボタンは renderer/toolbar.ts が tools 配列から動的生成する。
+         id="tool-buttons" を JS 側で querySelector して中身を埋める。 -->
+    <div id="tool-buttons" class="toolbar-group"></div>
 
     <div class="toolbar-group">
       <label for="font-family">フォント</label>

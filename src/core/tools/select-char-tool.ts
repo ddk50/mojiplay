@@ -18,7 +18,7 @@ import { moveAnchorRigid, moveHandle } from '../path/anchors';
 import { worldDeltaToPathLocalDelta } from '../path/coords';
 import { computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt } from './overlay-layout';
 import type {
-  Tool, ToolHost, PathHandle, PointerInput, PointerHandled,
+  Tool, ToolDescriptor, ToolHost, PathHandle, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
 
@@ -41,6 +41,15 @@ type SelectCharDragState =
     };
 
 export class SelectCharTool implements Tool {
+  readonly descriptor: ToolDescriptor = {
+    id:    'select-char',
+    label: '文字選択/カーニング (白矢印)',
+    iconSvg:
+      '<svg class="tool-icon outline-arrow" viewBox="0 0 14 18" xmlns="http://www.w3.org/2000/svg">' +
+        '<path d="M2,1 L2,14 L5,11 L7.5,16.5 L9.5,15.5 L7,10 L12,10 Z"/>' +
+      '</svg>',
+  };
+
   // 既定値は app.ts のトップ初期値と一致させる (pitch=8, threshold=5)。
   private snap: SnapConfig = { enabled: true, pitch: 8, threshold: 5 };
   private drag: SelectCharDragState | null = null;

@@ -17,7 +17,7 @@ import type { PathTransform } from '../path/coords';
 import { screenToPathLocal } from '../path/coords';
 import { findClosestSegment } from './segment-hit';
 import type {
-  Tool, ToolHost, PathHandle, PointerInput, PointerHandled,
+  Tool, ToolDescriptor, ToolHost, PathHandle, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
 
@@ -33,6 +33,18 @@ const PEN_HIT_THRESHOLD = 8;
 const PEN_SAMPLES       = 50;
 
 export class PenAddTool implements Tool {
+  readonly descriptor: ToolDescriptor = {
+    id:    'pen-add',
+    label: 'アンカーポイント追加 (+ペン)',
+    iconSvg:
+      '<svg class="tool-icon pen-icon" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">' +
+        '<path class="pen-nib" d="M9,1 L13,5.5 L11.5,10.5 L9,16 L6.5,10.5 L5,5.5 Z"/>' +
+        '<circle class="pen-dot" cx="9" cy="6.5" r="1.6"/>' +
+        '<line class="pen-sign" x1="14.5" y1="12" x2="14.5" y2="17" stroke-width="1.8" stroke-linecap="round"/>' +
+        '<line class="pen-sign" x1="12" y1="14.5" x2="17" y2="14.5" stroke-width="1.8" stroke-linecap="round"/>' +
+      '</svg>',
+  };
+
   private drag: PenAddDragState | null = null;
   private dragPath: PathHandle | null = null;
 

@@ -24,6 +24,7 @@ import {
   fontFamilySel, fontStyleSel, populateStyleList, styleValue,
 } from './font-enumeration';
 import { outlineTextToPath } from './outline-conversion';
+import { buildToolbar } from './toolbar';
 
 // メニューアクション → 後で canvas 初期化後に使う関数を参照するため
 // handleMenuAction は関数宣言 (hoisted) で定義し、canvas 依存部分は
@@ -100,11 +101,8 @@ resizeCanvas();
 const fontSizeInput      = document.getElementById('font-size')             as HTMLInputElement;
 const fontColorInput     = document.getElementById('font-color')            as HTMLInputElement;
 const rotationInput      = document.getElementById('rotation')              as HTMLInputElement;
-const btnModeSelectGroup = document.getElementById('btn-mode-select-group') as HTMLButtonElement;
-const btnModeSelectChar  = document.getElementById('btn-mode-select-char')  as HTMLButtonElement;
-const btnModeText        = document.getElementById('btn-mode-text')         as HTMLButtonElement;
-const btnModePenAdd      = document.getElementById('btn-mode-pen-add')      as HTMLButtonElement;
-const btnModePenRemove   = document.getElementById('btn-mode-pen-remove')   as HTMLButtonElement;
+// モード切替ボタンは renderer/toolbar.ts が tools 配列から動的生成する。
+// 生成された button マップは下段の dispatcher セットアップ後に modeButtons に代入される。
 const snapEnabledInput   = document.getElementById('snap-enabled')          as HTMLInputElement;
 const snapPitchInput     = document.getElementById('snap-pitch')            as HTMLInputElement;
 const snapThresholdInput = document.getElementById('snap-threshold')        as HTMLInputElement;
@@ -145,20 +143,16 @@ snapThresholdInput.addEventListener('input', () => {
 type Mode = 'select-group' | 'select-char' | 'text' | 'pen-add' | 'pen-remove';
 let currentMode: Mode = 'select-group';
 
-const modeButtons: Record<Mode, HTMLButtonElement> = {
-  'select-group': btnModeSelectGroup,
-  'select-char':  btnModeSelectChar,
-  'text':         btnModeText,
-  'pen-add':      btnModePenAdd,
-  'pen-remove':   btnModePenRemove,
-};
+// buildToolbar が tools 配列から button を生成して埋める。tool の id (= Mode) を
+// キーに button 要素を保持。setMode の active class 切替で参照する。
+let modeButtons: Record<string, HTMLButtonElement> = {};
 
 function setMode(m: Mode): void {
   const prev = currentMode;
   currentMode = m;
-  (Object.keys(modeButtons) as Mode[]).forEach(k => {
+  for (const k of Object.keys(modeButtons)) {
     modeButtons[k].classList.toggle('is-active', k === m);
-  });
+  }
 
   if (prev !== m) {
     tools[prev].onDeactivate(toolHost);
@@ -189,11 +183,7 @@ function setMode(m: Mode): void {
   canvas.requestRenderAll();
 }
 
-btnModeSelectGroup.addEventListener('click', () => setMode('select-group'));
-btnModeSelectChar.addEventListener('click',  () => setMode('select-char'));
-btnModeText.addEventListener('click',        () => setMode('text'));
-btnModePenAdd.addEventListener('click',      () => setMode('pen-add'));
-btnModePenRemove.addEventListener('click',   () => setMode('pen-remove'));
+// ツールバーボタンの click 配線は buildToolbar (後段) で行う。
 
 // ── IText 確定: 1文字ずつ fabric.Text に分割 ──────────────────────────────
 
@@ -826,6 +816,22 @@ const tools: Record<Mode, Tool> = {
   'pen-add':      penAddTool,
   'pen-remove':   penRemoveTool,
 };
+
+// ツールバーボタン群を tools 配列から動的生成する。Object.values は挿入順を
+// 保つので、上の Record 定義の並びがそのまま toolbar の左→右順になる。
+// 生成された button 群は modeButtons (上段で宣言) に格納され、setMode の
+// is-active class 切替に使われる。
+{
+  const container = document.getElementById('tool-buttons');
+  if (!container) throw new Error('#tool-buttons container not found in index.html');
+  modeButtons = buildToolbar(
+    Object.values(tools),
+    container,
+    (id) => setMode(id as Mode),
+  );
+  // 起動直後の active class を初期モードに合わせる。
+  setMode(currentMode);
+}
 
 function buildPointerInput(e: MouseEvent): PointerInput {
   const rect = upperCanvas.getBoundingClientRect();

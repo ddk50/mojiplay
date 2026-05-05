@@ -61,6 +61,28 @@ export interface ObjectHandle {
   getGroupId(): string | undefined;
 }
 
+// ツール自身が UI に表示するメタ情報。toolbar が tools 配列を iterate して
+// 動的にボタンを生成する際に使う。
+//
+// - id:      currentMode キーと同じ識別子 ('select-group' 等)
+// - label:   button の title (= ツールチップ) に表示する人間可読ラベル
+// - iconSvg: button.innerHTML に流す SVG (or 任意の HTML) 文字列。renderer の
+//            CSS class (tool-icon, outline-arrow, pen-icon, pen-nib 等) を参照
+//            するのは許容 (renderer/style.css 側で定義済の package である前提)
+//
+// 依存方向: tool → renderer の一方通行。tool が UI 表現の文字列を自己完結で
+// 宣言し、renderer (toolbar.ts) は受け取った文字列をそのまま innerHTML に
+// 流す pure sink として振る舞う。中間 registry は使わない (key と registry
+// 双方の維持コストを避けるため)。
+//
+// "core/tools が DOM を触らない" 原則は守られる: tool は string 値を保持する
+// だけで document.* / fabric には触れない。
+export interface ToolDescriptor {
+  readonly id:      string;
+  readonly label:   string;
+  readonly iconSvg: string;
+}
+
 // TextTool が host に渡す生成リクエストのフォントプロパティ。
 // fabric.IText の生成に必要な最小セット。
 export interface TextCreateProps {
@@ -120,6 +142,9 @@ export interface ToolHost {
 export type PointerHandled = 'consumed' | 'pass';
 
 export interface Tool {
+  // ツール ID + UI メタ情報。toolbar から参照される (詳細は ToolDescriptor)。
+  readonly descriptor: ToolDescriptor;
+
   onActivate(host: ToolHost): void;
   onDeactivate(host: ToolHost): void;
 

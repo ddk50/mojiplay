@@ -8,11 +8,22 @@
 import { removeAnchor } from '../path/anchors';
 import { computeOverlayLayout, hitTestAnchorAt } from './overlay-layout';
 import type {
-  Tool, ToolHost, PointerInput, PointerHandled,
+  Tool, ToolDescriptor, ToolHost, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
 
 export class PenRemoveTool implements Tool {
+  readonly descriptor: ToolDescriptor = {
+    id:    'pen-remove',
+    label: 'アンカーポイント削除 (-ペン)',
+    iconSvg:
+      '<svg class="tool-icon pen-icon" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">' +
+        '<path class="pen-nib" d="M9,1 L13,5.5 L11.5,10.5 L9,16 L6.5,10.5 L5,5.5 Z"/>' +
+        '<circle class="pen-dot" cx="9" cy="6.5" r="1.6"/>' +
+        '<line class="pen-sign" x1="12" y1="14.5" x2="17" y2="14.5" stroke-width="1.8" stroke-linecap="round"/>' +
+      '</svg>',
+  };
+
   onActivate(_host: ToolHost): void { /* no-op */ }
   onDeactivate(host: ToolHost): void { host.setCursor(''); }
 
