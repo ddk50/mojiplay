@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   zoomOut:        (): Promise<void> => ipcRenderer.invoke('zoom-out'),
   zoomReset:      (): Promise<void> => ipcRenderer.invoke('zoom-reset'),
   toggleFullscreen: (): Promise<void> => ipcRenderer.invoke('toggle-fullscreen'),
+  undo:  (): Promise<void> => ipcRenderer.invoke('undo'),
+  redo:  (): Promise<void> => ipcRenderer.invoke('redo'),
+  paste: (): Promise<void> => ipcRenderer.invoke('paste'),
   log: {
     debug: (msg: string) => ipcRenderer.invoke('log', 'debug', msg),
     info:  (msg: string) => ipcRenderer.invoke('log', 'info',  msg),

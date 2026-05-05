@@ -12,6 +12,9 @@ interface Window {
     zoomOut(): Promise<void>;
     zoomReset(): Promise<void>;
     toggleFullscreen(): Promise<void>;
+    undo(): Promise<void>;
+    redo(): Promise<void>;
+    paste(): Promise<void>;
     log?: {
       debug(msg: string): Promise<void>;
       info(msg: string):  Promise<void>;

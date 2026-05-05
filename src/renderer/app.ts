@@ -18,13 +18,13 @@
         if (typeof doCopy === 'function') doCopy();
         break;
       case 'undo':
-        document.execCommand('undo');
+        void window.electronAPI?.undo();
         break;
       case 'redo':
-        document.execCommand('redo');
+        void window.electronAPI?.redo();
         break;
       case 'paste':
-        document.execCommand('paste');
+        void window.electronAPI?.paste();
         break;
       case 'delete':
         menuDeleteSelection();
@@ -59,7 +59,13 @@
   const canvas = new fabric.Canvas('main-canvas', {
     backgroundColor: undefined,
     preserveObjectStacking: true,
-    selection: true
+    selection: true,
+    // 範囲選択 (ドラッグマーキー) の見た目: 薄いブルー塗り + ブルー点線。
+    // ハンドル色 (#0066ff) と統一して視覚言語を揃える。
+    selectionColor:       'rgba(0, 102, 255, 0.08)',
+    selectionBorderColor: '#0066ff',
+    selectionLineWidth:   1,
+    selectionDashArray:   [5, 3],
   });
 
   function resizeCanvas(): void {
@@ -635,14 +641,16 @@
 
   function drawAnchorOverlay(): void {
     const ctx = (canvas as any).contextTop as CanvasRenderingContext2D;
-    if (ctx) canvas.clearContext(ctx);
-
     const path = getEditablePath();
     if (!path || !ctx) {
+      // 編集対象パスが無い場合は contextTop に手を出さない。
+      // fabric は contextTop に範囲選択 (marquee) や free-drawing を描画するので、
+      // 我々が無条件に clearContext すると marquee が消えてしまう (回帰防止)。
       anchorScreenCache = [];
       handleScreenCache = [];
       return;
     }
+    canvas.clearContext(ctx);
 
     const rawCmds = (path as any).path as ReadonlyArray<ReadonlyArray<unknown>> | undefined;
     if (!rawCmds) { anchorScreenCache = []; handleScreenCache = []; return; }
