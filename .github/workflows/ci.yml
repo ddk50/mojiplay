@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 同じブランチの後続 push が来たら古い run をキャンセルする (PR 連投時の節約)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # tsc (main + preload), tsc --noEmit (renderer typecheck), esbuild (renderer bundle)
+      # の 3 段階を順に走らせる。型エラーやコンパイル失敗があればここで落ちる。
+      - name: Build (typecheck + bundle)
+        run: npm run build
+
+      # ts-jest が test ファイルを on-the-fly でコンパイルしながら実行するので、
+      # ここでテスト用 .ts の型エラーも検出される。
+      - name: Test
+        run: npm test
