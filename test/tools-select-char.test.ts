@@ -49,11 +49,24 @@ interface MovingTarget {
   setLeft(v: number): void; setTop(v: number): void;
 }
 
+interface ObjectHandle { getGroupId(): string | undefined }
+interface TextCreateProps {
+  readonly fontFamily: string;
+  readonly fontSize:   number;
+  readonly fontWeight: number | string;
+  readonly fontStyle:  'normal' | 'italic';
+  readonly fill:       string;
+}
+
 interface ToolHost {
   getActivePath(): PathHandle | null;
   getViewportMatrix(): Mat2x3;
   requestRerender(): void;
   setCursor(c: string): void;
+  getActiveObjects(): ReadonlyArray<ObjectHandle>;
+  getAllObjects():    ReadonlyArray<ObjectHandle>;
+  setActiveSelection(objs: ReadonlyArray<ObjectHandle>): void;
+  createTextAt(x: number, y: number, props: TextCreateProps): void;
 }
 
 type PointerHandled = 'consumed' | 'pass';
@@ -111,6 +124,10 @@ class FakeHost implements ToolHost {
   getViewportMatrix(): Mat2x3 { return IDENT; }
   requestRerender(): void { this.rerenderCount++; }
   setCursor(c: string): void { this.cursor = c; }
+  getActiveObjects(): ReadonlyArray<ObjectHandle> { return []; }
+  getAllObjects():    ReadonlyArray<ObjectHandle> { return []; }
+  setActiveSelection(_objs: ReadonlyArray<ObjectHandle>): void { /* no-op */ }
+  createTextAt(_x: number, _y: number, _props: TextCreateProps): void { /* no-op */ }
 }
 
 function pointer(opts: Partial<PointerInput> & { x: number; y: number }): PointerInput {

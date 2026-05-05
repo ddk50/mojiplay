@@ -1,7 +1,10 @@
-// ツール抽象の型定義 (純粋、fabric / DOM 非依存)。
+// ツール抽象の境界 (interface) 定義 (純粋、fabric / DOM 非依存)。
 //
 // 「ツール」= ユーザがあるモードに入った時の挙動全体を 1 つのオブジェクトに
 // まとめたもの。app.ts の散在する if 文を分離してテスト可能にするのが目的。
+// 本ファイルは Tool / ToolHost / PathHandle / ObjectHandle 等、ツールと
+// ホスト (renderer) の間で授受される契約一式を集約する。データ ADT は
+// ../path/types.ts (Point / PathCommand など) と分離している。
 //
 // 設計方針:
 //   - 入力 (PointerInput, MovingTarget) は最小限のフィールドのみで fabric/DOM
@@ -35,6 +38,38 @@ interface MovingTarget {
   getTop(): number;
   setLeft(v: number): void;
   setTop(v: number): void;
+}
+
+// fabric の mouse:down イベント (fabric の hit-test 後) を抽象化。
+// TextTool は target が無いキャンバス空き領域クリックで IText を生成するため
+// hasTarget が必要。
+interface CanvasMouseDownInput {
+  readonly worldX: number;
+  readonly worldY: number;
+  readonly hasTarget: boolean;
+}
+
+// 選択操作用の最小 ObjectHandle。
+// 現状は groupId だけで足りる (黒矢印の自動展開) が、後で型情報や outlined フラグ
+// が要るツールが出てきたら拡張する。host が fabric.Object との対応関係を内部で保つ
+// ので、tool 側は handle を不透明な ID として === 比較できれば良い。
+//
+// 規約: ToolHost.getActiveObjects / getAllObjects の実装は、同じ対象オブジェクトに
+// 対しては必ず同じ handle instance を返すこと (canonical 化)。SelectGroupTool は
+// 「現在の選択 == 展開後の選択」を identity 比較で判定するため、毎回別 instance を
+// 返すと無限再帰に陥る。
+interface ObjectHandle {
+  getGroupId(): string | undefined;
+}
+
+// TextTool が host に渡す生成リクエストのフォントプロパティ。
+// fabric.IText の生成に必要な最小セット。
+interface TextCreateProps {
+  readonly fontFamily:  string;
+  readonly fontSize:    number;
+  readonly fontWeight:  number | string;
+  readonly fontStyle:   'normal' | 'italic';
+  readonly fill:        string;
 }
 
 // ── パスへの副作用 ──────────────────────────────────────────────────────
@@ -71,6 +106,14 @@ interface ToolHost {
 
   // upperCanvas のカーソル設定。空文字でデフォルトに戻す。
   setCursor(c: string): void;
+
+  // 選択管理 (主に SelectGroupTool が利用)
+  getActiveObjects(): ReadonlyArray<ObjectHandle>;
+  getAllObjects():    ReadonlyArray<ObjectHandle>;
+  setActiveSelection(objs: ReadonlyArray<ObjectHandle>): void;
+
+  // テキスト生成 (TextTool が利用)。fabric.IText の生成と編集モード突入は host に閉じる。
+  createTextAt(x: number, y: number, props: TextCreateProps): void;
 }
 
 // ── ツール ──────────────────────────────────────────────────────────────
@@ -87,9 +130,19 @@ interface Tool {
   onPointerMove(e: PointerInput, host: ToolHost): void;
   onPointerUp(e: PointerInput, host: ToolHost): void;
 
+  // ドラッグ中かどうか。dispatcher の hover ロジックは drag 中スキップしたい。
+  isDragging(): boolean;
+
   // fabric の object:moving (= パス全体のドラッグ) ハンドラ。
   // snap 等で target の left/top を書き換えるツールがここを実装する。
   onObjectMoving(target: MovingTarget, e: { altKey: boolean }, host: ToolHost): void;
+
+  // fabric の selection:created / selection:updated。SelectGroupTool が実装。
+  onSelectionChanged(host: ToolHost): void;
+
+  // fabric の mouse:down (fabric の hit-test 後)。TextTool が実装。
+  // DOM capture mousedown より後、fabric の選択処理の一部として発火する。
+  onCanvasMouseDown(e: CanvasMouseDownInput, host: ToolHost): void;
 }
 
 // 型のみのファイルだが、tsconfig.test の include に入れるために .ts として置く。

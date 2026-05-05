@@ -6,7 +6,7 @@
 //   - ホバー時にアンカー/ハンドル上ならカーソルを切替
 //   - パス全体ドラッグ中はグリッドスナップ (Alt で一時バイパス)
 //
-// 入力 (PointerInput) と出力 (PathHandle / ToolHost) は core/tools/types.ts で
+// 入力 (PointerInput) と出力 (PathHandle / ToolHost) は core/tools/tool-interface.ts で
 // 抽象化されており、本クラスは fabric / DOM を一切知らない。
 // テストは FakePathHandle と FakeToolHost を渡すだけで全挙動を検証可能。
 //
@@ -164,6 +164,9 @@ class SelectCharTool implements Tool {
     const nearestY = Math.round(freeY / pitch) * pitch;
     if (Math.abs(freeY - nearestY) < threshold) target.setTop(nearestY);
   }
+
+  onSelectionChanged(_host: ToolHost): void { /* no-op */ }
+  onCanvasMouseDown(_e: CanvasMouseDownInput, _host: ToolHost): void { /* no-op */ }
 }
 
 // Dual-mode export
