@@ -3,52 +3,12 @@
 // PathSnapshot + viewportMatrix から「screen 座標つきアンカー / ハンドル一覧」
 // を計算する純粋関数と、その結果へのヒットテストを検証。
 
-type Point = { readonly x: number; readonly y: number };
-type Mat2x3 = readonly [number, number, number, number, number, number];
-
-type PathCommand =
-  | { readonly type: 'M'; readonly to: Point }
-  | { readonly type: 'L'; readonly to: Point }
-  | { readonly type: 'C'; readonly c1: Point; readonly c2: Point; readonly to: Point }
-  | { readonly type: 'Q'; readonly c: Point; readonly to: Point }
-  | { readonly type: 'Z' };
-
-type HandleRef =
-  | { readonly kind: 'C-c1'; readonly cmdIndex: number }
-  | { readonly kind: 'C-c2'; readonly cmdIndex: number }
-  | { readonly kind: 'Q-c';  readonly cmdIndex: number };
-
-interface PathSnapshot {
-  readonly commands: ReadonlyArray<PathCommand>;
-  readonly pathMatrix: Mat2x3;
-  readonly pathOffset: Point;
-}
-
-interface AnchorScreenPos {
-  readonly anchorIndex: number;
-  readonly sx: number;
-  readonly sy: number;
-}
-
-interface HandleScreenPos {
-  readonly anchorIndex: number;
-  readonly which: 'in' | 'out';
-  readonly handle: HandleRef;
-  readonly sx: number;
-  readonly sy: number;
-}
-
-interface OverlayScreenLayout {
-  readonly anchors: ReadonlyArray<AnchorScreenPos>;
-  readonly handles: ReadonlyArray<HandleScreenPos>;
-}
-
-const { computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt } =
-  require('../src/core/tools/overlay-layout') as {
-    computeOverlayLayout: (s: PathSnapshot, vp: Mat2x3) => OverlayScreenLayout;
-    hitTestAnchorAt:      (layout: OverlayScreenLayout, x: number, y: number, r?: number) => number;
-    hitTestHandleAt:      (layout: OverlayScreenLayout, x: number, y: number, r?: number) => HandleScreenPos | null;
-  };
+import type { PathCommand } from '../src/core/path/types';
+import type { Mat2x3 } from '../src/core/path/coords';
+import type { PathSnapshot } from '../src/core/tools/tool-interface';
+import {
+  computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt,
+} from '../src/core/tools/overlay-layout';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 
@@ -166,4 +126,3 @@ describe('hitTestHandleAt', () => {
   });
 });
 
-export {};

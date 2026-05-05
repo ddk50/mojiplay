@@ -5,13 +5,17 @@
   "author": "kazushi",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc -p tsconfig.renderer.json",
-    "bundle:vendor": "esbuild node_modules/fontkit/dist/browser-module.mjs --bundle --format=iife --global-name=fontkit --outfile=renderer/vendor/fontkit.js --platform=browser --minify",
-    "bundle:fabric": "cp node_modules/fabric/dist/fabric.min.js renderer/vendor/fabric.min.js",
-    "start": "npm run build && electron .",
-    "pack": "npm run build && electron-builder --win --dir",
-    "dist:win": "npm run build && electron-builder --win --x64",
-    "test": "jest"
+    "build:main":      "tsc -p tsconfig.json",
+    "build:typecheck": "tsc -p tsconfig.renderer.json",
+    "build:renderer":  "node esbuild.renderer.mjs",
+    "build":           "npm run build:main && npm run build:typecheck && npm run build:renderer",
+    "watch:renderer":  "node esbuild.renderer.mjs --watch",
+    "bundle:vendor":   "esbuild node_modules/fontkit/dist/browser-module.mjs --bundle --format=iife --global-name=fontkit --outfile=renderer/vendor/fontkit.js --platform=browser --minify",
+    "bundle:fabric":   "cp node_modules/fabric/dist/fabric.min.js renderer/vendor/fabric.min.js",
+    "start":           "npm run build && electron .",
+    "pack":            "npm run build && electron-builder --win --dir",
+    "dist:win":        "npm run build && electron-builder --win --x64",
+    "test":            "jest"
   },
   "dependencies": {
     "electron-log": "^5.4.3"

@@ -3,36 +3,9 @@
 // PathCommand を直接構築して、screen 座標 (= identity transforms 下では local 座標)
 // でクリックしたときに正しく cmdIndex / t / dist が返るか検証。
 
-type Point = { readonly x: number; readonly y: number };
-type Mat2x3 = readonly [number, number, number, number, number, number];
-
-type PathCommand =
-  | { readonly type: 'M'; readonly to: Point }
-  | { readonly type: 'L'; readonly to: Point }
-  | { readonly type: 'C'; readonly c1: Point; readonly c2: Point; readonly to: Point }
-  | { readonly type: 'Q'; readonly c: Point; readonly to: Point }
-  | { readonly type: 'Z' };
-
-interface PathTransform {
-  readonly pathMatrix: Mat2x3;
-  readonly pathOffset: Point;
-  readonly viewportMatrix: Mat2x3;
-}
-
-interface SegmentHit {
-  readonly cmdIndex: number;
-  readonly t: number;
-  readonly dist: number;
-}
-
-const { findClosestSegment } = require('../src/core/tools/segment-hit') as {
-  findClosestSegment: (
-    cmds: ReadonlyArray<PathCommand>,
-    sx: number, sy: number,
-    t: PathTransform,
-    threshold: number, samples: number,
-  ) => SegmentHit | null;
-};
+import type { PathCommand } from '../src/core/path/types';
+import type { Mat2x3, PathTransform } from '../src/core/path/coords';
+import { findClosestSegment } from '../src/core/tools/segment-hit';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 const T: PathTransform = {
@@ -125,4 +98,3 @@ describe('findClosestSegment', () => {
   });
 });
 
-export {};

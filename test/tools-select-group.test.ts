@@ -2,27 +2,8 @@
 // FakeToolHost に getActiveObjects / getAllObjects / setActiveSelection を実装し、
 // 展開の有無と再帰防止を検証する。
 
-interface ObjectHandle { getGroupId(): string | undefined }
-
-interface ToolHost {
-  getActiveObjects(): ReadonlyArray<ObjectHandle>;
-  getAllObjects():    ReadonlyArray<ObjectHandle>;
-  setActiveSelection(objs: ReadonlyArray<ObjectHandle>): void;
-  // 他はテストで使わないので any で受ける
-  getActivePath():    any;
-  getViewportMatrix():any;
-  requestRerender():  void;
-  setCursor(c: string): void;
-  createTextAt(...args: any[]): void;
-}
-
-interface SelectGroupToolI {
-  onSelectionChanged(host: ToolHost): void;
-}
-
-const { SelectGroupTool } = require('../src/core/tools/select-group-tool') as {
-  SelectGroupTool: new () => SelectGroupToolI;
-};
+import type { ObjectHandle, ToolHost } from '../src/core/tools/tool-interface';
+import { SelectGroupTool } from '../src/core/tools/select-group-tool';
 
 function makeHandle(gid?: string): ObjectHandle {
   return { getGroupId: () => gid };
@@ -194,4 +175,3 @@ describe('SelectGroupTool: canonical handle contract (回帰テスト)', () => {
   });
 });
 
-export {};

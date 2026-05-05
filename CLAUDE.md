@@ -47,26 +47,36 @@ src/
 
 新しいファイルを追加する時はこの分類に従ってください。`core/` は pure function のみ、`renderer/` は副作用あり、`globals/` は他から型シムが必要な時だけ。path 関連のロジック (アンカー、ハンドル、ベジェ評価、コマンド変換など) は `core/path/` 内に。
 
-## ビルド構成 (2つのTypeScriptプロジェクト)
+## ビルド構成 (tsc + esbuild)
 
-メインプロセスとレンダラープロセスで異なるモジュールシステムとlib設定が必要なため、**2つの個別のtsconfig**を使用してコンパイルします。
+3 段階のビルドパイプライン (`npm run build`):
 
-- `tsconfig.json` → `src/main.ts`, `src/preload.ts` → `dist/{main,preload}.js` (CommonJS, Node APIを使用)
-- `tsconfig.renderer.json` → `src/core/**` + `src/renderer/**` → `dist/core/*.js` + `dist/renderer/app.js` (`"module": "none"`, DOM lib, `types: ["fabric"]`、`rootDir: "src"`)
-- `tsconfig.test.json` — ts-jest が参照するテスト用設定。`include` には `test/**` と `src/core/` の各ファイルを列挙 (cross-file global type 解決のため)
+1. **`build:main`** = `tsc -p tsconfig.json` → `src/main.ts`, `src/preload.ts` を `dist/{main,preload}.js` にコンパイル (CommonJS, Node API)
+2. **`build:typecheck`** = `tsc -p tsconfig.renderer.json` (noEmit) → `src/core/**` + `src/renderer/**` の型検査のみ
+3. **`build:renderer`** = `node esbuild.renderer.mjs` → `src/renderer/app.ts` をエントリに `dist/renderer/bundle.js` に IIFE バンドル
 
-`renderer/index.html` は `renderer/vendor/` 配下のプレーンな `<script>` タグで `fabric.min.js` と `fontkit.js` を読み込みます。Fabricは**バンドルされず**、グローバルな `fabric` として消費されます。レンダラーのtsconfigで `"module": "none"` を使用しているのはこのためです。バンダラーを導入せずにレンダラーコードに `import` や `require` を持ち込まないでください。
+`tsconfig.test.json` は ts-jest 用 (CommonJS, `include` は `test/**` のみ。test ファイルが import で source を参照する経路で型解決される)。
 
-`src/core/` の各ファイルも個別の `<script>` タグで読み込まれます (`../dist/core/*.js`)。新しい core ファイルを追加したら `renderer/index.html` の script タグも追加してください。
+### renderer の ES モジュール構成
 
-### Dual-mode export パターン
+`renderer/index.html` は 3 つの `<script>` だけ読み込む:
+```
+<script src="vendor/fabric.min.js"></script>
+<script src="vendor/fontkit.js"></script>
+<script src="../dist/renderer/bundle.js"></script>
+```
 
-`src/core/` の pure function モジュール (`path/types.ts`, `path/anchors.ts`, `path/fabric-adapter.ts`, `outline-position.ts`, `copy-export.ts`) は以下の規約に従います:
-- ソースに `import`/`export` を書かない（renderer の `module: "none"` と Node test の `module: "commonjs"` の両方で動作させるため）
-- 末尾の `if (typeof module !== 'undefined' && module.exports)` ブロックで CommonJS export
-- ブラウザではグローバル関数・グローバル型として露出 (`module: "none"` により全 core/ + renderer/ ファイルが一つのグローバルスコープを共有)
+fabric / fontkit は `renderer/vendor/` から `<script>` でグローバル読み込みされ、esbuild バンドルには含まれない。本体コード (core + renderer) は esbuild が単一 IIFE バンドルにまとめる。
 
-`src/globals/electron-api.d.ts` は両方のtsconfigで共有され、`window.electronAPI` ブリッジを定義します。
+ソースコードは普通の ES モジュールとして書く (`export function foo()` / `import { foo } from '...'`)。dual-mode export パターンや globalThis 注入は不要。
+
+`tsconfig.renderer.json` の `"allowUmdGlobalAccess": true` により、@types/fabric が UMD として宣言する `fabric` 名前空間を import 文無しで直接参照できる (vendor script 経由のグローバルとして runtime 解決される)。fontkit の global 型宣言は `src/globals/fontkit.d.ts`。
+
+### 新しい core / renderer ファイルを追加するとき
+
+esbuild が import グラフを follow して自動でバンドルに含めるので、`renderer/index.html` を触る必要は無い。型エラーが出ないように `tsconfig.renderer.json` の include グロブ (`src/core/**/*.ts` / `src/renderer/**/*.ts`) に該当することを確認するだけで OK。
+
+`src/globals/electron-api.d.ts` は両方の tsconfig で共有され、`window.electronAPI` ブリッジを定義します。
 
 ## アーキテクチャ
 
@@ -79,7 +89,7 @@ src/
   - `toggle-devtools`, `zoom-in/out/reset`, `toggle-fullscreen` — HTML メニュー用
   - ネイティブメニューは `Menu.setApplicationMenu(null)` で非表示化
 - `src/preload.ts` — `contextBridge` を介して `window.electronAPI` を公開。`savePng`, `copyImageToClipboard`, `onMenuCopy`, View 系 IPC を中継
-- `src/renderer/app.ts` — UI 状態 (mode、selection、drag state)、Fabric イベント接続、各モードのツールロジックを保持する即時実行関数 (IIFE)。下記の補助モジュールに切り出せなかった canvas 結合の強い処理がここに残る
+- `src/renderer/app.ts` — renderer エントリーポイント。esbuild が IIFE バンドルでラップするので本体は普通の ES モジュール。UI 状態 (mode、selection)、fabric イベント配線、各モードへのディスパッチ、`FabricToolHost` adapter (fabric ↔ tool 抽象境界) を保持。ツール本体は `core/tools/*` に分離済
 - `src/renderer/logger.ts` — IPC + DevTools console を束ねる `logger` オブジェクト
 - `src/renderer/toast.ts` — `showToast(message, isError?)` (3秒で消える簡易通知)
 - `src/renderer/menu-bar.ts` — `initMenuBar(handleAction)` (HTML メニューバーの開閉 UI、アクションは callback 経由)

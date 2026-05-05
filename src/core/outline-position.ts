@@ -2,14 +2,8 @@
 //
 // fabric.Text → fabric.Path 変換時、パスの world 座標を計算する算数部分だけを
 // 切り出したモジュール。fabric / fontkit / DOM 非依存なので単体テスト可能。
-//
-// このファイルはレンダラー (tsconfig.renderer.json, "module": "none") でも
-// Node test (tsconfig.test.json, "module": "commonjs") でもコンパイルできるよう、
-// ソースに import/export を書かない。末尾で `module` の存在をランタイム判定して
-// CommonJS export する「dual-mode」パターン。
-// ブラウザでは module が未定義なので if 節は no-op でグローバル関数として機能。
 
-interface OutlineTextAnchor {
+export interface OutlineTextAnchor {
   readonly left: number;
   readonly top: number;
   readonly fontSize: number;
@@ -19,12 +13,12 @@ interface OutlineTextAnchor {
   readonly fontSizeFraction?: number;
 }
 
-interface GlyphInkBBox {
+export interface GlyphInkBBox {
   readonly minX: number;
   readonly minY: number;
 }
 
-interface CanvasPosition {
+export interface CanvasPosition {
   readonly left: number;
   readonly top: number;
 }
@@ -48,7 +42,7 @@ interface CanvasPosition {
  * `_fontSizeMult` と 0.222 の `_fontSizeFraction` という定数で baseline 位置を
  * ずらしており、この式を忠実に再現しないと 72pt で約 8.7px のズレが発生する。
  */
-function computeOutlinePathPosition(
+export function computeOutlinePathPosition(
   text: OutlineTextAnchor,
   bbox: GlyphInkBBox,
 ): CanvasPosition {
@@ -59,15 +53,4 @@ function computeOutlinePathPosition(
     left: text.left + bbox.minX,
     top:  baselineY + bbox.minY,
   };
-}
-
-// Dual-mode export:
-//   - ブラウザ ("module": "none", no @types/node): `module` は未定義なので if 節
-//     は実行されない。関数宣言がそのままグローバルに露出し、app.ts から呼び出せる。
-//   - Node test ("module": "commonjs", with @types/node): `module.exports` が
-//     存在するので computeOutlinePathPosition を export する。
-// @ts-ignore -- `module` は renderer では未宣言、test では @types/node から来る
-if (typeof module !== 'undefined' && module.exports) {
-  // @ts-ignore
-  module.exports.computeOutlinePathPosition = computeOutlinePathPosition;
 }

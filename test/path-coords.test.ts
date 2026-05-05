@@ -3,26 +3,12 @@
 // fabric の TMat2D 互換の 6 要素タプル [a, b, c, d, tx, ty] を扱う。
 // (x, y) → (a*x + c*y + tx, b*x + d*y + ty) という 2x3 アフィン。
 
-type Point = { readonly x: number; readonly y: number };
-type Mat2x3 = readonly [number, number, number, number, number, number];
-
-interface PathTransform {
-  readonly pathMatrix: Mat2x3;
-  readonly pathOffset: Point;
-  readonly viewportMatrix: Mat2x3;
-}
-
-const {
+import type { Point } from '../src/core/path/types';
+import {
   applyMatrix, applyMatrixToDelta, invertMatrix,
   pathLocalToScreen, screenToPathLocal, worldDeltaToPathLocalDelta,
-} = require('../src/core/path/coords') as {
-  applyMatrix:               (p: Point, m: Mat2x3) => Point;
-  applyMatrixToDelta:        (d: Point, m: Mat2x3) => Point;
-  invertMatrix:              (m: Mat2x3) => Mat2x3;
-  pathLocalToScreen:         (p: Point, t: PathTransform) => { sx: number; sy: number };
-  screenToPathLocal:         (p: Point, t: PathTransform) => Point;
-  worldDeltaToPathLocalDelta:(d: Point, m: Mat2x3) => Point;
-};
+} from '../src/core/path/coords';
+import type { Mat2x3, PathTransform } from '../src/core/path/coords';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 
@@ -166,5 +152,3 @@ describe('worldDeltaToPathLocalDelta', () => {
     expectClose(worldDeltaToPathLocalDelta({ x: 3, y: 7 }, [1, 0, 0, 1, 999, 999]), 3, 7);
   });
 });
-
-export {};

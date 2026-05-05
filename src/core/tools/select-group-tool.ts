@@ -10,7 +10,13 @@
 // 中核ロジックは ./group-selection.ts の computeGroupExpansion (純粋関数)。
 // 本クラスは host 越しに ObjectHandle の取得 / 設定を行うだけ。
 
-class SelectGroupTool implements Tool {
+import { computeGroupExpansion } from './group-selection';
+import type {
+  Tool, ToolHost, ObjectHandle, PointerInput, PointerHandled,
+  MovingTarget, CanvasMouseDownInput,
+} from './tool-interface';
+
+export class SelectGroupTool implements Tool {
   onActivate(_host: ToolHost): void { /* no-op */ }
   onDeactivate(_host: ToolHost): void { /* no-op */ }
 
@@ -35,18 +41,4 @@ class SelectGroupTool implements Tool {
     if (r.alreadyExpanded) return;
     host.setActiveSelection(r.expanded);
   }
-}
-
-// Dual-mode export
-// @ts-ignore
-if (typeof module !== 'undefined' && module.exports) {
-  // @ts-ignore
-  module.exports.SelectGroupTool = SelectGroupTool;
-}
-
-// Node test 時に依存モジュールを pre-load
-// @ts-ignore
-if (typeof require === 'function' && typeof module !== 'undefined') {
-  // @ts-ignore
-  require('./group-selection');
 }

@@ -1,13 +1,15 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "none",
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "ignoreDeprecations": "6.0",
     "skipLibCheck": true,
     "strict": true,
     "lib": ["ES2020", "DOM"],
     "types": ["fabric"],
-    "outDir": "dist",
+    "allowUmdGlobalAccess": true,
+    "noEmit": true,
     "rootDir": "src"
   },
   "include": [

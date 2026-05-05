@@ -8,11 +8,14 @@
 //
 // pointer 系イベントは全て no-op (DOM capture 段階では何もしない)。
 
-interface FontPropsProvider {
-  (): TextCreateProps;
-}
+import type {
+  Tool, ToolHost, TextCreateProps, PointerInput, PointerHandled,
+  MovingTarget, CanvasMouseDownInput,
+} from './tool-interface';
 
-class TextTool implements Tool {
+type FontPropsProvider = () => TextCreateProps;
+
+export class TextTool implements Tool {
   constructor(private getFontProps: FontPropsProvider) {}
 
   onActivate(_host: ToolHost): void { /* no-op */ }
@@ -30,11 +33,4 @@ class TextTool implements Tool {
     if (e.hasTarget) return;
     host.createTextAt(e.worldX, e.worldY, this.getFontProps());
   }
-}
-
-// Dual-mode export
-// @ts-ignore
-if (typeof module !== 'undefined' && module.exports) {
-  // @ts-ignore
-  module.exports.TextTool = TextTool;
 }

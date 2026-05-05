@@ -4,16 +4,14 @@
 // 個別アンカーの剛体移動 (アンカー + 付属ベジェハンドル) を行う。
 // fabric / DOM 非依存で単体テスト可能。
 //
-// 共通型 (Point / PathCommand / HandleRef / PathAnchor) と assertNever は
-// ./types.ts に定義され、module: "none" のグローバル宣言として共有される。
 // fabric.js 生タプル ↔ PathCommand の境界変換は ./fabric-adapter.ts。
-//
-// dual-mode export パターン: ブラウザではグローバル関数として機能、
-// Node test では module.exports として export。
+
+import type { Point, PathCommand, HandleRef, PathAnchor } from './types';
+import { assertNever } from './types';
 
 // ── HandleRef → Point アクセサ ──────────────────────────────────────────
 
-function getHandlePoint(cmd: PathCommand, ref: HandleRef): Point | null {
+export function getHandlePoint(cmd: PathCommand, ref: HandleRef): Point | null {
   switch (ref.kind) {
     case 'C-c1':
       return cmd.type === 'C' ? cmd.c1 : null;
@@ -58,7 +56,7 @@ function withAnchorBodyMoved(cmd: PathCommand, dx: number, dy: number): PathComm
 
 // ── extractAnchors ──────────────────────────────────────────────────────
 
-function extractAnchors(path: ReadonlyArray<PathCommand>): PathAnchor[] {
+export function extractAnchors(path: ReadonlyArray<PathCommand>): PathAnchor[] {
   const anchors: PathAnchor[] = [];
   let subpathStartIdx = -1;
 
@@ -141,7 +139,7 @@ function extractAnchors(path: ReadonlyArray<PathCommand>): PathAnchor[] {
 // 指定アンカー本体と付属ハンドル (incoming/outgoing) を (dx, dy) 平行移動。
 // 変更されないコマンドは元の参照をそのまま返す (immutability 契約)。
 
-function moveAnchorRigid(
+export function moveAnchorRigid(
   path: ReadonlyArray<PathCommand>,
   anchorIndex: number,
   dx: number, dy: number,
@@ -183,7 +181,7 @@ function moveAnchorRigid(
 // HandleRef が指す制御点のみを (dx, dy) 移動する。
 // アンカー本体や反対側ハンドルには一切触れない。
 
-function moveHandle(
+export function moveHandle(
   path: ReadonlyArray<PathCommand>,
   handle: HandleRef,
   dx: number, dy: number,
@@ -203,7 +201,7 @@ function moveHandle(
 
 // ── ベジェ曲線評価 ──────────────────────────────────────────────────────
 
-function evalCubicAt(p0: Point, c1: Point, c2: Point, p3: Point, t: number): Point {
+export function evalCubicAt(p0: Point, c1: Point, c2: Point, p3: Point, t: number): Point {
   const u = 1 - t;
   const uu = u * u;
   const uuu = uu * u;
@@ -215,7 +213,7 @@ function evalCubicAt(p0: Point, c1: Point, c2: Point, p3: Point, t: number): Poi
   };
 }
 
-function evalQuadAt(p0: Point, c1: Point, p2: Point, t: number): Point {
+export function evalQuadAt(p0: Point, c1: Point, p2: Point, t: number): Point {
   const u = 1 - t;
   return {
     x: u * u * p0.x + 2 * u * t * c1.x + t * t * p2.x,
@@ -225,7 +223,7 @@ function evalQuadAt(p0: Point, c1: Point, p2: Point, t: number): Point {
 
 // ── セグメント始点取得 ──────────────────────────────────────────────────
 
-function getSegmentStart(
+export function getSegmentStart(
   path: ReadonlyArray<PathCommand>, cmdIndex: number,
 ): Point | null {
   for (let i = cmdIndex - 1; i >= 0; i--) {
@@ -244,7 +242,7 @@ function getSegmentStart(
 
 // ── セグメント分割 (De Casteljau) ───────────────────────────────────────
 
-function splitSegment(
+export function splitSegment(
   path: ReadonlyArray<PathCommand>,
   cmdIndex: number,
   t: number,
@@ -327,7 +325,7 @@ function splitSegment(
 // 指定アンカーを削除し、後続セグメントを直線 (L) に置換する。
 // サブパス内のアンカー数が 2 以下になる場合は操作を拒否する。
 
-function removeAnchor(
+export function removeAnchor(
   path: ReadonlyArray<PathCommand>,
   anchorIndex: number,
 ): PathCommand[] {
@@ -382,40 +380,3 @@ function removeAnchor(
   return result;
 }
 
-// Dual-mode export
-// @ts-ignore
-if (typeof module !== 'undefined' && module.exports) {
-  // @ts-ignore
-  module.exports.extractAnchors = extractAnchors;
-  // @ts-ignore
-  module.exports.moveAnchorRigid = moveAnchorRigid;
-  // @ts-ignore
-  module.exports.moveHandle = moveHandle;
-  // @ts-ignore
-  module.exports.evalCubicAt = evalCubicAt;
-  // @ts-ignore
-  module.exports.evalQuadAt = evalQuadAt;
-  // @ts-ignore
-  module.exports.getSegmentStart = getSegmentStart;
-  // @ts-ignore
-  module.exports.splitSegment = splitSegment;
-  // @ts-ignore
-  module.exports.removeAnchor = removeAnchor;
-  // @ts-ignore
-  module.exports.getHandlePoint = getHandlePoint;
-
-  // Node test 用: 他 core/* モジュールから bare identifier で参照される関数を
-  // globalThis に注入。ブラウザ (module: "none") では関数宣言がそのままグローバル
-  // なので不要だが、Node CJS では各 module-local に閉じてしまうため明示が要る。
-  // @ts-ignore
-  const G: any = globalThis;
-  G.extractAnchors  = extractAnchors;
-  G.getHandlePoint  = getHandlePoint;
-  G.moveAnchorRigid = moveAnchorRigid;
-  G.moveHandle      = moveHandle;
-  G.evalCubicAt     = evalCubicAt;
-  G.evalQuadAt      = evalQuadAt;
-  G.getSegmentStart = getSegmentStart;
-  G.splitSegment    = splitSegment;
-  G.removeAnchor    = removeAnchor;
-}

@@ -3,7 +3,7 @@
 // ネイティブ Electron メニューの代わりに #menu-bar を開閉する UI ロジック。
 // 実際のアクション処理は呼び出し側 (app.ts の handleMenuAction) に任せる。
 
-function initMenuBar(handleAction: (action: string) => void): void {
+export function initMenuBar(handleAction: (action: string) => void): void {
   const menuItems = document.querySelectorAll('#menu-bar .menu-item');
 
   function closeAll(): void {

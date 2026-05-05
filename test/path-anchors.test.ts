@@ -21,42 +21,11 @@
 // fabric の生タプル形式との境界変換 (fromFabricPath / toFabricPath) は
 // path-fabric-adapter.test.ts でテスト。
 
-type Point = { readonly x: number; readonly y: number };
-
-type PathCommand =
-  | { readonly type: 'M'; readonly to: Point }
-  | { readonly type: 'L'; readonly to: Point }
-  | { readonly type: 'C'; readonly c1: Point; readonly c2: Point; readonly to: Point }
-  | { readonly type: 'Q'; readonly c: Point; readonly to: Point }
-  | { readonly type: 'Z' };
-
-type HandleRef =
-  | { readonly kind: 'C-c1'; readonly cmdIndex: number }
-  | { readonly kind: 'C-c2'; readonly cmdIndex: number }
-  | { readonly kind: 'Q-c';  readonly cmdIndex: number };
-
-interface PathAnchor {
-  readonly cmdIndex: number;
-  readonly point: Point;
-  incomingHandle: HandleRef | null;
-  outgoingHandle: HandleRef | null;
-  readonly subpathStart: boolean;
-}
-
-const {
+import type { Point, PathCommand, HandleRef } from '../src/core/path/types';
+import {
   extractAnchors, moveAnchorRigid, moveHandle, evalCubicAt, evalQuadAt,
   getSegmentStart, splitSegment, removeAnchor, getHandlePoint,
-} = require('../src/core/path/anchors') as {
-  extractAnchors: (path: ReadonlyArray<PathCommand>) => PathAnchor[];
-  moveAnchorRigid: (path: ReadonlyArray<PathCommand>, anchorIndex: number, dx: number, dy: number) => PathCommand[];
-  moveHandle: (path: ReadonlyArray<PathCommand>, handle: HandleRef, dx: number, dy: number) => PathCommand[];
-  evalCubicAt: (p0: Point, c1: Point, c2: Point, p3: Point, t: number) => Point;
-  evalQuadAt: (p0: Point, c1: Point, p2: Point, t: number) => Point;
-  getSegmentStart: (path: ReadonlyArray<PathCommand>, cmdIndex: number) => Point | null;
-  splitSegment: (path: ReadonlyArray<PathCommand>, cmdIndex: number, t: number) => PathCommand[];
-  removeAnchor: (path: ReadonlyArray<PathCommand>, anchorIndex: number) => PathCommand[];
-  getHandlePoint: (cmd: PathCommand, ref: HandleRef) => Point | null;
-};
+} from '../src/core/path/anchors';
 
 // 短縮ヘルパ: テストの可読性向上のため
 const M  = (x: number, y: number): PathCommand => ({ type: 'M', to: { x, y } });
@@ -558,5 +527,3 @@ describe('getHandlePoint', () => {
     expect(getHandlePoint(C(1, 2, 3, 4, 5, 6), { kind: 'Q-c', cmdIndex: 0 })).toBeNull();
   });
 });
-
-export {};

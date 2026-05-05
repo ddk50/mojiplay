@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "commonjs",
+    "moduleResolution": "node",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -10,19 +11,6 @@
     "types": ["node", "jest"]
   },
   "include": [
-    "test/**/*.ts",
-    "src/core/path/types.ts",
-    "src/core/path/anchors.ts",
-    "src/core/path/fabric-adapter.ts",
-    "src/core/path/coords.ts",
-    "src/core/tools/tool-interface.ts",
-    "src/core/tools/overlay-layout.ts",
-    "src/core/tools/select-char-tool.ts",
-    "src/core/tools/group-selection.ts",
-    "src/core/tools/segment-hit.ts",
-    "src/core/tools/select-group-tool.ts",
-    "src/core/tools/pen-remove-tool.ts",
-    "src/core/tools/pen-add-tool.ts",
-    "src/core/tools/text-tool.ts"
+    "test/**/*.ts"
   ]
 }

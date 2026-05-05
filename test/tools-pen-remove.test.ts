@@ -1,54 +1,11 @@
 // PenRemoveTool の単体テスト。
 
-type Point = { readonly x: number; readonly y: number };
-type Mat2x3 = readonly [number, number, number, number, number, number];
-
-type PathCommand =
-  | { readonly type: 'M'; readonly to: Point }
-  | { readonly type: 'L'; readonly to: Point }
-  | { readonly type: 'C'; readonly c1: Point; readonly c2: Point; readonly to: Point }
-  | { readonly type: 'Q'; readonly c: Point; readonly to: Point }
-  | { readonly type: 'Z' };
-
-interface PathSnapshot {
-  readonly commands:   ReadonlyArray<PathCommand>;
-  readonly pathMatrix: Mat2x3;
-  readonly pathOffset: Point;
-}
-
-interface PathHandle {
-  snapshot(): PathSnapshot;
-  setCommands(cmds: ReadonlyArray<PathCommand>): void;
-  finalizeEdit(): void;
-}
-
-interface PointerInput {
-  readonly screenX: number; readonly screenY: number;
-  readonly worldX:  number; readonly worldY:  number;
-  readonly altKey: boolean; readonly shiftKey: boolean;
-}
-
-interface ToolHost {
-  getActivePath(): PathHandle | null;
-  getViewportMatrix(): Mat2x3;
-  requestRerender(): void;
-  setCursor(c: string): void;
-  getActiveObjects():     any;
-  getAllObjects():        any;
-  setActiveSelection(...args: any[]): void;
-  createTextAt(...args: any[]): void;
-}
-
-type PointerHandled = 'consumed' | 'pass';
-
-interface PenRemoveToolI {
-  onPointerDown(e: PointerInput, h: ToolHost): PointerHandled;
-  onPointerMove(e: PointerInput, h: ToolHost): void;
-}
-
-const { PenRemoveTool } = require('../src/core/tools/pen-remove-tool') as {
-  PenRemoveTool: new () => PenRemoveToolI;
-};
+import type { PathCommand } from '../src/core/path/types';
+import type { Mat2x3 } from '../src/core/path/coords';
+import type {
+  PathHandle, PathSnapshot, PointerInput, ToolHost, ObjectHandle,
+} from '../src/core/tools/tool-interface';
+import { PenRemoveTool } from '../src/core/tools/pen-remove-tool';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 
@@ -156,4 +113,3 @@ describe('PenRemoveTool', () => {
   });
 });
 
-export {};

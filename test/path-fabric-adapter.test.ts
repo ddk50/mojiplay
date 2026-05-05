@@ -3,27 +3,11 @@
 // fabric.js が扱う生タプル ([['M', 0, 0], ['C', ...]]) と、
 // path-anchors.ts が扱うオブジェクト ADT の相互変換をテスト。
 
-type Point = { readonly x: number; readonly y: number };
-
-type PathCommand =
-  | { readonly type: 'M'; readonly to: Point }
-  | { readonly type: 'L'; readonly to: Point }
-  | { readonly type: 'C'; readonly c1: Point; readonly c2: Point; readonly to: Point }
-  | { readonly type: 'Q'; readonly c: Point; readonly to: Point }
-  | { readonly type: 'Z' };
-
-type FabricPathCommand =
-  | ['M', number, number]
-  | ['L', number, number]
-  | ['C', number, number, number, number, number, number]
-  | ['Q', number, number, number, number]
-  | ['Z'];
-
-const { fromFabricPath, toFabricPath } =
-  require('../src/core/path/fabric-adapter') as {
-    fromFabricPath: (raw: ReadonlyArray<ReadonlyArray<unknown>>) => PathCommand[];
-    toFabricPath: (path: ReadonlyArray<PathCommand>) => FabricPathCommand[];
-  };
+import type { PathCommand } from '../src/core/path/types';
+import {
+  fromFabricPath, toFabricPath,
+} from '../src/core/path/fabric-adapter';
+import type { FabricPathCommand } from '../src/core/path/fabric-adapter';
 
 const M = (x: number, y: number): PathCommand => ({ type: 'M', to: { x, y } });
 const L = (x: number, y: number): PathCommand => ({ type: 'L', to: { x, y } });
@@ -64,4 +48,3 @@ describe('fromFabricPath / toFabricPath', () => {
   });
 });
 
-export {};

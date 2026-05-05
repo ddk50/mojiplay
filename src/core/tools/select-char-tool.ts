@@ -12,22 +12,17 @@
 //
 // 中間ドラッグ更新は path.setCommands() で頻繁に呼び、bbox 再計算は
 // pointerUp で 1 回だけ path.finalizeEdit() を呼ぶ (コスト集約)。
-//
-// dual-mode export: ブラウザではグローバル class、Node test では module.exports。
 
-// Node test 時に依存モジュールを pre-load して globalThis に関数を載せる。
-// 詳細は overlay-layout.ts の冒頭ガードコメント参照。
-// @ts-ignore
-if (typeof require === 'function' && typeof module !== 'undefined') {
-  // @ts-ignore
-  require('../path/coords');
-  // @ts-ignore
-  require('../path/anchors');
-  // @ts-ignore
-  require('./overlay-layout');
-}
+import type { Point, PathCommand, HandleRef } from '../path/types';
+import { moveAnchorRigid, moveHandle } from '../path/anchors';
+import { worldDeltaToPathLocalDelta } from '../path/coords';
+import { computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt } from './overlay-layout';
+import type {
+  Tool, ToolHost, PathHandle, PointerInput, PointerHandled,
+  MovingTarget, CanvasMouseDownInput,
+} from './tool-interface';
 
-interface SnapConfig {
+export interface SnapConfig {
   readonly enabled: boolean;
   readonly pitch: number;
   readonly threshold: number;
@@ -45,7 +40,7 @@ type SelectCharDragState =
       lastWorld: Point;
     };
 
-class SelectCharTool implements Tool {
+export class SelectCharTool implements Tool {
   // 既定値は app.ts のトップ初期値と一致させる (pitch=8, threshold=5)。
   private snap: SnapConfig = { enabled: true, pitch: 8, threshold: 5 };
   private drag: SelectCharDragState | null = null;
@@ -167,11 +162,4 @@ class SelectCharTool implements Tool {
 
   onSelectionChanged(_host: ToolHost): void { /* no-op */ }
   onCanvasMouseDown(_e: CanvasMouseDownInput, _host: ToolHost): void { /* no-op */ }
-}
-
-// Dual-mode export
-// @ts-ignore
-if (typeof module !== 'undefined' && module.exports) {
-  // @ts-ignore
-  module.exports.SelectCharTool = SelectCharTool;
 }

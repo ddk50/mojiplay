@@ -51,16 +51,7 @@
 //
 // ──────────────────────────────────────────────────────────────────────────
 
-const { computeOutlinePathPosition } =
-  require('../src/core/outline-position') as {
-    computeOutlinePathPosition: (
-      text: {
-        left: number; top: number; fontSize: number;
-        fontSizeMult?: number; fontSizeFraction?: number;
-      },
-      bbox: { minX: number; minY: number },
-    ) => { left: number; top: number };
-  };
+import { computeOutlinePathPosition } from '../src/core/outline-position';
 
 describe('computeOutlinePathPosition', () => {
   test('fabric デフォルト定数 (_fontSizeMult=1.13, _fontSizeFraction=0.222) を使う', () => {
@@ -117,4 +108,3 @@ describe('computeOutlinePathPosition', () => {
   });
 });
 
-export {};
