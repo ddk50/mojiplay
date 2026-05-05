@@ -517,12 +517,15 @@
     );
 
     const succeeded = conversions.filter(x => x.path) as Array<{ ft: fabric.Text; path: fabric.Path }>;
-    const failedFamilies = new Set(
-      conversions.filter(x => !x.path).map(x => x.ft.fontFamily || '?')
-    );
+    const failed = conversions.filter(x => !x.path);
+    const failedChars = failed.map(x => x.ft.text || '').join('');
+    const failedFamilies = Array.from(new Set(failed.map(x => x.ft.fontFamily || '?')));
 
     if (succeeded.length === 0) {
-      showToast(`アウトライン化失敗: ${Array.from(failedFamilies).join(', ')}`, true);
+      const detail = failedChars
+        ? `${failedFamilies.join(', ')} には「${failedChars}」のグリフがありません`
+        : failedFamilies.join(', ');
+      showToast(`アウトライン化失敗: ${detail}`, true);
       return;
     }
 
@@ -550,8 +553,11 @@
     // 通常動作で展開される経路に委ねる (data.groupId は保持している)。
     canvas.requestRenderAll();
 
-    if (failedFamilies.size > 0) {
-      showToast(`一部失敗: ${Array.from(failedFamilies).join(', ')}`, true);
+    if (failed.length > 0) {
+      const detail = failedChars
+        ? `${failedFamilies.join(', ')} には「${failedChars}」のグリフがありません`
+        : failedFamilies.join(', ');
+      showToast(`一部失敗: ${detail}`, true);
     }
   }
 
@@ -1238,6 +1244,13 @@
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'O' || e.key === 'o')) {
       e.preventDefault();
       void outlineSelection();
+    }
+
+    // F12 / Ctrl+Shift+I: DevTools を開閉 (HTML メニューの「開発者ツール」と同等)
+    if (e.key === 'F12' ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i'))) {
+      e.preventDefault();
+      void window.electronAPI?.toggleDevTools();
     }
   });
 

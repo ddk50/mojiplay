@@ -104,9 +104,18 @@ async function outlineTextToPath(ft: fabric.Text): Promise<fabric.Path | null> {
   // 単文字前提 (commitIText で 1 文字ごとに分割済み)
   const cp = text.codePointAt(0);
   if (cp === undefined) return null;
+  // フォントが該当コードポイントを持っていない場合、fontkit は .notdef
+  // (豆腐) glyph を返すので、先に hasGlyphForCodePoint で検出して
+  // 失敗扱いにする。例: fontFamily="Arial" で日本語を入力したケース。
+  // (ブラウザは描画時にフォールバックフォントで描くが、ft.fontFamily は
+  //  Arial のままなので、アウトライン化はそのフォントで実行される)
+  if (!font.hasGlyphForCodePoint(cp)) {
+    logger.warn(`[outline] ${family}: no glyph for U+${cp.toString(16).padStart(4, '0')} ("${text}")`);
+    return null;
+  }
   const glyph = font.glyphForCodePoint(cp);
   if (!glyph) {
-    logger.warn(`[outline] ${family}: no glyph for U+${cp.toString(16).padStart(4, '0')}`);
+    logger.warn(`[outline] ${family}: glyphForCodePoint returned null for U+${cp.toString(16).padStart(4, '0')}`);
     return null;
   }
 
