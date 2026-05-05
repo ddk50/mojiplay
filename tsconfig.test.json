@@ -13,6 +13,10 @@
     "test/**/*.ts",
     "src/core/path/types.ts",
     "src/core/path/anchors.ts",
-    "src/core/path/fabric-adapter.ts"
+    "src/core/path/fabric-adapter.ts",
+    "src/core/path/coords.ts",
+    "src/core/tools/types.ts",
+    "src/core/tools/overlay-layout.ts",
+    "src/core/tools/select-char-tool.ts"
   ]
 }

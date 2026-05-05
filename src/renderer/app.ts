@@ -102,14 +102,25 @@
   let snapPitch     = Math.max(1, parseInt(snapPitchInput.value, 10)     || 8);
   let snapThreshold = Math.max(1, parseInt(snapThresholdInput.value, 10) || 5);
 
+  function syncSnapConfigToTool(): void {
+    // selectCharTool は後段で初期化されるので、最初の input イベントは setMode 直後の
+    // ロード完了以降。ガード必要無し (selectCharTool は const、IIFE 内で必ず生成済み)。
+    selectCharTool.setSnapConfig({
+      enabled: snapEnabled, pitch: snapPitch, threshold: snapThreshold,
+    });
+  }
+
   snapEnabledInput.addEventListener('change', () => {
     snapEnabled = snapEnabledInput.checked;
+    syncSnapConfigToTool();
   });
   snapPitchInput.addEventListener('input', () => {
     snapPitch = Math.max(1, parseInt(snapPitchInput.value, 10) || 8);
+    syncSnapConfigToTool();
   });
   snapThresholdInput.addEventListener('input', () => {
     snapThreshold = Math.max(1, parseInt(snapThresholdInput.value, 10) || 5);
+    syncSnapConfigToTool();
   });
 
   // ── Mode management ───────────────────────────────────────────────────────
@@ -126,10 +137,18 @@
   };
 
   function setMode(m: Mode): void {
+    const prev = currentMode;
     currentMode = m;
     (Object.keys(modeButtons) as Mode[]).forEach(k => {
       modeButtons[k].classList.toggle('is-active', k === m);
     });
+
+    if (prev === 'select-char' && m !== 'select-char') {
+      selectCharTool.onDeactivate(toolHost);
+    }
+    if (m === 'select-char' && prev !== 'select-char') {
+      selectCharTool.onActivate(toolHost);
+    }
 
     const isSelectMode = m === 'select-group' || m === 'select-char';
     const isPenMode    = m === 'pen-add' || m === 'pen-remove';
@@ -411,30 +430,25 @@
   });
 
   // ── Snap on move (白矢印モード専用) ──────────────────────────────────────
+  // スナップロジックは SelectCharTool.onObjectMoving に抽出済み。
+  // ここでは fabric.Object を MovingTarget 抽象に橋渡しする。
 
   canvas.on('object:moving', (e: fabric.IEvent) => {
     if (currentMode !== 'select-char') return;
-    if (!snapEnabled) return;
-
-    const mouseEvt = e.e as MouseEvent | undefined;
-    if (mouseEvt?.altKey) return; // Alt 押下中は一時バイパス
-
     const target = e.target;
     if (!target) return;
+    const mouseEvt = e.e as MouseEvent | undefined;
 
-    // X 軸: 等間隔グリッドに sticky snap
-    const freeX    = target.left ?? 0;
-    const nearestX = Math.round(freeX / snapPitch) * snapPitch;
-    if (Math.abs(freeX - nearestX) < snapThreshold) {
-      target.set({ left: nearestX });
-    }
-
-    // Y 軸: 等間隔グリッドに sticky snap (X と同ロジック)
-    const freeY    = target.top ?? 0;
-    const nearestY = Math.round(freeY / snapPitch) * snapPitch;
-    if (Math.abs(freeY - nearestY) < snapThreshold) {
-      target.set({ top: nearestY });
-    }
+    selectCharTool.onObjectMoving(
+      {
+        getLeft: () => target.left ?? 0,
+        getTop:  () => target.top  ?? 0,
+        setLeft: (v: number) => target.set({ left: v }),
+        setTop:  (v: number) => target.set({ top:  v }),
+      },
+      { altKey: !!mouseEvt?.altKey },
+      toolHost,
+    );
 
     target.setCoords();
   });
@@ -620,33 +634,11 @@
   const HANDLE_STROKE     = '#0066ff';
   const HANDLE_HIT_RADIUS = 5;
 
-  interface AnchorScreenPos { anchorIndex: number; sx: number; sy: number }
-  let anchorScreenCache: AnchorScreenPos[] = [];
-
-  interface HandleScreenPos {
-    anchorIndex: number;
-    which: 'in' | 'out';
-    handle: HandleRef;
-    sx: number;
-    sy: number;
-  }
-  let handleScreenCache: HandleScreenPos[] = [];
-
-  interface AnchorDragState {
-    pathObj: fabric.Path;
-    anchorIndex: number;
-    startPath: PathCommand[];
-    lastPointer: { x: number; y: number };
-  }
-  let anchorDrag: AnchorDragState | null = null;
-
-  interface HandleDragState {
-    pathObj: fabric.Path;
-    handle: HandleRef;
-    startPath: PathCommand[];
-    lastPointer: { x: number; y: number };
-  }
-  let handleDrag: HandleDragState | null = null;
+  // 共通型 (AnchorScreenPos, HandleScreenPos) は core/tools/overlay-layout.ts の
+  // グローバル宣言を再利用する。SelectCharTool 抽出後はドラッグ状態もツール内部に
+  // 移動したため、ここではペンツール用にスクリーン座標キャッシュのみ保持する。
+  let anchorScreenCache: ReadonlyArray<AnchorScreenPos> = [];
+  let handleScreenCache: ReadonlyArray<HandleScreenPos> = [];
 
   function getEditablePath(): fabric.Path | null {
     if (currentMode !== 'select-char' && currentMode !== 'pen-add' && currentMode !== 'pen-remove') return null;
@@ -656,18 +648,18 @@
     return obj as fabric.Path;
   }
 
+  function buildPathTransform(path: fabric.Path): PathTransform {
+    return {
+      pathMatrix:     path.calcTransformMatrix() as unknown as Mat2x3,
+      pathOffset:     { x: (path as any).pathOffset.x, y: (path as any).pathOffset.y },
+      viewportMatrix: canvas.viewportTransform as unknown as Mat2x3,
+    };
+  }
+
   function anchorLocalToScreen(
     ax: number, ay: number, path: fabric.Path,
   ): { sx: number; sy: number } {
-    const po = (path as any).pathOffset as { x: number; y: number };
-    const mat = path.calcTransformMatrix();
-    const vt = canvas.viewportTransform!;
-    const world = fabric.util.transformPoint(
-      { x: ax - po.x, y: ay - po.y } as fabric.Point,
-      mat,
-    );
-    const screen = fabric.util.transformPoint(world, vt);
-    return { sx: screen.x, sy: screen.y };
+    return pathLocalToScreen({ x: ax, y: ay }, buildPathTransform(path));
   }
 
   function drawAnchorOverlay(): void {
@@ -687,38 +679,14 @@
     if (!rawCmds) { anchorScreenCache = []; handleScreenCache = []; return; }
     const cmds = fromFabricPath(rawCmds);
 
-    const anchors = extractAnchors(cmds);
     const half = ANCHOR_MARKER_PX / 2;
-    const aCache: AnchorScreenPos[] = [];
-    const hCache: HandleScreenPos[] = [];
-
-    // アンカーのスクリーン座標を先に全計算
-    for (let i = 0; i < anchors.length; i++) {
-      const a = anchors[i];
-      const { sx, sy } = anchorLocalToScreen(a.point.x, a.point.y, path);
-      aCache.push({ anchorIndex: i, sx, sy });
-    }
-
-    // ハンドルのスクリーン座標を計算
-    for (let i = 0; i < anchors.length; i++) {
-      const a = anchors[i];
-      if (a.incomingHandle) {
-        const h = a.incomingHandle;
-        const hp = getHandlePoint(cmds[h.cmdIndex], h);
-        if (hp) {
-          const { sx, sy } = anchorLocalToScreen(hp.x, hp.y, path);
-          hCache.push({ anchorIndex: i, which: 'in', handle: h, sx, sy });
-        }
-      }
-      if (a.outgoingHandle) {
-        const h = a.outgoingHandle;
-        const hp = getHandlePoint(cmds[h.cmdIndex], h);
-        if (hp) {
-          const { sx, sy } = anchorLocalToScreen(hp.x, hp.y, path);
-          hCache.push({ anchorIndex: i, which: 'out', handle: h, sx, sy });
-        }
-      }
-    }
+    const layout = computeOverlayLayout(
+      { commands: cmds, pathMatrix: path.calcTransformMatrix() as unknown as Mat2x3,
+        pathOffset: { x: (path as any).pathOffset.x, y: (path as any).pathOffset.y } },
+      canvas.viewportTransform as unknown as Mat2x3,
+    );
+    const aCache = layout.anchors;
+    const hCache = layout.handles;
 
     ctx.save();
     const retina = (canvas as any).getRetinaScaling?.() ?? window.devicePixelRatio ?? 1;
@@ -794,8 +762,8 @@
   }
 
   function clearAnchorState(): void {
-    anchorDrag = null;
-    handleDrag = null;
+    // ペンツール用のスクリーン座標キャッシュと contextTop を空にする。
+    // SelectCharTool 内部のドラッグ状態はモード切替時の onDeactivate でクリアされる。
     anchorScreenCache = [];
     handleScreenCache = [];
     const ctx = (canvas as any).contextTop as CanvasRenderingContext2D;
@@ -803,18 +771,6 @@
   }
 
   // ── 共通ヘルパー ────────────────────────────────────────────────────
-
-  /** ワールド座標デルタ → パスローカル座標デルタ変換 */
-  function worldToLocalDelta(
-    pathObj: fabric.Path, worldDx: number, worldDy: number,
-  ): { dx: number; dy: number } {
-    const mat = pathObj.calcTransformMatrix();
-    const inv = fabric.util.invertTransform(mat);
-    return {
-      dx: inv[0] * worldDx + inv[2] * worldDy,
-      dy: inv[1] * worldDx + inv[3] * worldDy,
-    };
-  }
 
   /** ドラッグ終了時の bbox 再計算 + pathOffset 補正 */
   function finalizeDrag(p: fabric.Path): void {
@@ -837,122 +793,93 @@
     canvas.fire('object:modified', { target: p } as any);
   }
 
-  // DOM capture で fabric の mousedown より先にヒットテストを行う。
-  // ヒットした場合は stopImmediatePropagation で fabric に渡さない。
+  // ── SelectCharTool 配線 ────────────────────────────────────────────
+  //
+  // 白矢印モードのアンカー/ハンドルドラッグとホバー判定は core/tools/select-char-tool.ts に
+  // 抽出済み。ここでは fabric.Path をツール抽象 (PathHandle) に橋渡しする adapter と、
+  // DOM/fabric イベントをツールメソッドへ転送する配線だけを行う。
+
   const upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement;
 
-  upperCanvas.addEventListener('mousedown', (e: MouseEvent) => {
-    // ペンモードではドラッグではなくペンツール側で処理する
-    if (currentMode === 'pen-add' || currentMode === 'pen-remove') return;
+  function makeFabricPathHandle(p: fabric.Path): PathHandle {
+    return {
+      snapshot(): PathSnapshot {
+        return {
+          commands:   fromFabricPath((p as any).path as ReadonlyArray<ReadonlyArray<unknown>>),
+          pathMatrix: p.calcTransformMatrix() as unknown as Mat2x3,
+          pathOffset: { x: (p as any).pathOffset.x, y: (p as any).pathOffset.y },
+        };
+      },
+      setCommands(cmds: ReadonlyArray<PathCommand>): void {
+        (p as any).path = toFabricPath(cmds);
+        (p as any).dirty = true;
+      },
+      finalizeEdit(): void {
+        finalizeDrag(p);
+      },
+    };
+  }
 
-    const path = getEditablePath();
-    if (!path) return;
+  const toolHost: ToolHost = {
+    getActivePath(): PathHandle | null {
+      const p = getEditablePath();
+      return p ? makeFabricPathHandle(p) : null;
+    },
+    getViewportMatrix(): Mat2x3 {
+      return canvas.viewportTransform as unknown as Mat2x3;
+    },
+    requestRerender(): void {
+      canvas.requestRenderAll();
+    },
+    setCursor(c: string): void {
+      upperCanvas.style.cursor = c;
+    },
+  };
 
+  const selectCharTool = new SelectCharTool();
+  selectCharTool.setSnapConfig({ enabled: snapEnabled, pitch: snapPitch, threshold: snapThreshold });
+
+  function buildPointerInput(e: MouseEvent): PointerInput {
     const rect = upperCanvas.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
+    const w = canvas.getPointer(e);
+    return {
+      screenX:  e.clientX - rect.left,
+      screenY:  e.clientY - rect.top,
+      worldX:   w.x,
+      worldY:   w.y,
+      altKey:   e.altKey,
+      shiftKey: e.shiftKey,
+    };
+  }
 
-    // ヒットテスト: ハンドル優先 → アンカー
-    const hitHandle = hitTestHandle(screenX, screenY);
-    const hitAnchor = hitHandle ? -1 : hitTestAnchor(screenX, screenY);
-    if (!hitHandle && hitAnchor < 0) return;
+  // DOM capture mousedown: ツールが consumed を返したら document-level の
+  // mousemove/up にドラッグ追跡を載せ、fabric への伝播を抑止する。
+  upperCanvas.addEventListener('mousedown', (e: MouseEvent) => {
+    if (currentMode !== 'select-char') return;
+    const result = selectCharTool.onPointerDown(buildPointerInput(e), toolHost);
+    if (result !== 'consumed') return;
 
     e.stopImmediatePropagation();
     e.preventDefault();
 
-    const startPath = fromFabricPath((path as any).path as ReadonlyArray<ReadonlyArray<unknown>>);
-    const lastPointer = canvas.getPointer(e);
-
-    if (hitHandle) {
-      // ── ハンドル (制御点) ドラッグ ──────────────────────────────
-      handleDrag = {
-        pathObj: path,
-        handle: hitHandle.handle,
-        startPath,
-        lastPointer,
-      };
-
-      const onMove = (me: MouseEvent) => {
-        if (!handleDrag) return;
-        const pointer = canvas.getPointer(me);
-        const worldDx = pointer.x - handleDrag.lastPointer.x;
-        const worldDy = pointer.y - handleDrag.lastPointer.y;
-        const local = worldToLocalDelta(handleDrag.pathObj, worldDx, worldDy);
-
-        const curPath = fromFabricPath((handleDrag.pathObj as any).path);
-        const newPath = moveHandle(curPath, handleDrag.handle, local.dx, local.dy);
-        (handleDrag.pathObj as any).path = toFabricPath(newPath);
-        (handleDrag.pathObj as any).dirty = true;
-        handleDrag.lastPointer = pointer;
-        canvas.requestRenderAll();
-      };
-
-      const onUp = () => {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        if (handleDrag) {
-          finalizeDrag(handleDrag.pathObj);
-          handleDrag = null;
-        }
-        canvas.requestRenderAll();
-      };
-
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    } else {
-      // ── アンカードラッグ (既存) ────────────────────────────────
-      anchorDrag = {
-        pathObj: path,
-        anchorIndex: hitAnchor,
-        startPath,
-        lastPointer,
-      };
-
-      const onMove = (me: MouseEvent) => {
-        if (!anchorDrag) return;
-        const pointer = canvas.getPointer(me);
-        const worldDx = pointer.x - anchorDrag.lastPointer.x;
-        const worldDy = pointer.y - anchorDrag.lastPointer.y;
-        const local = worldToLocalDelta(anchorDrag.pathObj, worldDx, worldDy);
-
-        const curPath = fromFabricPath((anchorDrag.pathObj as any).path);
-        const newPath = moveAnchorRigid(curPath, anchorDrag.anchorIndex, local.dx, local.dy);
-        (anchorDrag.pathObj as any).path = toFabricPath(newPath);
-        (anchorDrag.pathObj as any).dirty = true;
-        anchorDrag.lastPointer = pointer;
-        canvas.requestRenderAll();
-      };
-
-      const onUp = () => {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        if (anchorDrag) {
-          finalizeDrag(anchorDrag.pathObj);
-          anchorDrag = null;
-        }
-        canvas.requestRenderAll();
-      };
-
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    }
+    const onMove = (me: MouseEvent) => {
+      selectCharTool.onPointerMove(buildPointerInput(me), toolHost);
+    };
+    const onUp = (me: MouseEvent) => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      selectCharTool.onPointerUp(buildPointerInput(me), toolHost);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }, true);
 
-  // ホバー時のカーソル変更
+  // ホバー時のカーソル切替: ドラッグ中はドキュメント level handler が処理するので、
+  // upperCanvas mousemove は idle 状態だけツールへ通知する。
   upperCanvas.addEventListener('mousemove', (e: MouseEvent) => {
-    if (anchorDrag || handleDrag) return;
-    const path = getEditablePath();
-    if (!path) {
-      upperCanvas.style.cursor = '';
-      return;
-    }
-    const rect = upperCanvas.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
-    const hHit = hitTestHandle(screenX, screenY);
-    if (hHit) { upperCanvas.style.cursor = 'pointer'; return; }
-    const aidx = hitTestAnchor(screenX, screenY);
-    upperCanvas.style.cursor = aidx >= 0 ? 'move' : '';
+    if (currentMode !== 'select-char') return;
+    if (selectCharTool.isDragging()) return;
+    selectCharTool.onPointerMove(buildPointerInput(e), toolHost);
   }, true);
 
   // ── +/- ペンツール ──────────────────────────────────────────────────────
@@ -1184,11 +1111,10 @@
     if (currentMode === 'select-group') expandSelectionToGroup();
     syncToolbarToSelection();
   });
-  canvas.on('object:removed', (e: fabric.IEvent) => {
-    if ((anchorDrag && e.target === anchorDrag.pathObj) ||
-        (handleDrag && e.target === handleDrag.pathObj)) {
-      clearAnchorState();
-    }
+  canvas.on('object:removed', () => {
+    // ドラッグ対象パスが削除されたケースは通常 selection:cleared が同時に発火し、
+    // そこで clearAnchorState + onDeactivate が走る。ここでは追加処理不要。
+    // SelectCharTool 内のドラッグ状態は次の onPointerUp かモード切替で解除される。
   });
 
   // ── 選択オブジェクトを透過 PNG としてクリップボードにコピー ────────────
