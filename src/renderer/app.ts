@@ -910,7 +910,7 @@
   interface HandleScreenPos {
     anchorIndex: number;
     which: 'in' | 'out';
-    handle: { cmdIndex: number; paramIndices: readonly [number, number] };
+    handle: HandleRef;
     sx: number;
     sy: number;
   }
@@ -919,15 +919,15 @@
   interface AnchorDragState {
     pathObj: fabric.Path;
     anchorIndex: number;
-    startPath: any[];
+    startPath: PathCommand[];
     lastPointer: { x: number; y: number };
   }
   let anchorDrag: AnchorDragState | null = null;
 
   interface HandleDragState {
     pathObj: fabric.Path;
-    handle: { cmdIndex: number; paramIndices: readonly [number, number] };
-    startPath: any[];
+    handle: HandleRef;
+    startPath: PathCommand[];
     lastPointer: { x: number; y: number };
   }
   let handleDrag: HandleDragState | null = null;
@@ -965,8 +965,9 @@
       return;
     }
 
-    const cmds = (path as any).path as any[];
-    if (!cmds) { anchorScreenCache = []; handleScreenCache = []; return; }
+    const rawCmds = (path as any).path as ReadonlyArray<ReadonlyArray<unknown>> | undefined;
+    if (!rawCmds) { anchorScreenCache = []; handleScreenCache = []; return; }
+    const cmds = fromFabricPath(rawCmds);
 
     const anchors = extractAnchors(cmds);
     const half = ANCHOR_MARKER_PX / 2;
@@ -976,7 +977,7 @@
     // アンカーのスクリーン座標を先に全計算
     for (let i = 0; i < anchors.length; i++) {
       const a = anchors[i];
-      const { sx, sy } = anchorLocalToScreen(a.x, a.y, path);
+      const { sx, sy } = anchorLocalToScreen(a.point.x, a.point.y, path);
       aCache.push({ anchorIndex: i, sx, sy });
     }
 
@@ -985,17 +986,19 @@
       const a = anchors[i];
       if (a.incomingHandle) {
         const h = a.incomingHandle;
-        const hx = cmds[h.cmdIndex][h.paramIndices[0]] as number;
-        const hy = cmds[h.cmdIndex][h.paramIndices[1]] as number;
-        const { sx, sy } = anchorLocalToScreen(hx, hy, path);
-        hCache.push({ anchorIndex: i, which: 'in', handle: h, sx, sy });
+        const hp = getHandlePoint(cmds[h.cmdIndex], h);
+        if (hp) {
+          const { sx, sy } = anchorLocalToScreen(hp.x, hp.y, path);
+          hCache.push({ anchorIndex: i, which: 'in', handle: h, sx, sy });
+        }
       }
       if (a.outgoingHandle) {
         const h = a.outgoingHandle;
-        const hx = cmds[h.cmdIndex][h.paramIndices[0]] as number;
-        const hy = cmds[h.cmdIndex][h.paramIndices[1]] as number;
-        const { sx, sy } = anchorLocalToScreen(hx, hy, path);
-        hCache.push({ anchorIndex: i, which: 'out', handle: h, sx, sy });
+        const hp = getHandlePoint(cmds[h.cmdIndex], h);
+        if (hp) {
+          const { sx, sy } = anchorLocalToScreen(hp.x, hp.y, path);
+          hCache.push({ anchorIndex: i, which: 'out', handle: h, sx, sy });
+        }
       }
     }
 
@@ -1139,8 +1142,7 @@
     e.stopImmediatePropagation();
     e.preventDefault();
 
-    const cmds = (path as any).path as any[];
-    const startPath = cmds.map((c: any[]) => c.slice());
+    const startPath = fromFabricPath((path as any).path as ReadonlyArray<ReadonlyArray<unknown>>);
     const lastPointer = canvas.getPointer(e);
 
     if (hitHandle) {
@@ -1159,9 +1161,9 @@
         const worldDy = pointer.y - handleDrag.lastPointer.y;
         const local = worldToLocalDelta(handleDrag.pathObj, worldDx, worldDy);
 
-        const curPath = (handleDrag.pathObj as any).path as any[];
+        const curPath = fromFabricPath((handleDrag.pathObj as any).path);
         const newPath = moveHandle(curPath, handleDrag.handle, local.dx, local.dy);
-        (handleDrag.pathObj as any).path = newPath;
+        (handleDrag.pathObj as any).path = toFabricPath(newPath);
         (handleDrag.pathObj as any).dirty = true;
         handleDrag.lastPointer = pointer;
         canvas.requestRenderAll();
@@ -1195,9 +1197,9 @@
         const worldDy = pointer.y - anchorDrag.lastPointer.y;
         const local = worldToLocalDelta(anchorDrag.pathObj, worldDx, worldDy);
 
-        const curPath = (anchorDrag.pathObj as any).path as any[];
+        const curPath = fromFabricPath((anchorDrag.pathObj as any).path);
         const newPath = moveAnchorRigid(curPath, anchorDrag.anchorIndex, local.dx, local.dy);
-        (anchorDrag.pathObj as any).path = newPath;
+        (anchorDrag.pathObj as any).path = toFabricPath(newPath);
         (anchorDrag.pathObj as any).dirty = true;
         anchorDrag.lastPointer = pointer;
         canvas.requestRenderAll();
@@ -1266,51 +1268,41 @@
   function findClosestSegment(
     path: fabric.Path, screenX: number, screenY: number,
   ): SegmentHit | null {
-    const cmds = (path as any).path as any[];
-    if (!cmds) return null;
+    const rawCmds = (path as any).path as ReadonlyArray<ReadonlyArray<unknown>> | undefined;
+    if (!rawCmds) return null;
+    const cmds = fromFabricPath(rawCmds);
 
     let best: SegmentHit | null = null;
-    let curX = 0, curY = 0;
+    let cur: Point = { x: 0, y: 0 };
 
     for (let i = 0; i < cmds.length; i++) {
       const cmd = cmds[i];
 
-      if (cmd[0] === 'M') {
-        curX = cmd[1]; curY = cmd[2];
-        continue;
-      }
-
-      if (cmd[0] === 'Z') {
-        // Z closure は現在スキップ
-        continue;
-      }
+      if (cmd.type === 'M') { cur = cmd.to; continue; }
+      if (cmd.type === 'Z') { continue; }
 
       for (let s = 0; s <= PEN_SAMPLES; s++) {
         const t = s / PEN_SAMPLES;
-        let px: number, py: number;
+        let p: Point;
 
-        if (cmd[0] === 'C') {
-          [px, py] = evalCubicAt(curX, curY, cmd[1], cmd[2], cmd[3], cmd[4], cmd[5], cmd[6], t);
-        } else if (cmd[0] === 'Q') {
-          [px, py] = evalQuadAt(curX, curY, cmd[1], cmd[2], cmd[3], cmd[4], t);
-        } else if (cmd[0] === 'L') {
-          px = curX + t * (cmd[1] - curX);
-          py = curY + t * (cmd[2] - curY);
+        if (cmd.type === 'C') {
+          p = evalCubicAt(cur, cmd.c1, cmd.c2, cmd.to, t);
+        } else if (cmd.type === 'Q') {
+          p = evalQuadAt(cur, cmd.c, cmd.to, t);
         } else {
-          continue;
+          // L
+          p = { x: cur.x + t * (cmd.to.x - cur.x), y: cur.y + t * (cmd.to.y - cur.y) };
         }
 
-        const scr = anchorLocalToScreen(px, py, path);
+        const scr = anchorLocalToScreen(p.x, p.y, path);
         const d = Math.hypot(scr.sx - screenX, scr.sy - screenY);
         if (d < PEN_HIT_THRESHOLD && (!best || d < best.dist)) {
           best = { cmdIndex: i, t, dist: d };
         }
       }
 
-      // 現在点を更新
-      if (cmd[0] === 'C') { curX = cmd[5]; curY = cmd[6]; }
-      else if (cmd[0] === 'Q') { curX = cmd[3]; curY = cmd[4]; }
-      else if (cmd[0] === 'L') { curX = cmd[1]; curY = cmd[2]; }
+      // 現在点を更新 (C/Q/L はすべて .to を持つ)
+      cur = cmd.to;
     }
 
     return best;
@@ -1335,29 +1327,31 @@
       e.stopImmediatePropagation();
       e.preventDefault();
 
-      const cmds = (path as any).path as any[];
-      const origCmdType = cmds[hit.cmdIndex][0] as string;
+      const cmds = fromFabricPath((path as any).path as ReadonlyArray<ReadonlyArray<unknown>>);
+      const origCmd = cmds[hit.cmdIndex];
+      const origCmdType = origCmd.type;
       const newPath = splitSegment(cmds, hit.cmdIndex, hit.t);
-      (path as any).path = newPath;
+      (path as any).path = toFabricPath(newPath);
       (path as any).dirty = true;
 
       logger.debug(`[pen-add] origCmdType=${origCmdType} cmdIndex=${hit.cmdIndex} t=${hit.t}`);
 
-      // 新アンカーの位置 (分割で生成された first half の終点)
-      const firstCmd = newPath[hit.cmdIndex] as any[];
-      let anchorX: number, anchorY: number;
-      if (origCmdType === 'C') { anchorX = firstCmd[5]; anchorY = firstCmd[6]; }
-      else if (origCmdType === 'Q') { anchorX = firstCmd[3]; anchorY = firstCmd[4]; }
-      else { anchorX = firstCmd[1]; anchorY = firstCmd[2]; } // L
+      // 新アンカーの位置 (分割で生成された first half の終点)。
+      // splitSegment は M/Z に対しては分割せず元配列を返すので、ここでの type は C/Q/L のいずれか。
+      const firstCmd = newPath[hit.cmdIndex];
+      if (firstCmd.type !== 'C' && firstCmd.type !== 'Q' && firstCmd.type !== 'L') return;
+      const anchorPt = firstCmd.to;
+      const anchorX = anchorPt.x, anchorY = anchorPt.y;
       const secondIdx = hit.cmdIndex + 1;
 
       // L→C 変換用: 前後のアンカー位置を記録
       const prevPt = getSegmentStart(newPath, hit.cmdIndex);
-      const nextCmd = newPath[secondIdx] as any[];
-      const prevX = prevPt ? prevPt[0] : anchorX;
-      const prevY = prevPt ? prevPt[1] : anchorY;
-      const nextX = origCmdType === 'C' ? nextCmd[5] : origCmdType === 'Q' ? nextCmd[3] : nextCmd[1];
-      const nextY = origCmdType === 'C' ? nextCmd[6] : origCmdType === 'Q' ? nextCmd[4] : nextCmd[2];
+      const nextCmd = newPath[secondIdx];
+      if (nextCmd.type !== 'C' && nextCmd.type !== 'Q' && nextCmd.type !== 'L') return;
+      const prevX = prevPt ? prevPt.x : anchorX;
+      const prevY = prevPt ? prevPt.y : anchorY;
+      const nextX = nextCmd.to.x;
+      const nextY = nextCmd.to.y;
 
       logger.debug(`[pen-add] drag mode. anchor=(${anchorX.toFixed(1)},${anchorY.toFixed(1)}) prev=(${prevX.toFixed(1)},${prevY.toFixed(1)}) next=(${nextX.toFixed(1)},${nextY.toFixed(1)})`);
 
@@ -1370,26 +1364,36 @@
         const dy = local.y - anchorY;
         logger.debug(`[pen-add:onMove] delta=(${dx.toFixed(1)},${dy.toFixed(1)})`);
 
-        const curPath = (path as any).path as any[];
-        const updated = new Array(curPath.length);
-        for (let k = 0; k < curPath.length; k++) updated[k] = curPath[k];
+        const curPath = fromFabricPath((path as any).path);
+        const updated: PathCommand[] = curPath.slice();
 
-        // 全セグメントタイプ共通: C コマンドでハンドルを設定
-        // L/Q の場合は C に変換してからハンドルを付与
-        updated[hit.cmdIndex] = ['C',
-          origCmdType === 'C' ? (curPath[hit.cmdIndex] as any[])[1] : prevX + (anchorX - prevX) / 3,
-          origCmdType === 'C' ? (curPath[hit.cmdIndex] as any[])[2] : prevY + (anchorY - prevY) / 3,
-          anchorX - dx, anchorY - dy,
-          anchorX, anchorY,
-        ] as any;
-        updated[secondIdx] = ['C',
-          anchorX + dx, anchorY + dy,
-          origCmdType === 'C' ? (curPath[secondIdx] as any[])[3] : anchorX + 2 * (nextX - anchorX) / 3,
-          origCmdType === 'C' ? (curPath[secondIdx] as any[])[4] : anchorY + 2 * (nextY - anchorY) / 3,
-          nextX, nextY,
-        ] as any;
+        const curFirst = curPath[hit.cmdIndex];
+        const curSecond = curPath[secondIdx];
 
-        (path as any).path = updated;
+        // 全セグメントタイプ共通: C コマンドでハンドルを設定。
+        // L/Q を分割した場合は C に変換してからハンドルを付与。
+        // 元が C ならその c1/c2 を保ち、それ以外は3等分点でデフォルトハンドルを生成。
+        const firstC1: Point = origCmdType === 'C' && curFirst.type === 'C'
+          ? curFirst.c1
+          : { x: prevX + (anchorX - prevX) / 3, y: prevY + (anchorY - prevY) / 3 };
+        updated[hit.cmdIndex] = {
+          type: 'C',
+          c1: firstC1,
+          c2: { x: anchorX - dx, y: anchorY - dy },
+          to: { x: anchorX, y: anchorY },
+        };
+
+        const secondC2: Point = origCmdType === 'C' && curSecond.type === 'C'
+          ? curSecond.c2
+          : { x: anchorX + 2 * (nextX - anchorX) / 3, y: anchorY + 2 * (nextY - anchorY) / 3 };
+        updated[secondIdx] = {
+          type: 'C',
+          c1: { x: anchorX + dx, y: anchorY + dy },
+          c2: secondC2,
+          to: { x: nextX, y: nextY },
+        };
+
+        (path as any).path = toFabricPath(updated);
         (path as any).dirty = true;
         canvas.requestRenderAll();
       };
@@ -1414,13 +1418,13 @@
       e.stopImmediatePropagation();
       e.preventDefault();
 
-      const cmds = (path as any).path as any[];
+      const cmds = fromFabricPath((path as any).path as ReadonlyArray<ReadonlyArray<unknown>>);
       const newPath = removeAnchor(cmds, aidx);
 
       // removeAnchor が操作を拒否した場合 (アンカー数不足) は長さが同じ
       if (newPath.length === cmds.length) return;
 
-      (path as any).path = newPath;
+      (path as any).path = toFabricPath(newPath);
       (path as any).dirty = true;
       finalizeDrag(path);
       canvas.requestRenderAll();
