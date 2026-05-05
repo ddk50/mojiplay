@@ -1,73 +1,12 @@
 (function () {
   'use strict';
 
-  // ── Logger (IPC → electron-log + DevTools console) ───────────────────────
-  const logger = {
-    debug: (msg: string) => {
-      console.debug(msg);
-      void window.electronAPI?.log?.debug(msg);
-    },
-    info: (msg: string) => {
-      console.info(msg);
-      void window.electronAPI?.log?.info(msg);
-    },
-    warn: (msg: string) => {
-      console.warn(msg);
-      void window.electronAPI?.log?.warn(msg);
-    },
-    error: (msg: string, err?: unknown) => {
-      const stack = err instanceof Error
-        ? `\n${err.stack ?? err.message}`
-        : (err != null ? `\n${String(err)}` : '');
-      const full = msg + stack;
-      console.error(full);
-      void window.electronAPI?.log?.error(full);
-    },
-  };
-
-  // ── Custom menu bar (Claude Desktop 風 HTML メニュー) ──────────────────
-
-  function initMenuBar(): void {
-    const menuItems = document.querySelectorAll('#menu-bar .menu-item');
-
-    function closeAll(): void {
-      menuItems.forEach(mi => mi.classList.remove('is-open'));
-    }
-
-    menuItems.forEach(item => {
-      const label = item.querySelector('.menu-label');
-      if (!label) return;
-
-      label.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const wasOpen = item.classList.contains('is-open');
-        closeAll();
-        if (!wasOpen) item.classList.add('is-open');
-      });
-
-      // ホバーで切り替え (他メニューが開いている時)
-      label.addEventListener('mouseenter', () => {
-        const anyOpen = document.querySelector('#menu-bar .menu-item.is-open');
-        if (anyOpen && anyOpen !== item) {
-          closeAll();
-          item.classList.add('is-open');
-        }
-      });
-    });
-
-    // 外クリックで閉じる
-    document.addEventListener('click', closeAll);
-
-    // アクション実行
-    document.querySelectorAll('#menu-bar .menu-dropdown button[data-action]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const action = (btn as HTMLElement).dataset.action;
-        closeAll();
-        handleMenuAction(action || '');
-      });
-    });
-  }
+  // ロガー: renderer/logger.ts (logger)
+  // トースト: renderer/toast.ts (showToast)
+  // メニュー UI: renderer/menu-bar.ts (initMenuBar)
+  // フォント列挙: renderer/font-enumeration.ts (parseStyle, fontsByFamily,
+  //   populateStyleList, populateFontList, fontFamilySel, fontStyleSel)
+  // アウトライン化変換: renderer/outline-conversion.ts (outlineTextToPath, getFontkitFont)
 
   // メニューアクション → 後で canvas 初期化後に使う関数を参照するため
   // handleMenuAction は関数宣言 (hoisted) で定義し、canvas 依存部分は
@@ -79,13 +18,13 @@
         if (typeof doCopy === 'function') doCopy();
         break;
       case 'undo':
-        document.execCommand('undo');
+        void window.electronAPI?.undo();
         break;
       case 'redo':
-        document.execCommand('redo');
+        void window.electronAPI?.redo();
         break;
       case 'paste':
-        document.execCommand('paste');
+        void window.electronAPI?.paste();
         break;
       case 'delete':
         menuDeleteSelection();
@@ -111,7 +50,7 @@
     }
   }
 
-  initMenuBar();
+  initMenuBar(handleMenuAction);
 
   // ── Canvas setup ──────────────────────────────────────────────────────────
 
@@ -120,7 +59,13 @@
   const canvas = new fabric.Canvas('main-canvas', {
     backgroundColor: undefined,
     preserveObjectStacking: true,
-    selection: true
+    selection: true,
+    // 範囲選択 (ドラッグマーキー) の見た目: 薄いブルー塗り + ブルー点線。
+    // ハンドル色 (#0066ff) と統一して視覚言語を揃える。
+    selectionColor:       'rgba(0, 102, 255, 0.08)',
+    selectionBorderColor: '#0066ff',
+    selectionLineWidth:   1,
+    selectionDashArray:   [5, 3],
   });
 
   function resizeCanvas(): void {
@@ -133,113 +78,23 @@
   resizeCanvas();
 
   // ── Toolbar references ────────────────────────────────────────────────────
+  // fontFamilySel / fontStyleSel は renderer/font-enumeration.ts で定義済み (cross-file global)。
 
-  const fontFamilySel      = document.getElementById('font-family')          as HTMLSelectElement;
-  const fontStyleSel       = document.getElementById('font-style')            as HTMLSelectElement;
   const fontSizeInput      = document.getElementById('font-size')             as HTMLInputElement;
   const fontColorInput     = document.getElementById('font-color')            as HTMLInputElement;
   const rotationInput      = document.getElementById('rotation')              as HTMLInputElement;
   const btnModeSelectGroup = document.getElementById('btn-mode-select-group') as HTMLButtonElement;
   const btnModeSelectChar  = document.getElementById('btn-mode-select-char')  as HTMLButtonElement;
   const btnModeText        = document.getElementById('btn-mode-text')         as HTMLButtonElement;
+  const btnModePenAdd      = document.getElementById('btn-mode-pen-add')      as HTMLButtonElement;
+  const btnModePenRemove   = document.getElementById('btn-mode-pen-remove')   as HTMLButtonElement;
   const snapEnabledInput   = document.getElementById('snap-enabled')          as HTMLInputElement;
   const snapPitchInput     = document.getElementById('snap-pitch')            as HTMLInputElement;
   const snapThresholdInput = document.getElementById('snap-threshold')        as HTMLInputElement;
 
-  // ── システムフォント列挙 (Local Font Access API) ──────────────────────────
-  // Electron 29 / Chromium 122+ に標準搭載。main 側で local-fonts 権限を許可済み。
-  // 取得失敗時は index.html のフォールバック Arial / Regular がそのまま残る。
-
-  type StyleInfo = { label: string; weight: number; italic: boolean };
-
-  const WEIGHT_MAP: Record<string, number> = {
-    thin: 100, hairline: 100,
-    extralight: 200, ultralight: 200,
-    light: 300,
-    '': 400, normal: 400, regular: 400, book: 400,
-    medium: 500,
-    semibold: 600, demibold: 600,
-    bold: 700,
-    extrabold: 800, ultrabold: 800,
-    black: 900, heavy: 900,
-  };
-
-  function parseStyle(s: string): StyleInfo {
-    const lower = s.toLowerCase();
-    const italic = /italic|oblique/.test(lower);
-    const key = lower.replace(/italic|oblique/g, '').replace(/\s+/g, '');
-    const weight = WEIGHT_MAP[key] ?? 400;
-    return { label: s || 'Regular', weight, italic };
-  }
-
-  const fontsByFamily = new Map<string, StyleInfo[]>();
-
-  function styleValue(weight: number, italic: boolean): string {
-    return `${weight}|${italic ? 'italic' : 'normal'}`;
-  }
-
-  function populateStyleList(family: string): void {
-    const styles = fontsByFamily.get(family);
-    const previous = fontStyleSel.value;
-    fontStyleSel.innerHTML = '';
-
-    const list: StyleInfo[] = (styles && styles.length > 0)
-      ? styles
-      : [{ label: 'Regular', weight: 400, italic: false }];
-
-    for (const s of list) {
-      const opt = document.createElement('option');
-      opt.value = styleValue(s.weight, s.italic);
-      opt.textContent = s.label;
-      fontStyleSel.appendChild(opt);
-    }
-
-    const values = list.map(s => styleValue(s.weight, s.italic));
-    if (values.includes(previous)) {
-      fontStyleSel.value = previous;
-    } else {
-      const regular = styleValue(400, false);
-      fontStyleSel.value = values.includes(regular) ? regular : values[0];
-    }
-  }
-
-  async function populateFontList(): Promise<void> {
-    if (typeof window.queryLocalFonts !== 'function') return;
-    try {
-      const fonts = await window.queryLocalFonts();
-      if (!fonts.length) return;
-
-      fontsByFamily.clear();
-      for (const f of fonts) {
-        const info = parseStyle(f.style);
-        let arr = fontsByFamily.get(f.family);
-        if (!arr) { arr = []; fontsByFamily.set(f.family, arr); }
-        if (!arr.some(x => x.weight === info.weight && x.italic === info.italic)) {
-          arr.push(info);
-        }
-      }
-      for (const arr of fontsByFamily.values()) {
-        arr.sort((a, b) => (a.weight - b.weight) || (Number(a.italic) - Number(b.italic)));
-      }
-
-      const families = Array.from(fontsByFamily.keys())
-        .sort((a, b) => a.localeCompare(b, 'ja'));
-
-      const previous = fontFamilySel.value;
-      fontFamilySel.innerHTML = '';
-      for (const family of families) {
-        const opt = document.createElement('option');
-        opt.value = family;
-        opt.textContent = family;
-        fontFamilySel.appendChild(opt);
-      }
-      fontFamilySel.value = families.includes(previous) ? previous : families[0];
-      populateStyleList(fontFamilySel.value);
-    } catch (err) {
-      logger.error('[fonts] queryLocalFonts failed', err);
-    }
-  }
-  populateFontList();
+  // システムフォント列挙は renderer/font-enumeration.ts に移動済み。
+  // (parseStyle, fontsByFamily, populateStyleList, populateFontList,
+  //  fontFamilySel, fontStyleSel, styleValue, StyleInfo)
 
   // ── Snap state (select-char モード専用) ──────────────────────────────────
 
@@ -259,13 +114,15 @@
 
   // ── Mode management ───────────────────────────────────────────────────────
 
-  type Mode = 'select-group' | 'select-char' | 'text';
+  type Mode = 'select-group' | 'select-char' | 'text' | 'pen-add' | 'pen-remove';
   let currentMode: Mode = 'select-group';
 
   const modeButtons: Record<Mode, HTMLButtonElement> = {
     'select-group': btnModeSelectGroup,
     'select-char':  btnModeSelectChar,
     'text':         btnModeText,
+    'pen-add':      btnModePenAdd,
+    'pen-remove':   btnModePenRemove,
   };
 
   function setMode(m: Mode): void {
@@ -275,9 +132,17 @@
     });
 
     const isSelectMode = m === 'select-group' || m === 'select-char';
+    const isPenMode    = m === 'pen-add' || m === 'pen-remove';
     canvas.selection     = isSelectMode;
     canvas.defaultCursor = m === 'text' ? 'text' : 'default';
-    canvas.hoverCursor   = m === 'text' ? 'text' : 'move';
+    // 白矢印 (select-char) はアンカー編集モードなので、Illustrator の Direct
+    // Selection 同様に標準アローを維持する (path 本体のホバーで move カーソルに
+    // 切り替わるのは「十字」表示になり混乱の原因)。
+    // 黒矢印 (select-group) は文字列丸ごと移動が主用途なので move を維持。
+    canvas.hoverCursor   =
+      m === 'text'        ? 'text' :
+      m === 'select-char' ? 'default' :
+      'move';
 
     canvas.forEachObject(o => {
       o.selectable = isSelectMode;
@@ -285,13 +150,16 @@
     });
 
     clearAnchorState();
-    if (!isSelectMode) canvas.discardActiveObject();
+    // ペンモードでは選択中パスを維持する
+    if (!isSelectMode && !isPenMode) canvas.discardActiveObject();
     canvas.requestRenderAll();
   }
 
   btnModeSelectGroup.addEventListener('click', () => setMode('select-group'));
   btnModeSelectChar.addEventListener('click',  () => setMode('select-char'));
   btnModeText.addEventListener('click',        () => setMode('text'));
+  btnModePenAdd.addEventListener('click',      () => setMode('pen-add'));
+  btnModePenRemove.addEventListener('click',   () => setMode('pen-remove'));
 
   // ── IText 確定: 1文字ずつ fabric.Text に分割 ──────────────────────────────
 
@@ -435,17 +303,41 @@
 
   function expandSelectionToGroup(): void {
     const active = canvas.getActiveObject();
-    if (!active || active.type === 'activeSelection') return;
+    if (!active) return;
 
-    const gid = (active as any).data?.groupId;
-    if (!gid) return;
+    // 単独オブジェクトでも activeSelection (marquee 選択) でも groupId を集約。
+    // marquee で複数文字を範囲選択した場合、それぞれが属する全 group に展開する
+    // (黒矢印モードは「文字列単位」が選択粒度のため、部分選択を許さない)。
+    const currentObjs: fabric.Object[] = active.type === 'activeSelection'
+      ? (active as fabric.ActiveSelection).getObjects()
+      : [active];
 
-    const groupObjs = canvas.getObjects().filter(o => (o as any).data?.groupId === gid);
-    if (groupObjs.length <= 1) return;
+    const gids = new Set<string>();
+    for (const o of currentObjs) {
+      const gid = (o as any).data?.groupId;
+      if (gid) gids.add(gid);
+    }
+    if (gids.size === 0) return;
+
+    const groupObjs = canvas.getObjects().filter(o => {
+      const gid = (o as any).data?.groupId;
+      return gid !== undefined && gids.has(gid);
+    });
+
+    // 既に完全展開済み (現在の選択 = group 全体) なら no-op。
+    // selection:updated の再帰発火で無限ループに入るのを防ぐ。
+    if (currentObjs.length === groupObjs.length &&
+        currentObjs.every(o => groupObjs.includes(o))) {
+      return;
+    }
 
     canvas.discardActiveObject();
-    const sel = new fabric.ActiveSelection(groupObjs, { canvas });
-    canvas.setActiveObject(sel);
+    if (groupObjs.length === 1) {
+      canvas.setActiveObject(groupObjs[0]);
+    } else {
+      const sel = new fabric.ActiveSelection(groupObjs, { canvas });
+      canvas.setActiveObject(sel);
+    }
     canvas.requestRenderAll();
   }
 
@@ -627,186 +519,12 @@
     }
   });
 
-  // ── Toast ─────────────────────────────────────────────────────────────────
+  // showToast は renderer/toast.ts に移動済み。
 
-  function showToast(message: string, isError = false): void {
-    const toast = document.createElement('div');
-    toast.className = 'toast' + (isError ? ' toast-error' : '');
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-  }
-
-  // ── アウトライン化: fabric.Text → fabric.Path ──────────────────────────────
-  // fontkit でフォントファイルを解析し、グリフパスを取得して fabric.Path に
-  // 差し替える。Illustrator の「アウトライン作成」(Cmd+Shift+O) 相当。
-  // fontkit は TTC (TrueType Collection) もネイティブ対応しているため Windows の
-  // 日本語フォント (Meiryo / Yu Gothic / MS Gothic 等) でも動作する。
-  // Phase 1 は変換のみ。アンカー編集は Phase 2 で実装予定のため、今は generic な
-  // fabric.Path として扱う (移動・回転・選択は既存ロジックで動く)。
-
-  // family|weight|italic をキーに fontkit.Font をキャッシュ。失敗時も null を
-  // キャッシュして再試行のコストを避ける。
-  const fontkitFontCache = new Map<string, Promise<fontkit.Font | null>>();
-
-  // TTC の場合 fontkit.create の第2引数で postscriptName を渡してサブフォントを
-  // 選択する必要があるため、{blob, postscriptName} の組で返す。
-  async function loadFontData(
-    family: string, weight: number, italic: boolean
-  ): Promise<{ blob: Blob; postscriptName: string } | null> {
-    if (typeof window.queryLocalFonts !== 'function') return null;
-    try {
-      const all = await window.queryLocalFonts();
-      const sameFamily = all.filter(f => f.family === family);
-      if (sameFamily.length === 0) return null;
-
-      // 1) weight と italic が完全一致するものを優先
-      const exact = sameFamily.find(f => {
-        const info = parseStyle(f.style);
-        return info.weight === weight && info.italic === italic;
-      });
-      let pick: FontData | undefined = exact;
-
-      // 2) なければ italic を合わせつつ最も近い weight
-      if (!pick) {
-        const byDistance = sameFamily
-          .map(f => ({ f, info: parseStyle(f.style) }))
-          .filter(x => x.info.italic === italic)
-          .sort((a, b) =>
-            Math.abs(a.info.weight - weight) - Math.abs(b.info.weight - weight));
-        pick = byDistance[0]?.f ?? sameFamily[0];
-      }
-
-      const blob = await pick.blob();
-      return { blob, postscriptName: pick.postscriptName };
-    } catch (err) {
-      logger.error('[outline] loadFontData failed', err);
-      return null;
-    }
-  }
-
-  function getFontkitFont(
-    family: string, weight: number, italic: boolean
-  ): Promise<fontkit.Font | null> {
-    const key = `${family}|${weight}|${italic}`;
-    const cached = fontkitFontCache.get(key);
-    if (cached) return cached;
-    const fresh = (async () => {
-      const result = await loadFontData(family, weight, italic);
-      if (!result) return null;
-      try {
-        const ab = await result.blob.arrayBuffer();
-        const buf = new Uint8Array(ab);
-
-        // fontkit.create(buf, postscriptName) は、
-        //   - TTC (先頭 'ttcf')          → サブフォント選択
-        //   - 単体フォント (TTF/OTF/...)  → Variable Font のバリエーション選択
-        // という 2 つの意味を持つ。単体フォントで postscriptName を渡すと
-        // fvar/gvar/CFF2 テーブルが必要になり、通常の Arial 等では throw
-        // する。したがって TTC のときだけ postscriptName を渡す。
-        const isTTC = buf[0] === 0x74 && buf[1] === 0x74 &&
-                      buf[2] === 0x63 && buf[3] === 0x66;
-        return isTTC
-          ? fontkit.create(buf, result.postscriptName)
-          : fontkit.create(buf);
-      } catch (err) {
-        logger.error(`[outline] fontkit.create failed for ${key}`, err);
-        return null;
-      }
-    })();
-    fontkitFontCache.set(key, fresh);
-    return fresh;
-  }
-
-  async function outlineTextToPath(ft: fabric.Text): Promise<fabric.Path | null> {
-    const text = ft.text || '';
-    if (!text.trim()) return null;
-
-    const family     = ft.fontFamily || 'Arial';
-    const rawWeight  = ft.fontWeight;
-    const weight     = typeof rawWeight === 'number'
-      ? rawWeight
-      : (String(rawWeight).toLowerCase() === 'bold' ? 700 : 400);
-    const italic     = ft.fontStyle === 'italic';
-    const fontSize   = (ft.fontSize as number) || 72;
-
-    const font = await getFontkitFont(family, weight, italic);
-    if (!font) return null;
-
-    // 単文字前提 (commitIText で 1 文字ごとに分割済み)
-    const cp = text.codePointAt(0);
-    if (cp === undefined) return null;
-    const glyph = font.glyphForCodePoint(cp);
-    if (!glyph) {
-      logger.warn(`[outline] ${family}: no glyph for U+${cp.toString(16).padStart(4, '0')}`);
-      return null;
-    }
-
-    // fontkit のグリフパスは design units (Y-up、baseline=0)。
-    // fabric / canvas は pixel + Y-down なので scale(fs/UPM, -fs/UPM) で
-    // スケール + Y 反転を同時に行う。結果のパスは opentype.js と同じ座標系
-    // (baseline=0、ascender=負値、descender=正値) になる。
-    const scale = fontSize / font.unitsPerEm;
-    const scaledPath = glyph.path.scale(scale, -scale);
-    const pathData = scaledPath.toSVG();
-    const bb = scaledPath.bbox; // { minX, minY, maxX, maxY }
-
-    // 位置計算は純粋関数 computeOutlinePathPosition に切り出し済み
-    // (src/renderer/outline-position.ts, ユニットテストあり)。
-    const { left: pathLeft, top: pathTop } = computeOutlinePathPosition(
-      {
-        left:             ft.left ?? 0,
-        top:              ft.top  ?? 0,
-        fontSize,
-        fontSizeMult:     (ft as any)._fontSizeMult,
-        fontSizeFraction: (ft as any)._fontSizeFraction,
-      },
-      { minX: bb.minX, minY: bb.minY },
-    );
-
-    const ftRect = ft.getBoundingRect(true, true);
-    logger.debug(
-      `[outline] char="${text}" cp=U+${cp.toString(16).padStart(4, '0')}` +
-      ` ft=(${ft.left},${ft.top}) fontSize=${fontSize}` +
-      ` ft.width=${ft.width} ft.height=${ft.height}` +
-      ` ft.boundingRect=(${ftRect.left.toFixed(2)},${ftRect.top.toFixed(2)},${ftRect.width.toFixed(2)},${ftRect.height.toFixed(2)})` +
-      ` bb=(${bb.minX.toFixed(2)},${bb.minY.toFixed(2)},${bb.maxX.toFixed(2)},${bb.maxY.toFixed(2)})` +
-      ` → path=(${pathLeft.toFixed(2)},${pathTop.toFixed(2)})`
-    );
-
-    const sx = (ft.scaleX as number) ?? 1;
-    const sy = (ft.scaleY as number) ?? 1;
-    const origData = (ft as any).data || {};
-
-    // NOTE: angle != 0 の場合、fabric.Path は ink bbox 中心を pivot に回転するため
-    // 元の fabric.Text (text bbox 中心 pivot) とズレが生じる。Phase 2 で修正予定。
-    const p = new fabric.Path(pathData, {
-      left:        pathLeft,
-      top:         pathTop,
-      fill:        ft.fill,
-      angle:       ft.angle,
-      scaleX:      sx,
-      scaleY:      sy,
-      selectable:  ft.selectable,
-      evented:     ft.evented,
-      hasControls: false,
-      hasBorders:  true,
-    } as fabric.IPathOptions);
-    (p as any).data = { ...origData, outlined: true };
-
-    // デバッグ: fabric が実際に保持している値をダンプ。
-    const po = (p as any).pathOffset;
-    const rect = p.getBoundingRect(true, true);
-    logger.debug(
-      `[outline] fabric.Path post-init: p.left=${p.left} p.top=${p.top}` +
-      ` p.width=${p.width} p.height=${p.height}` +
-      ` pathOffset=(${po?.x},${po?.y})` +
-      ` originX=${p.originX} originY=${p.originY}` +
-      ` boundingRect=(${rect.left.toFixed(2)},${rect.top.toFixed(2)},${rect.width.toFixed(2)},${rect.height.toFixed(2)})`
-    );
-
-    return p;
-  }
+  // ── アウトライン化: 選択処理とボタンバインド ─────────────────────────────
+  // 純粋寄りの変換 (outlineTextToPath, getFontkitFont, loadFontData,
+  // fontkitFontCache) は renderer/outline-conversion.ts に移動済み。
+  // canvas 操作を含む outlineSelection / isOutlineable とボタンバインドはここに残す。
 
   function isOutlineable(obj: fabric.Object): boolean {
     const anyObj = obj as any;
@@ -836,12 +554,15 @@
     );
 
     const succeeded = conversions.filter(x => x.path) as Array<{ ft: fabric.Text; path: fabric.Path }>;
-    const failedFamilies = new Set(
-      conversions.filter(x => !x.path).map(x => x.ft.fontFamily || '?')
-    );
+    const failed = conversions.filter(x => !x.path);
+    const failedChars = failed.map(x => x.ft.text || '').join('');
+    const failedFamilies = Array.from(new Set(failed.map(x => x.ft.fontFamily || '?')));
 
     if (succeeded.length === 0) {
-      showToast(`アウトライン化失敗: ${Array.from(failedFamilies).join(', ')}`, true);
+      const detail = failedChars
+        ? `${failedFamilies.join(', ')} には「${failedChars}」のグリフがありません`
+        : failedFamilies.join(', ');
+      showToast(`アウトライン化失敗: ${detail}`, true);
       return;
     }
 
@@ -869,8 +590,11 @@
     // 通常動作で展開される経路に委ねる (data.groupId は保持している)。
     canvas.requestRenderAll();
 
-    if (failedFamilies.size > 0) {
-      showToast(`一部失敗: ${Array.from(failedFamilies).join(', ')}`, true);
+    if (failed.length > 0) {
+      const detail = failedChars
+        ? `${failedFamilies.join(', ')} には「${failedChars}」のグリフがありません`
+        : failedFamilies.join(', ');
+      showToast(`一部失敗: ${detail}`, true);
     }
   }
 
@@ -889,19 +613,43 @@
   const ANCHOR_FILL       = '#ffffff';
   const ANCHOR_STROKE     = '#0066ff';
 
+  const HANDLE_LINE_COLOR = '#0066ff';
+  const HANDLE_LINE_WIDTH = 1;
+  const HANDLE_CIRCLE_R   = 4;
+  const HANDLE_FILL       = '#ffffff';
+  const HANDLE_STROKE     = '#0066ff';
+  const HANDLE_HIT_RADIUS = 5;
+
   interface AnchorScreenPos { anchorIndex: number; sx: number; sy: number }
   let anchorScreenCache: AnchorScreenPos[] = [];
+
+  interface HandleScreenPos {
+    anchorIndex: number;
+    which: 'in' | 'out';
+    handle: HandleRef;
+    sx: number;
+    sy: number;
+  }
+  let handleScreenCache: HandleScreenPos[] = [];
 
   interface AnchorDragState {
     pathObj: fabric.Path;
     anchorIndex: number;
-    startPath: any[];
+    startPath: PathCommand[];
     lastPointer: { x: number; y: number };
   }
   let anchorDrag: AnchorDragState | null = null;
 
+  interface HandleDragState {
+    pathObj: fabric.Path;
+    handle: HandleRef;
+    startPath: PathCommand[];
+    lastPointer: { x: number; y: number };
+  }
+  let handleDrag: HandleDragState | null = null;
+
   function getEditablePath(): fabric.Path | null {
-    if (currentMode !== 'select-char') return null;
+    if (currentMode !== 'select-char' && currentMode !== 'pen-add' && currentMode !== 'pen-remove') return null;
     const obj = canvas.getActiveObject();
     if (!obj || obj.type !== 'path') return null;
     if (!(obj as any).data?.outlined) return null;
@@ -924,47 +672,93 @@
 
   function drawAnchorOverlay(): void {
     const ctx = (canvas as any).contextTop as CanvasRenderingContext2D;
-    if (ctx) canvas.clearContext(ctx);
-
     const path = getEditablePath();
     if (!path || !ctx) {
+      // 編集対象パスが無い場合は contextTop に手を出さない。
+      // fabric は contextTop に範囲選択 (marquee) や free-drawing を描画するので、
+      // 我々が無条件に clearContext すると marquee が消えてしまう (回帰防止)。
       anchorScreenCache = [];
+      handleScreenCache = [];
       return;
     }
+    canvas.clearContext(ctx);
 
-    const cmds = (path as any).path as any[];
-    if (!cmds) { anchorScreenCache = []; return; }
+    const rawCmds = (path as any).path as ReadonlyArray<ReadonlyArray<unknown>> | undefined;
+    if (!rawCmds) { anchorScreenCache = []; handleScreenCache = []; return; }
+    const cmds = fromFabricPath(rawCmds);
 
     const anchors = extractAnchors(cmds);
     const half = ANCHOR_MARKER_PX / 2;
-    const cache: AnchorScreenPos[] = [];
+    const aCache: AnchorScreenPos[] = [];
+    const hCache: HandleScreenPos[] = [];
 
-    ctx.save();
-    // ── DPI スケーリング補正 ──────────────────────────────────────
-    // fabric の contextTop (オーバーレイ用 Canvas) は高 DPI 環境では
-    // 物理ピクセルサイズが CSS ピクセルの devicePixelRatio (dpr) 倍に
-    // なっている。anchorLocalToScreen() が返す座標は CSS ピクセル空間
-    // なので、setTransform で dpr を掛けないと dpr 倍ずれて描画される。
-    //
-    // force-device-scale-factor: 1 を使っていた時は dpr=1 のため
-    // 問題が顕在化しなかったが、OS スケーリングに従うようにした
-    // (dpr>1) ことで顕在化した。
-    const retina = (canvas as any).getRetinaScaling?.() ?? window.devicePixelRatio ?? 1;
-    ctx.setTransform(retina, 0, 0, retina, 0, 0);
-    ctx.strokeStyle = ANCHOR_STROKE;
-    ctx.lineWidth = 1;
-    ctx.fillStyle = ANCHOR_FILL;
-
+    // アンカーのスクリーン座標を先に全計算
     for (let i = 0; i < anchors.length; i++) {
       const a = anchors[i];
-      const { sx, sy } = anchorLocalToScreen(a.x, a.y, path);
-      cache.push({ anchorIndex: i, sx, sy });
-      ctx.fillRect(sx - half, sy - half, ANCHOR_MARKER_PX, ANCHOR_MARKER_PX);
-      ctx.strokeRect(sx - half, sy - half, ANCHOR_MARKER_PX, ANCHOR_MARKER_PX);
+      const { sx, sy } = anchorLocalToScreen(a.point.x, a.point.y, path);
+      aCache.push({ anchorIndex: i, sx, sy });
     }
+
+    // ハンドルのスクリーン座標を計算
+    for (let i = 0; i < anchors.length; i++) {
+      const a = anchors[i];
+      if (a.incomingHandle) {
+        const h = a.incomingHandle;
+        const hp = getHandlePoint(cmds[h.cmdIndex], h);
+        if (hp) {
+          const { sx, sy } = anchorLocalToScreen(hp.x, hp.y, path);
+          hCache.push({ anchorIndex: i, which: 'in', handle: h, sx, sy });
+        }
+      }
+      if (a.outgoingHandle) {
+        const h = a.outgoingHandle;
+        const hp = getHandlePoint(cmds[h.cmdIndex], h);
+        if (hp) {
+          const { sx, sy } = anchorLocalToScreen(hp.x, hp.y, path);
+          hCache.push({ anchorIndex: i, which: 'out', handle: h, sx, sy });
+        }
+      }
+    }
+
+    ctx.save();
+    const retina = (canvas as any).getRetinaScaling?.() ?? window.devicePixelRatio ?? 1;
+    ctx.setTransform(retina, 0, 0, retina, 0, 0);
+
+    // Pass 1: ハンドル線 (最背面)
+    ctx.strokeStyle = HANDLE_LINE_COLOR;
+    ctx.lineWidth = HANDLE_LINE_WIDTH;
+    for (const h of hCache) {
+      const anchor = aCache[h.anchorIndex];
+      ctx.beginPath();
+      ctx.moveTo(anchor.sx, anchor.sy);
+      ctx.lineTo(h.sx, h.sy);
+      ctx.stroke();
+    }
+
+    // Pass 2: ハンドル円
+    ctx.fillStyle = HANDLE_FILL;
+    ctx.strokeStyle = HANDLE_STROKE;
+    ctx.lineWidth = 1;
+    for (const h of hCache) {
+      ctx.beginPath();
+      ctx.arc(h.sx, h.sy, HANDLE_CIRCLE_R, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Pass 3: アンカー四角 (最前面)
+    ctx.fillStyle = ANCHOR_FILL;
+    ctx.strokeStyle = ANCHOR_STROKE;
+    ctx.lineWidth = 1;
+    for (const a of aCache) {
+      ctx.fillRect(a.sx - half, a.sy - half, ANCHOR_MARKER_PX, ANCHOR_MARKER_PX);
+      ctx.strokeRect(a.sx - half, a.sy - half, ANCHOR_MARKER_PX, ANCHOR_MARKER_PX);
+    }
+
     ctx.restore();
 
-    anchorScreenCache = cache;
+    anchorScreenCache = aCache;
+    handleScreenCache = hCache;
   }
 
   canvas.on('after:render', drawAnchorOverlay);
@@ -984,101 +778,169 @@
     return bestIdx;
   }
 
+  function hitTestHandle(screenX: number, screenY: number): HandleScreenPos | null {
+    let best: HandleScreenPos | null = null;
+    let bestDist = HANDLE_HIT_RADIUS + 1;
+    for (const h of handleScreenCache) {
+      const dx = screenX - h.sx;
+      const dy = screenY - h.sy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = h;
+      }
+    }
+    return best;
+  }
+
   function clearAnchorState(): void {
     anchorDrag = null;
+    handleDrag = null;
     anchorScreenCache = [];
+    handleScreenCache = [];
     const ctx = (canvas as any).contextTop as CanvasRenderingContext2D;
     if (ctx) canvas.clearContext(ctx);
   }
 
-  // DOM capture で fabric の mousedown より先にアンカーヒットテストを行う。
+  // ── 共通ヘルパー ────────────────────────────────────────────────────
+
+  /** ワールド座標デルタ → パスローカル座標デルタ変換 */
+  function worldToLocalDelta(
+    pathObj: fabric.Path, worldDx: number, worldDy: number,
+  ): { dx: number; dy: number } {
+    const mat = pathObj.calcTransformMatrix();
+    const inv = fabric.util.invertTransform(mat);
+    return {
+      dx: inv[0] * worldDx + inv[2] * worldDy,
+      dy: inv[1] * worldDx + inv[3] * worldDy,
+    };
+  }
+
+  /** ドラッグ終了時の bbox 再計算 + pathOffset 補正 */
+  function finalizeDrag(p: fabric.Path): void {
+    const oldPO = { x: (p as any).pathOffset.x, y: (p as any).pathOffset.y };
+    (fabric.Polyline.prototype as any)._setPositionDimensions.call(p, {
+      left: p.left,
+      top: p.top,
+    });
+    const newPO = (p as any).pathOffset as { x: number; y: number };
+    const dxLocal = oldPO.x - newPO.x;
+    const dyLocal = oldPO.y - newPO.y;
+    const sx = (p.scaleX as number) ?? 1;
+    const sy = (p.scaleY as number) ?? 1;
+    const rad = ((p.angle as number) ?? 0) * Math.PI / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    p.left = (p.left ?? 0) + dxLocal * sx * cos - dyLocal * sy * sin;
+    p.top  = (p.top  ?? 0) + dxLocal * sx * sin + dyLocal * sy * cos;
+    p.setCoords();
+    canvas.fire('object:modified', { target: p } as any);
+  }
+
+  // DOM capture で fabric の mousedown より先にヒットテストを行う。
   // ヒットした場合は stopImmediatePropagation で fabric に渡さない。
   const upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement;
 
   upperCanvas.addEventListener('mousedown', (e: MouseEvent) => {
+    // ペンモードではドラッグではなくペンツール側で処理する
+    if (currentMode === 'pen-add' || currentMode === 'pen-remove') return;
+
     const path = getEditablePath();
     if (!path) return;
 
     const rect = upperCanvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
-    const aidx = hitTestAnchor(screenX, screenY);
-    if (aidx < 0) return;
+
+    // ヒットテスト: ハンドル優先 → アンカー
+    const hitHandle = hitTestHandle(screenX, screenY);
+    const hitAnchor = hitHandle ? -1 : hitTestAnchor(screenX, screenY);
+    if (!hitHandle && hitAnchor < 0) return;
 
     e.stopImmediatePropagation();
     e.preventDefault();
 
-    const cmds = (path as any).path as any[];
-    anchorDrag = {
-      pathObj: path,
-      anchorIndex: aidx,
-      startPath: cmds.map((c: any[]) => c.slice()),
-      lastPointer: canvas.getPointer(e),
-    };
+    const startPath = fromFabricPath((path as any).path as ReadonlyArray<ReadonlyArray<unknown>>);
+    const lastPointer = canvas.getPointer(e);
 
-    const onMove = (me: MouseEvent) => {
-      if (!anchorDrag) return;
+    if (hitHandle) {
+      // ── ハンドル (制御点) ドラッグ ──────────────────────────────
+      handleDrag = {
+        pathObj: path,
+        handle: hitHandle.handle,
+        startPath,
+        lastPointer,
+      };
 
-      const pointer = canvas.getPointer(me);
-      const worldDx = pointer.x - anchorDrag.lastPointer.x;
-      const worldDy = pointer.y - anchorDrag.lastPointer.y;
+      const onMove = (me: MouseEvent) => {
+        if (!handleDrag) return;
+        const pointer = canvas.getPointer(me);
+        const worldDx = pointer.x - handleDrag.lastPointer.x;
+        const worldDy = pointer.y - handleDrag.lastPointer.y;
+        const local = worldToLocalDelta(handleDrag.pathObj, worldDx, worldDy);
 
-      // world delta → path-local delta (逆行列の線形部分のみ使用)
-      const mat = anchorDrag.pathObj.calcTransformMatrix();
-      const inv = fabric.util.invertTransform(mat);
-      // 線形部分 (回転・スケール) だけ適用。並進成分を除去
-      const localDx = inv[0] * worldDx + inv[2] * worldDy;
-      const localDy = inv[1] * worldDx + inv[3] * worldDy;
+        const curPath = fromFabricPath((handleDrag.pathObj as any).path);
+        const newPath = moveHandle(curPath, handleDrag.handle, local.dx, local.dy);
+        (handleDrag.pathObj as any).path = toFabricPath(newPath);
+        (handleDrag.pathObj as any).dirty = true;
+        handleDrag.lastPointer = pointer;
+        canvas.requestRenderAll();
+      };
 
-      const curPath = (anchorDrag.pathObj as any).path as any[];
-      const newPath = moveAnchorRigid(curPath, anchorDrag.anchorIndex, localDx, localDy);
-      (anchorDrag.pathObj as any).path = newPath;
-      (anchorDrag.pathObj as any).dirty = true;
-      anchorDrag.lastPointer = pointer;
-      canvas.requestRenderAll();
-    };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        if (handleDrag) {
+          finalizeDrag(handleDrag.pathObj);
+          handleDrag = null;
+        }
+        canvas.requestRenderAll();
+      };
 
-    const onUp = (_ue: MouseEvent) => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      if (anchorDrag) {
-        const p = anchorDrag.pathObj;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    } else {
+      // ── アンカードラッグ (既存) ────────────────────────────────
+      anchorDrag = {
+        pathObj: path,
+        anchorIndex: hitAnchor,
+        startPath,
+        lastPointer,
+      };
 
-        // ── bbox 再計算 ────────────────────────────────────────────
-        // アンカー移動で path コマンドが変わったため、width/height/pathOffset
-        // を再計算する。_setPositionDimensions は pathOffset を更新するが、
-        // left/top を明示指定しているため上書きされない。
-        // pathOffset の変化分を left/top に反映して視覚位置を維持する。
-        const oldPO = { x: (p as any).pathOffset.x, y: (p as any).pathOffset.y };
-        (fabric.Polyline.prototype as any)._setPositionDimensions.call(p, {
-          left: p.left,
-          top: p.top,
-        });
-        const newPO = (p as any).pathOffset as { x: number; y: number };
-        const dxLocal = oldPO.x - newPO.x;
-        const dyLocal = oldPO.y - newPO.y;
-        const sx = (p.scaleX as number) ?? 1;
-        const sy = (p.scaleY as number) ?? 1;
-        const rad = ((p.angle as number) ?? 0) * Math.PI / 180;
-        const cos = Math.cos(rad);
-        const sin = Math.sin(rad);
-        p.left = (p.left ?? 0) + dxLocal * sx * cos - dyLocal * sy * sin;
-        p.top  = (p.top  ?? 0) + dxLocal * sx * sin + dyLocal * sy * cos;
+      const onMove = (me: MouseEvent) => {
+        if (!anchorDrag) return;
+        const pointer = canvas.getPointer(me);
+        const worldDx = pointer.x - anchorDrag.lastPointer.x;
+        const worldDy = pointer.y - anchorDrag.lastPointer.y;
+        const local = worldToLocalDelta(anchorDrag.pathObj, worldDx, worldDy);
 
-        p.setCoords();
-        canvas.fire('object:modified', { target: p } as any);
-        anchorDrag = null;
-      }
-      canvas.requestRenderAll();
-    };
+        const curPath = fromFabricPath((anchorDrag.pathObj as any).path);
+        const newPath = moveAnchorRigid(curPath, anchorDrag.anchorIndex, local.dx, local.dy);
+        (anchorDrag.pathObj as any).path = toFabricPath(newPath);
+        (anchorDrag.pathObj as any).dirty = true;
+        anchorDrag.lastPointer = pointer;
+        canvas.requestRenderAll();
+      };
 
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        if (anchorDrag) {
+          finalizeDrag(anchorDrag.pathObj);
+          anchorDrag = null;
+        }
+        canvas.requestRenderAll();
+      };
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    }
   }, true);
 
   // ホバー時のカーソル変更
   upperCanvas.addEventListener('mousemove', (e: MouseEvent) => {
-    if (anchorDrag) return;
+    if (anchorDrag || handleDrag) return;
     const path = getEditablePath();
     if (!path) {
       upperCanvas.style.cursor = '';
@@ -1087,8 +949,227 @@
     const rect = upperCanvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
+    const hHit = hitTestHandle(screenX, screenY);
+    if (hHit) { upperCanvas.style.cursor = 'pointer'; return; }
     const aidx = hitTestAnchor(screenX, screenY);
     upperCanvas.style.cursor = aidx >= 0 ? 'move' : '';
+  }, true);
+
+  // ── +/- ペンツール ──────────────────────────────────────────────────────
+
+  const PEN_HIT_THRESHOLD = 8; // セグメントヒットの画面ピクセル閾値
+  const PEN_SAMPLES       = 50; // セグメントあたりのサンプル数
+
+  /** スクリーン座標 → パスローカル座標 */
+  function screenToPathLocal(
+    screenX: number, screenY: number, path: fabric.Path,
+  ): { x: number; y: number } {
+    const vt = canvas.viewportTransform!;
+    const invVt = fabric.util.invertTransform(vt);
+    const world = fabric.util.transformPoint(
+      { x: screenX, y: screenY } as fabric.Point, invVt,
+    );
+    const mat = path.calcTransformMatrix();
+    const invMat = fabric.util.invertTransform(mat);
+    const local = fabric.util.transformPoint(world, invMat);
+    const po = (path as any).pathOffset as { x: number; y: number };
+    return { x: local.x + po.x, y: local.y + po.y };
+  }
+
+  interface SegmentHit {
+    cmdIndex: number;
+    t: number;
+    dist: number;
+  }
+
+  /** パス上の最近傍セグメントを探索 (スクリーン座標ベースの距離比較) */
+  function findClosestSegment(
+    path: fabric.Path, screenX: number, screenY: number,
+  ): SegmentHit | null {
+    const rawCmds = (path as any).path as ReadonlyArray<ReadonlyArray<unknown>> | undefined;
+    if (!rawCmds) return null;
+    const cmds = fromFabricPath(rawCmds);
+
+    let best: SegmentHit | null = null;
+    let cur: Point = { x: 0, y: 0 };
+
+    for (let i = 0; i < cmds.length; i++) {
+      const cmd = cmds[i];
+
+      if (cmd.type === 'M') { cur = cmd.to; continue; }
+      if (cmd.type === 'Z') { continue; }
+
+      for (let s = 0; s <= PEN_SAMPLES; s++) {
+        const t = s / PEN_SAMPLES;
+        let p: Point;
+
+        if (cmd.type === 'C') {
+          p = evalCubicAt(cur, cmd.c1, cmd.c2, cmd.to, t);
+        } else if (cmd.type === 'Q') {
+          p = evalQuadAt(cur, cmd.c, cmd.to, t);
+        } else {
+          // L
+          p = { x: cur.x + t * (cmd.to.x - cur.x), y: cur.y + t * (cmd.to.y - cur.y) };
+        }
+
+        const scr = anchorLocalToScreen(p.x, p.y, path);
+        const d = Math.hypot(scr.sx - screenX, scr.sy - screenY);
+        if (d < PEN_HIT_THRESHOLD && (!best || d < best.dist)) {
+          best = { cmdIndex: i, t, dist: d };
+        }
+      }
+
+      // 現在点を更新 (C/Q/L はすべて .to を持つ)
+      cur = cmd.to;
+    }
+
+    return best;
+  }
+
+  // +ペンツール: セグメント上クリックでアンカー追加
+  // -ペンツール: アンカー上クリックでアンカー削除
+  upperCanvas.addEventListener('mousedown', (e: MouseEvent) => {
+    if (currentMode !== 'pen-add' && currentMode !== 'pen-remove') return;
+
+    const path = getEditablePath();
+    if (!path) return;
+
+    const rect = upperCanvas.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+
+    if (currentMode === 'pen-add') {
+      const hit = findClosestSegment(path, screenX, screenY);
+      if (!hit) return;
+
+      e.stopImmediatePropagation();
+      e.preventDefault();
+
+      const cmds = fromFabricPath((path as any).path as ReadonlyArray<ReadonlyArray<unknown>>);
+      const origCmd = cmds[hit.cmdIndex];
+      const origCmdType = origCmd.type;
+      const newPath = splitSegment(cmds, hit.cmdIndex, hit.t);
+      (path as any).path = toFabricPath(newPath);
+      (path as any).dirty = true;
+
+      logger.debug(`[pen-add] origCmdType=${origCmdType} cmdIndex=${hit.cmdIndex} t=${hit.t}`);
+
+      // 新アンカーの位置 (分割で生成された first half の終点)。
+      // splitSegment は M/Z に対しては分割せず元配列を返すので、ここでの type は C/Q/L のいずれか。
+      const firstCmd = newPath[hit.cmdIndex];
+      if (firstCmd.type !== 'C' && firstCmd.type !== 'Q' && firstCmd.type !== 'L') return;
+      const anchorPt = firstCmd.to;
+      const anchorX = anchorPt.x, anchorY = anchorPt.y;
+      const secondIdx = hit.cmdIndex + 1;
+
+      // L→C 変換用: 前後のアンカー位置を記録
+      const prevPt = getSegmentStart(newPath, hit.cmdIndex);
+      const nextCmd = newPath[secondIdx];
+      if (nextCmd.type !== 'C' && nextCmd.type !== 'Q' && nextCmd.type !== 'L') return;
+      const prevX = prevPt ? prevPt.x : anchorX;
+      const prevY = prevPt ? prevPt.y : anchorY;
+      const nextX = nextCmd.to.x;
+      const nextY = nextCmd.to.y;
+
+      logger.debug(`[pen-add] drag mode. anchor=(${anchorX.toFixed(1)},${anchorY.toFixed(1)}) prev=(${prevX.toFixed(1)},${prevY.toFixed(1)}) next=(${nextX.toFixed(1)},${nextY.toFixed(1)})`);
+
+      const onMove = (me: MouseEvent) => {
+        const r = upperCanvas.getBoundingClientRect();
+        const mx = me.clientX - r.left;
+        const my = me.clientY - r.top;
+        const local = screenToPathLocal(mx, my, path);
+        const dx = local.x - anchorX;
+        const dy = local.y - anchorY;
+        logger.debug(`[pen-add:onMove] delta=(${dx.toFixed(1)},${dy.toFixed(1)})`);
+
+        const curPath = fromFabricPath((path as any).path);
+        const updated: PathCommand[] = curPath.slice();
+
+        const curFirst = curPath[hit.cmdIndex];
+        const curSecond = curPath[secondIdx];
+
+        // 全セグメントタイプ共通: C コマンドでハンドルを設定。
+        // L/Q を分割した場合は C に変換してからハンドルを付与。
+        // 元が C ならその c1/c2 を保ち、それ以外は3等分点でデフォルトハンドルを生成。
+        const firstC1: Point = origCmdType === 'C' && curFirst.type === 'C'
+          ? curFirst.c1
+          : { x: prevX + (anchorX - prevX) / 3, y: prevY + (anchorY - prevY) / 3 };
+        updated[hit.cmdIndex] = {
+          type: 'C',
+          c1: firstC1,
+          c2: { x: anchorX - dx, y: anchorY - dy },
+          to: { x: anchorX, y: anchorY },
+        };
+
+        const secondC2: Point = origCmdType === 'C' && curSecond.type === 'C'
+          ? curSecond.c2
+          : { x: anchorX + 2 * (nextX - anchorX) / 3, y: anchorY + 2 * (nextY - anchorY) / 3 };
+        updated[secondIdx] = {
+          type: 'C',
+          c1: { x: anchorX + dx, y: anchorY + dy },
+          c2: secondC2,
+          to: { x: nextX, y: nextY },
+        };
+
+        (path as any).path = toFabricPath(updated);
+        (path as any).dirty = true;
+        canvas.requestRenderAll();
+      };
+
+      const onUp = () => {
+        logger.debug('[pen-add:onUp] mouseup fired');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        finalizeDrag(path);
+        canvas.requestRenderAll();
+      };
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      canvas.requestRenderAll();
+
+    } else {
+      // pen-remove: アンカーのヒットテスト
+      const aidx = hitTestAnchor(screenX, screenY);
+      if (aidx < 0) return;
+
+      e.stopImmediatePropagation();
+      e.preventDefault();
+
+      const cmds = fromFabricPath((path as any).path as ReadonlyArray<ReadonlyArray<unknown>>);
+      const newPath = removeAnchor(cmds, aidx);
+
+      // removeAnchor が操作を拒否した場合 (アンカー数不足) は長さが同じ
+      if (newPath.length === cmds.length) return;
+
+      (path as any).path = toFabricPath(newPath);
+      (path as any).dirty = true;
+      finalizeDrag(path);
+      canvas.requestRenderAll();
+    }
+  }, true);
+
+  // ペンモードのホバーカーソル
+  upperCanvas.addEventListener('mousemove', (e: MouseEvent) => {
+    if (currentMode !== 'pen-add' && currentMode !== 'pen-remove') return;
+
+    const path = getEditablePath();
+    if (!path) {
+      upperCanvas.style.cursor = '';
+      return;
+    }
+
+    const rect = upperCanvas.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+
+    if (currentMode === 'pen-add') {
+      const hit = findClosestSegment(path, screenX, screenY);
+      upperCanvas.style.cursor = hit ? 'copy' : '';
+    } else {
+      const aidx = hitTestAnchor(screenX, screenY);
+      upperCanvas.style.cursor = aidx >= 0 ? 'pointer' : '';
+    }
   }, true);
 
   // モード・選択変更時のクリーンアップ
@@ -1104,7 +1185,10 @@
     syncToolbarToSelection();
   });
   canvas.on('object:removed', (e: fabric.IEvent) => {
-    if (anchorDrag && e.target === anchorDrag.pathObj) clearAnchorState();
+    if ((anchorDrag && e.target === anchorDrag.pathObj) ||
+        (handleDrag && e.target === handleDrag.pathObj)) {
+      clearAnchorState();
+    }
   });
 
   // ── 選択オブジェクトを透過 PNG としてクリップボードにコピー ────────────
@@ -1199,6 +1283,13 @@
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'O' || e.key === 'o')) {
       e.preventDefault();
       void outlineSelection();
+    }
+
+    // F12 / Ctrl+Shift+I: DevTools を開閉 (HTML メニューの「開発者ツール」と同等)
+    if (e.key === 'F12' ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i'))) {
+      e.preventDefault();
+      void window.electronAPI?.toggleDevTools();
     }
   });
 

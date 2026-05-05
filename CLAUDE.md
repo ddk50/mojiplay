@@ -27,29 +27,46 @@ npx jest --watch      # ウォッチモード
 npx jest copy-export  # 特定ファイルのみ
 ```
 
-テスト対象モジュール（すべて pure function、dual-mode export パターン）:
-- `src/renderer/outline-position.ts` — アウトライン位置計算
-- `src/renderer/path-anchors.ts` — パスアンカー抽出・移動
-- `src/renderer/copy-export.ts` — PNG エクスポート用 typed wrapper
+テスト対象モジュール（すべて `src/core/` 配下、pure function、dual-mode export パターン）:
+- `path/types.ts` — 共通型定義 (Point / PathCommand / HandleRef / PathAnchor) と `assertNever`
+- `path/anchors.ts` — パスアンカー抽出・移動
+- `path/fabric-adapter.ts` — fabric 生タプル ↔ PathCommand 境界変換
+- `outline-position.ts` — アウトライン位置計算
+- `copy-export.ts` — PNG エクスポート用 typed wrapper
+
+## ディレクトリ構成 (3層レイアウト)
+
+```
+src/
+├── main.ts / preload.ts  # Electron main/preload
+├── core/                 # ドメインロジック (DOM/fabric/Electron 非依存、テスト可)
+│   └── path/             # path 操作のドメイン (中核概念。今後 path 関連が増えたらここへ)
+├── renderer/             # view (DOM/fabric/Electron に触れる)
+└── globals/              # ambient .d.ts (Window 拡張など外部世界の型)
+```
+
+新しいファイルを追加する時はこの分類に従ってください。`core/` は pure function のみ、`renderer/` は副作用あり、`globals/` は他から型シムが必要な時だけ。path 関連のロジック (アンカー、ハンドル、ベジェ評価、コマンド変換など) は `core/path/` 内に。
 
 ## ビルド構成 (2つのTypeScriptプロジェクト)
 
 メインプロセスとレンダラープロセスで異なるモジュールシステムとlib設定が必要なため、**2つの個別のtsconfig**を使用してコンパイルします。
 
-- `tsconfig.json` → `src/main.ts`, `src/preload.ts` → `dist/*.js` (CommonJS, Node APIを使用)
-- `tsconfig.renderer.json` → `src/renderer/**` → `dist/renderer/*.js` (`"module": "none"`, DOM lib, `types: ["fabric"]`を使用)
-- `tsconfig.test.json` — ts-jest が参照するテスト用設定（`include` にはテストファイルのみ）
+- `tsconfig.json` → `src/main.ts`, `src/preload.ts` → `dist/{main,preload}.js` (CommonJS, Node APIを使用)
+- `tsconfig.renderer.json` → `src/core/**` + `src/renderer/**` → `dist/core/*.js` + `dist/renderer/app.js` (`"module": "none"`, DOM lib, `types: ["fabric"]`、`rootDir: "src"`)
+- `tsconfig.test.json` — ts-jest が参照するテスト用設定。`include` には `test/**` と `src/core/` の各ファイルを列挙 (cross-file global type 解決のため)
 
 `renderer/index.html` は `renderer/vendor/` 配下のプレーンな `<script>` タグで `fabric.min.js` と `fontkit.js` を読み込みます。Fabricは**バンドルされず**、グローバルな `fabric` として消費されます。レンダラーのtsconfigで `"module": "none"` を使用しているのはこのためです。バンダラーを導入せずにレンダラーコードに `import` や `require` を持ち込まないでください。
 
+`src/core/` の各ファイルも個別の `<script>` タグで読み込まれます (`../dist/core/*.js`)。新しい core ファイルを追加したら `renderer/index.html` の script タグも追加してください。
+
 ### Dual-mode export パターン
 
-`outline-position.ts`, `path-anchors.ts`, `copy-export.ts` は pure function モジュールで、以下の規約に従います:
+`src/core/` の pure function モジュール (`path/types.ts`, `path/anchors.ts`, `path/fabric-adapter.ts`, `outline-position.ts`, `copy-export.ts`) は以下の規約に従います:
 - ソースに `import`/`export` を書かない（renderer の `module: "none"` と Node test の `module: "commonjs"` の両方で動作させるため）
 - 末尾の `if (typeof module !== 'undefined' && module.exports)` ブロックで CommonJS export
-- ブラウザではグローバル関数として露出
+- ブラウザではグローバル関数・グローバル型として露出 (`module: "none"` により全 core/ + renderer/ ファイルが一つのグローバルスコープを共有)
 
-`src/types/electron-api.d.ts` は両方のtsconfigで共有され、`window.electronAPI` ブリッジを定義します。
+`src/globals/electron-api.d.ts` は両方のtsconfigで共有され、`window.electronAPI` ブリッジを定義します。
 
 ## アーキテクチャ
 
@@ -62,7 +79,12 @@ npx jest copy-export  # 特定ファイルのみ
   - `toggle-devtools`, `zoom-in/out/reset`, `toggle-fullscreen` — HTML メニュー用
   - ネイティブメニューは `Menu.setApplicationMenu(null)` で非表示化
 - `src/preload.ts` — `contextBridge` を介して `window.electronAPI` を公開。`savePng`, `copyImageToClipboard`, `onMenuCopy`, View 系 IPC を中継
-- `src/renderer/app.ts` — それ以外すべて。UIの状態、Fabricのイベント接続、ツールロジックを保持する単一の即時実行関数 (IIFE)
+- `src/renderer/app.ts` — UI 状態 (mode、selection、drag state)、Fabric イベント接続、各モードのツールロジックを保持する即時実行関数 (IIFE)。下記の補助モジュールに切り出せなかった canvas 結合の強い処理がここに残る
+- `src/renderer/logger.ts` — IPC + DevTools console を束ねる `logger` オブジェクト
+- `src/renderer/toast.ts` — `showToast(message, isError?)` (3秒で消える簡易通知)
+- `src/renderer/menu-bar.ts` — `initMenuBar(handleAction)` (HTML メニューバーの開閉 UI、アクションは callback 経由)
+- `src/renderer/font-enumeration.ts` — Local Font Access API でシステムフォントを列挙し、family/style セレクトを populate
+- `src/renderer/outline-conversion.ts` — `outlineTextToPath()` の純粋寄り変換 (fabric.Text → fabric.Path、fontkit 経由)。canvas 操作を含む `outlineSelection` は app.ts に残る
 
 **カスタム HTML メニューバー:**
 
@@ -96,7 +118,7 @@ npx jest copy-export  # 特定ファイルのみ
 
 **クリップボードコピー (Ctrl+C / メニュー Edit > Copy):**
 
-選択オブジェクトを `exportObjectToPngDataUrl()` (typed wrapper, `src/renderer/copy-export.ts`) 経由で 10 倍解像度の透過 PNG にレンダリングし、IPC `copy-image` でメインプロセスの `clipboard.writeImage` に渡す。
+選択オブジェクトを `exportObjectToPngDataUrl()` (typed wrapper, `src/core/copy-export.ts`) 経由で 10 倍解像度の透過 PNG にレンダリングし、IPC `copy-image` でメインプロセスの `clipboard.writeImage` に渡す。
 
 重要: `fabric.Object.prototype.toCanvasElement(options)` は **options オブジェクト** (`{ multiplier: 10 }`) で呼ぶ必要がある。`toCanvasElement(10)` と positional arg で渡すと `options.multiplier` が `undefined` になり 1 倍でレンダリングされる（Canvas-level の同名メソッドとは API が異なる）。この落とし穴は `copy-export.ts` の typed wrapper で型安全に防止されている。
 

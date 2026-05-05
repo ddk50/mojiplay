@@ -1,0 +1,60 @@
+// パス操作の共通型定義 (ドメイン語彙)
+//
+// path-anchors.ts / path-fabric-adapter.ts などが共有する型と
+// 網羅性チェック用の assertNever ヘルパ。
+//
+// dual-mode export パターン: ブラウザでは module: "none" によって
+// グローバル宣言として共有、Node test では module.exports で export。
+
+type Point = { readonly x: number; readonly y: number };
+
+// SVG パスコマンドのオブジェクト ADT。
+//
+// M / L
+//   to = アンカー位置 (M はサブパス開始、L は直線で繋ぐ)
+//
+// C (Cubic Bézier)
+//   始点 = 直前コマンドの to (現在点)
+//   c1   = 始点側制御点 = 直前アンカーの outgoing handle
+//   c2   = 終点側制御点 = このアンカーの incoming handle
+//   to   = 終点 (このアンカー)
+//
+// Q (Quadratic Bézier)
+//   始点 = 直前コマンドの to
+//   c    = 唯一の制御点 (前後アンカーで共有)
+//   to   = 終点
+//
+// Z
+//   ClosePath。サブパス先頭 M に直線で戻る。
+type PathCommand =
+  | { readonly type: 'M'; readonly to: Point }
+  | { readonly type: 'L'; readonly to: Point }
+  | { readonly type: 'C'; readonly c1: Point; readonly c2: Point; readonly to: Point }
+  | { readonly type: 'Q'; readonly c: Point; readonly to: Point }
+  | { readonly type: 'Z' };
+
+// ハンドル参照は「どのコマンドの、意味的にどの制御点か」で表現する。
+// kind 経由で型安全に該当 Point フィールドにアクセスできる。
+type HandleRef =
+  | { readonly kind: 'C-c1'; readonly cmdIndex: number }  // C命令の c1 (= 直前アンカーの outgoing)
+  | { readonly kind: 'C-c2'; readonly cmdIndex: number }  // C命令の c2 (= 末尾アンカーの incoming)
+  | { readonly kind: 'Q-c';  readonly cmdIndex: number }; // Q命令の c
+
+interface PathAnchor {
+  readonly cmdIndex: number;
+  readonly point: Point;
+  incomingHandle: HandleRef | null;
+  outgoingHandle: HandleRef | null;
+  readonly subpathStart: boolean;
+}
+
+function assertNever(x: never): never {
+  throw new Error(`unexpected variant: ${JSON.stringify(x)}`);
+}
+
+// Dual-mode export
+// @ts-ignore
+if (typeof module !== 'undefined' && module.exports) {
+  // @ts-ignore
+  module.exports.assertNever = assertNever;
+}

@@ -31,6 +31,10 @@ declare namespace fontkit {
     readonly postscriptName: string;
     readonly familyName: string;
     glyphForCodePoint(codePoint: number): Glyph | null;
+    // フォントに該当コードポイントのグリフが存在するかどうか。
+    // false のとき glyphForCodePoint は .notdef (豆腐表示) を返すので、
+    // 呼び出し前に必ずこれで確認すること。
+    hasGlyphForCodePoint(codePoint: number): boolean;
   }
 
   // fontkit.create: 第2引数に postscriptName を渡すと、TTC の場合に特定の

@@ -7,8 +7,12 @@
     "strict": true,
     "lib": ["ES2020", "DOM"],
     "types": ["fabric"],
-    "outDir": "dist/renderer",
-    "rootDir": "src/renderer"
+    "outDir": "dist",
+    "rootDir": "src"
   },
-  "include": ["src/renderer/**/*.ts", "src/types/**/*.d.ts"]
+  "include": [
+    "src/core/**/*.ts",
+    "src/renderer/**/*.ts",
+    "src/globals/**/*.d.ts"
+  ]
 }

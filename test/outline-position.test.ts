@@ -52,7 +52,7 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 const { computeOutlinePathPosition } =
-  require('../src/renderer/outline-position') as {
+  require('../src/core/outline-position') as {
     computeOutlinePathPosition: (
       text: {
         left: number; top: number; fontSize: number;

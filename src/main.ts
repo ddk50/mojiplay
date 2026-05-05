@@ -116,6 +116,13 @@ ipcMain.handle('toggle-fullscreen', () => {
   if (win) win.setFullScreen(!win.isFullScreen());
 });
 
+// Edit メニュー (undo/redo/paste): document.execCommand は deprecated なので
+// Electron の webContents メソッド経由に統一。内部呼び出しは同じだが
+// Web 標準の deprecation サイクルから外れる。
+ipcMain.handle('undo',  (event) => { event.sender.undo();  });
+ipcMain.handle('redo',  (event) => { event.sender.redo();  });
+ipcMain.handle('paste', (event) => { event.sender.paste(); });
+
 
 
 app.whenReady().then(() => {

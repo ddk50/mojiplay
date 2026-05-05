@@ -238,6 +238,36 @@ button.mode-btn.is-active {
   stroke: #fff;
 }
 
+/* ペンツールアイコン (Figma風アウトラインスタイル) */
+.pen-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.pen-icon .pen-nib {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4px;
+  stroke-linejoin: round;
+}
+
+.pen-icon .pen-dot {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4px;
+}
+
+.pen-icon .pen-sign {
+  stroke: currentColor;
+  fill: none;
+}
+
+.mode-btn.is-active .pen-icon .pen-nib,
+.mode-btn.is-active .pen-icon .pen-dot,
+.mode-btn.is-active .pen-icon .pen-sign {
+  stroke: #fff;
+}
+
 /* ── Canvas area ─────────────────────────────────────────────────────────── */
 
 #canvas-container {
