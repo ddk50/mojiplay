@@ -403,4 +403,19 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports.removeAnchor = removeAnchor;
   // @ts-ignore
   module.exports.getHandlePoint = getHandlePoint;
+
+  // Node test 用: 他 core/* モジュールから bare identifier で参照される関数を
+  // globalThis に注入。ブラウザ (module: "none") では関数宣言がそのままグローバル
+  // なので不要だが、Node CJS では各 module-local に閉じてしまうため明示が要る。
+  // @ts-ignore
+  const G: any = globalThis;
+  G.extractAnchors  = extractAnchors;
+  G.getHandlePoint  = getHandlePoint;
+  G.moveAnchorRigid = moveAnchorRigid;
+  G.moveHandle      = moveHandle;
+  G.evalCubicAt     = evalCubicAt;
+  G.evalQuadAt      = evalQuadAt;
+  G.getSegmentStart = getSegmentStart;
+  G.splitSegment    = splitSegment;
+  G.removeAnchor    = removeAnchor;
 }

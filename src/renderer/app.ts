@@ -102,14 +102,25 @@
   let snapPitch     = Math.max(1, parseInt(snapPitchInput.value, 10)     || 8);
   let snapThreshold = Math.max(1, parseInt(snapThresholdInput.value, 10) || 5);
 
+  function syncSnapConfigToTool(): void {
+    // selectCharTool は後段で初期化されるので、最初の input イベントは setMode 直後の
+    // ロード完了以降。ガード必要無し (selectCharTool は const、IIFE 内で必ず生成済み)。
+    selectCharTool.setSnapConfig({
+      enabled: snapEnabled, pitch: snapPitch, threshold: snapThreshold,
+    });
+  }
+
   snapEnabledInput.addEventListener('change', () => {
     snapEnabled = snapEnabledInput.checked;
+    syncSnapConfigToTool();
   });
   snapPitchInput.addEventListener('input', () => {
     snapPitch = Math.max(1, parseInt(snapPitchInput.value, 10) || 8);
+    syncSnapConfigToTool();
   });
   snapThresholdInput.addEventListener('input', () => {
     snapThreshold = Math.max(1, parseInt(snapThresholdInput.value, 10) || 5);
+    syncSnapConfigToTool();
   });
 
   // ── Mode management ───────────────────────────────────────────────────────
@@ -126,10 +137,16 @@
   };
 
   function setMode(m: Mode): void {
+    const prev = currentMode;
     currentMode = m;
     (Object.keys(modeButtons) as Mode[]).forEach(k => {
       modeButtons[k].classList.toggle('is-active', k === m);
     });
+
+    if (prev !== m) {
+      tools[prev].onDeactivate(toolHost);
+      tools[m].onActivate(toolHost);
+    }
 
     const isSelectMode = m === 'select-group' || m === 'select-char';
     const isPenMode    = m === 'pen-add' || m === 'pen-remove';
@@ -255,32 +272,8 @@
     );
   });
 
-  // ── Text placement (mouse:down on canvas) ─────────────────────────────────
-
-  canvas.on('mouse:down', (opt) => {
-    if (currentMode !== 'text') return;
-    if (opt.target) return;
-
-    const p = canvas.getPointer(opt.e as MouseEvent);
-
-    const { fontWeight, fontStyle } = currentFontStyle();
-    const it = new fabric.IText('', {
-      left:       p.x,
-      top:        p.y,
-      fontFamily: fontFamilySel.value,
-      fontSize:   parseInt(fontSizeInput.value, 10) || 72,
-      fontWeight,
-      fontStyle,
-      fill:       fontColorInput.value,
-      selectable: true,
-      evented:    true,
-    });
-
-    canvas.add(it);
-    canvas.setActiveObject(it);
-    it.enterEditing();
-    (it as any).hiddenTextarea?.focus();
-  });
+  // テキスト生成 (mouse:down) は TextTool に分離済み。配線は後段の
+  // ツールディスパッチャで onCanvasMouseDown を呼ぶ形に統一されている。
 
   // ── Enter で確定（capture フェーズで Fabric の keydown より先に実行）────────
 
@@ -299,51 +292,10 @@
     if (obj) commitIText(obj);
   });
 
-  // ── グループ選択の自動展開（黒矢印モード）────────────────────────────────
-
-  function expandSelectionToGroup(): void {
-    const active = canvas.getActiveObject();
-    if (!active) return;
-
-    // 単独オブジェクトでも activeSelection (marquee 選択) でも groupId を集約。
-    // marquee で複数文字を範囲選択した場合、それぞれが属する全 group に展開する
-    // (黒矢印モードは「文字列単位」が選択粒度のため、部分選択を許さない)。
-    const currentObjs: fabric.Object[] = active.type === 'activeSelection'
-      ? (active as fabric.ActiveSelection).getObjects()
-      : [active];
-
-    const gids = new Set<string>();
-    for (const o of currentObjs) {
-      const gid = (o as any).data?.groupId;
-      if (gid) gids.add(gid);
-    }
-    if (gids.size === 0) return;
-
-    const groupObjs = canvas.getObjects().filter(o => {
-      const gid = (o as any).data?.groupId;
-      return gid !== undefined && gids.has(gid);
-    });
-
-    // 既に完全展開済み (現在の選択 = group 全体) なら no-op。
-    // selection:updated の再帰発火で無限ループに入るのを防ぐ。
-    if (currentObjs.length === groupObjs.length &&
-        currentObjs.every(o => groupObjs.includes(o))) {
-      return;
-    }
-
-    canvas.discardActiveObject();
-    if (groupObjs.length === 1) {
-      canvas.setActiveObject(groupObjs[0]);
-    } else {
-      const sel = new fabric.ActiveSelection(groupObjs, { canvas });
-      canvas.setActiveObject(sel);
-    }
-    canvas.requestRenderAll();
-  }
-
-  // selection:created / selection:updated は後段のアンカー編集セクションで
-  // clearAnchorState + expandSelectionToGroup + syncToolbarToSelection を
-  // まとめて登録している。
+  // 黒矢印モードのグループ自動展開ロジックは SelectGroupTool に抽出済み
+  // (core/tools/select-group-tool.ts + core/tools/group-selection.ts)。
+  // 配線は後段の selection:created / selection:updated ディスパッチャから
+  // onSelectionChanged 経由で呼ばれる。
 
   // ── Apply property to selected objects ───────────────────────────────────
 
@@ -410,31 +362,27 @@
     evt.stopPropagation();
   });
 
-  // ── Snap on move (白矢印モード専用) ──────────────────────────────────────
+  // ── object:moving ディスパッチ ──────────────────────────────────────
+  // fabric.Object を MovingTarget 抽象に橋渡しして現在ツールに転送する。
+  // pen / text モードではオブジェクトが selectable=false なのでこのイベントは
+  // 通常発火しないが、念のため全ツールに dispatch して問題が起きないよう各ツールに
+  // 安全な no-op を実装させている。
 
   canvas.on('object:moving', (e: fabric.IEvent) => {
-    if (currentMode !== 'select-char') return;
-    if (!snapEnabled) return;
-
-    const mouseEvt = e.e as MouseEvent | undefined;
-    if (mouseEvt?.altKey) return; // Alt 押下中は一時バイパス
-
     const target = e.target;
     if (!target) return;
+    const mouseEvt = e.e as MouseEvent | undefined;
 
-    // X 軸: 等間隔グリッドに sticky snap
-    const freeX    = target.left ?? 0;
-    const nearestX = Math.round(freeX / snapPitch) * snapPitch;
-    if (Math.abs(freeX - nearestX) < snapThreshold) {
-      target.set({ left: nearestX });
-    }
-
-    // Y 軸: 等間隔グリッドに sticky snap (X と同ロジック)
-    const freeY    = target.top ?? 0;
-    const nearestY = Math.round(freeY / snapPitch) * snapPitch;
-    if (Math.abs(freeY - nearestY) < snapThreshold) {
-      target.set({ top: nearestY });
-    }
+    tools[currentMode].onObjectMoving(
+      {
+        getLeft: () => target.left ?? 0,
+        getTop:  () => target.top  ?? 0,
+        setLeft: (v: number) => target.set({ left: v }),
+        setTop:  (v: number) => target.set({ top:  v }),
+      },
+      { altKey: !!mouseEvt?.altKey },
+      toolHost,
+    );
 
     target.setCoords();
   });
@@ -608,8 +556,9 @@
   // パスのアンカーポイント (セグメント端点) を正方形マーカーで表示し、
   // ドラッグで個別アンカー + 付属ベジェハンドルを剛体移動する。
 
+  // ヒット半径はツール側に閉じている (core/tools/overlay-layout.ts)。
+  // ここはマーカー描画の見た目関連のみ。
   const ANCHOR_MARKER_PX  = 7;
-  const ANCHOR_HIT_RADIUS = 6;
   const ANCHOR_FILL       = '#ffffff';
   const ANCHOR_STROKE     = '#0066ff';
 
@@ -618,35 +567,11 @@
   const HANDLE_CIRCLE_R   = 4;
   const HANDLE_FILL       = '#ffffff';
   const HANDLE_STROKE     = '#0066ff';
-  const HANDLE_HIT_RADIUS = 5;
 
-  interface AnchorScreenPos { anchorIndex: number; sx: number; sy: number }
-  let anchorScreenCache: AnchorScreenPos[] = [];
-
-  interface HandleScreenPos {
-    anchorIndex: number;
-    which: 'in' | 'out';
-    handle: HandleRef;
-    sx: number;
-    sy: number;
-  }
-  let handleScreenCache: HandleScreenPos[] = [];
-
-  interface AnchorDragState {
-    pathObj: fabric.Path;
-    anchorIndex: number;
-    startPath: PathCommand[];
-    lastPointer: { x: number; y: number };
-  }
-  let anchorDrag: AnchorDragState | null = null;
-
-  interface HandleDragState {
-    pathObj: fabric.Path;
-    handle: HandleRef;
-    startPath: PathCommand[];
-    lastPointer: { x: number; y: number };
-  }
-  let handleDrag: HandleDragState | null = null;
+  // 全ツールがそれぞれ自前で computeOverlayLayout / hitTest を呼ぶようになったため、
+  // app.ts レベルでのスクリーン座標キャッシュは不要になった (drawAnchorOverlay は
+  // 描画ごとに layout を計算しても十分軽い)。ヒットテスト関数も core/tools/
+  // overlay-layout.ts の hitTestAnchorAt / hitTestHandleAt を直接ツールが利用する。
 
   function getEditablePath(): fabric.Path | null {
     if (currentMode !== 'select-char' && currentMode !== 'pen-add' && currentMode !== 'pen-remove') return null;
@@ -656,20 +581,6 @@
     return obj as fabric.Path;
   }
 
-  function anchorLocalToScreen(
-    ax: number, ay: number, path: fabric.Path,
-  ): { sx: number; sy: number } {
-    const po = (path as any).pathOffset as { x: number; y: number };
-    const mat = path.calcTransformMatrix();
-    const vt = canvas.viewportTransform!;
-    const world = fabric.util.transformPoint(
-      { x: ax - po.x, y: ay - po.y } as fabric.Point,
-      mat,
-    );
-    const screen = fabric.util.transformPoint(world, vt);
-    return { sx: screen.x, sy: screen.y };
-  }
-
   function drawAnchorOverlay(): void {
     const ctx = (canvas as any).contextTop as CanvasRenderingContext2D;
     const path = getEditablePath();
@@ -677,48 +588,22 @@
       // 編集対象パスが無い場合は contextTop に手を出さない。
       // fabric は contextTop に範囲選択 (marquee) や free-drawing を描画するので、
       // 我々が無条件に clearContext すると marquee が消えてしまう (回帰防止)。
-      anchorScreenCache = [];
-      handleScreenCache = [];
       return;
     }
     canvas.clearContext(ctx);
 
     const rawCmds = (path as any).path as ReadonlyArray<ReadonlyArray<unknown>> | undefined;
-    if (!rawCmds) { anchorScreenCache = []; handleScreenCache = []; return; }
+    if (!rawCmds) return;
     const cmds = fromFabricPath(rawCmds);
 
-    const anchors = extractAnchors(cmds);
     const half = ANCHOR_MARKER_PX / 2;
-    const aCache: AnchorScreenPos[] = [];
-    const hCache: HandleScreenPos[] = [];
-
-    // アンカーのスクリーン座標を先に全計算
-    for (let i = 0; i < anchors.length; i++) {
-      const a = anchors[i];
-      const { sx, sy } = anchorLocalToScreen(a.point.x, a.point.y, path);
-      aCache.push({ anchorIndex: i, sx, sy });
-    }
-
-    // ハンドルのスクリーン座標を計算
-    for (let i = 0; i < anchors.length; i++) {
-      const a = anchors[i];
-      if (a.incomingHandle) {
-        const h = a.incomingHandle;
-        const hp = getHandlePoint(cmds[h.cmdIndex], h);
-        if (hp) {
-          const { sx, sy } = anchorLocalToScreen(hp.x, hp.y, path);
-          hCache.push({ anchorIndex: i, which: 'in', handle: h, sx, sy });
-        }
-      }
-      if (a.outgoingHandle) {
-        const h = a.outgoingHandle;
-        const hp = getHandlePoint(cmds[h.cmdIndex], h);
-        if (hp) {
-          const { sx, sy } = anchorLocalToScreen(hp.x, hp.y, path);
-          hCache.push({ anchorIndex: i, which: 'out', handle: h, sx, sy });
-        }
-      }
-    }
+    const layout = computeOverlayLayout(
+      { commands: cmds, pathMatrix: path.calcTransformMatrix() as unknown as Mat2x3,
+        pathOffset: { x: (path as any).pathOffset.x, y: (path as any).pathOffset.y } },
+      canvas.viewportTransform as unknown as Mat2x3,
+    );
+    const aCache = layout.anchors;
+    const hCache = layout.handles;
 
     ctx.save();
     const retina = (canvas as any).getRetinaScaling?.() ?? window.devicePixelRatio ?? 1;
@@ -756,65 +641,18 @@
     }
 
     ctx.restore();
-
-    anchorScreenCache = aCache;
-    handleScreenCache = hCache;
   }
 
   canvas.on('after:render', drawAnchorOverlay);
 
-  function hitTestAnchor(screenX: number, screenY: number): number {
-    let bestIdx = -1;
-    let bestDist = ANCHOR_HIT_RADIUS + 1;
-    for (const a of anchorScreenCache) {
-      const dx = screenX - a.sx;
-      const dy = screenY - a.sy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestIdx = a.anchorIndex;
-      }
-    }
-    return bestIdx;
-  }
-
-  function hitTestHandle(screenX: number, screenY: number): HandleScreenPos | null {
-    let best: HandleScreenPos | null = null;
-    let bestDist = HANDLE_HIT_RADIUS + 1;
-    for (const h of handleScreenCache) {
-      const dx = screenX - h.sx;
-      const dy = screenY - h.sy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = h;
-      }
-    }
-    return best;
-  }
-
   function clearAnchorState(): void {
-    anchorDrag = null;
-    handleDrag = null;
-    anchorScreenCache = [];
-    handleScreenCache = [];
+    // contextTop に描かれたアンカー/ハンドルマーカーをクリアする。
+    // 各ツール内のドラッグ状態は onDeactivate で個別にリセットされる。
     const ctx = (canvas as any).contextTop as CanvasRenderingContext2D;
     if (ctx) canvas.clearContext(ctx);
   }
 
   // ── 共通ヘルパー ────────────────────────────────────────────────────
-
-  /** ワールド座標デルタ → パスローカル座標デルタ変換 */
-  function worldToLocalDelta(
-    pathObj: fabric.Path, worldDx: number, worldDy: number,
-  ): { dx: number; dy: number } {
-    const mat = pathObj.calcTransformMatrix();
-    const inv = fabric.util.invertTransform(mat);
-    return {
-      dx: inv[0] * worldDx + inv[2] * worldDy,
-      dy: inv[1] * worldDx + inv[3] * worldDy,
-    };
-  }
 
   /** ドラッグ終了時の bbox 再計算 + pathOffset 補正 */
   function finalizeDrag(p: fabric.Path): void {
@@ -837,358 +675,212 @@
     canvas.fire('object:modified', { target: p } as any);
   }
 
-  // DOM capture で fabric の mousedown より先にヒットテストを行う。
-  // ヒットした場合は stopImmediatePropagation で fabric に渡さない。
+  // ── SelectCharTool 配線 ────────────────────────────────────────────
+  //
+  // 白矢印モードのアンカー/ハンドルドラッグとホバー判定は core/tools/select-char-tool.ts に
+  // 抽出済み。ここでは fabric.Path をツール抽象 (PathHandle) に橋渡しする adapter と、
+  // DOM/fabric イベントを現在ツールへ転送する dispatcher。
+  // 各ツールは core/tools/* に抽象化されており、本ブロックは fabric.Path /
+  // fabric.IText / fabric.ActiveSelection との橋渡しのみを行う。
+
   const upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement;
 
-  upperCanvas.addEventListener('mousedown', (e: MouseEvent) => {
-    // ペンモードではドラッグではなくペンツール側で処理する
-    if (currentMode === 'pen-add' || currentMode === 'pen-remove') return;
+  function makeFabricPathHandle(p: fabric.Path): PathHandle {
+    return {
+      snapshot(): PathSnapshot {
+        return {
+          commands:   fromFabricPath((p as any).path as ReadonlyArray<ReadonlyArray<unknown>>),
+          pathMatrix: p.calcTransformMatrix() as unknown as Mat2x3,
+          pathOffset: { x: (p as any).pathOffset.x, y: (p as any).pathOffset.y },
+        };
+      },
+      setCommands(cmds: ReadonlyArray<PathCommand>): void {
+        (p as any).path = toFabricPath(cmds);
+        (p as any).dirty = true;
+      },
+      finalizeEdit(): void {
+        finalizeDrag(p);
+      },
+    };
+  }
 
-    const path = getEditablePath();
-    if (!path) return;
+  // ObjectHandle は SelectGroupTool 用。fabric.Object との対応関係を内部に保つので
+  // setActiveSelection では _obj を取り出して fabric API を呼ぶ。
+  //
+  // 重要: 同じ fabric.Object に対しては常に同じ handle instance を返す
+  // (canonical 化)。SelectGroupTool は alreadyExpanded 判定で identity (===) を
+  // 使うため、毎回別 instance を返すと「展開済み」を検出できず無限再帰し、
+  // fabric の drag state を破壊する (オブジェクトが画面外に飛ぶ・mouseup で
+  // 選択解除されない等の症状)。WeakMap で fabric.Object が GC されると自動で
+  // 抜けるのでメモリリークも無い。
+  const objectHandleCache = new WeakMap<fabric.Object, ObjectHandle & { _obj: fabric.Object }>();
+  function makeFabricObjectHandle(o: fabric.Object): ObjectHandle & { _obj: fabric.Object } {
+    let h = objectHandleCache.get(o);
+    if (!h) {
+      h = {
+        getGroupId: () => (o as any).data?.groupId,
+        _obj: o,
+      };
+      objectHandleCache.set(o, h);
+    }
+    return h;
+  }
 
+  function currentTextProps(): TextCreateProps {
+    const { fontWeight, fontStyle } = currentFontStyle();
+    return {
+      fontFamily: fontFamilySel.value,
+      fontSize:   parseInt(fontSizeInput.value, 10) || 72,
+      fontWeight,
+      fontStyle,
+      fill:       fontColorInput.value,
+    };
+  }
+
+  const toolHost: ToolHost = {
+    getActivePath(): PathHandle | null {
+      const p = getEditablePath();
+      return p ? makeFabricPathHandle(p) : null;
+    },
+    getViewportMatrix(): Mat2x3 {
+      return canvas.viewportTransform as unknown as Mat2x3;
+    },
+    requestRerender(): void {
+      canvas.requestRenderAll();
+    },
+    setCursor(c: string): void {
+      upperCanvas.style.cursor = c;
+    },
+    getActiveObjects(): ReadonlyArray<ObjectHandle> {
+      const active = canvas.getActiveObject();
+      if (!active) return [];
+      const objs: fabric.Object[] = active.type === 'activeSelection'
+        ? (active as fabric.ActiveSelection).getObjects()
+        : [active];
+      return objs.map(makeFabricObjectHandle);
+    },
+    getAllObjects(): ReadonlyArray<ObjectHandle> {
+      return canvas.getObjects().map(makeFabricObjectHandle);
+    },
+    setActiveSelection(handles: ReadonlyArray<ObjectHandle>): void {
+      const objs = handles.map(h => (h as any)._obj as fabric.Object);
+      canvas.discardActiveObject();
+      if (objs.length === 1) {
+        canvas.setActiveObject(objs[0]);
+      } else if (objs.length > 1) {
+        const sel = new fabric.ActiveSelection(objs, { canvas });
+        canvas.setActiveObject(sel);
+      }
+      canvas.requestRenderAll();
+    },
+    createTextAt(x: number, y: number, props: TextCreateProps): void {
+      const it = new fabric.IText('', {
+        left:       x,
+        top:        y,
+        fontFamily: props.fontFamily,
+        fontSize:   props.fontSize,
+        fontWeight: props.fontWeight,
+        fontStyle:  props.fontStyle,
+        fill:       props.fill,
+        selectable: true,
+        evented:    true,
+      });
+      canvas.add(it);
+      canvas.setActiveObject(it);
+      it.enterEditing();
+      (it as any).hiddenTextarea?.focus();
+    },
+  };
+
+  // ツールインスタンス。SelectCharTool だけは snap 設定の動的注入があるので
+  // 個別変数で保持し、map にも入れる。
+  const selectGroupTool = new SelectGroupTool();
+  const selectCharTool  = new SelectCharTool();
+  const textTool        = new TextTool(currentTextProps);
+  const penAddTool      = new PenAddTool();
+  const penRemoveTool   = new PenRemoveTool();
+
+  selectCharTool.setSnapConfig({ enabled: snapEnabled, pitch: snapPitch, threshold: snapThreshold });
+
+  const tools: Record<Mode, Tool> = {
+    'select-group': selectGroupTool,
+    'select-char':  selectCharTool,
+    'text':         textTool,
+    'pen-add':      penAddTool,
+    'pen-remove':   penRemoveTool,
+  };
+
+  function buildPointerInput(e: MouseEvent): PointerInput {
     const rect = upperCanvas.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
+    const w = canvas.getPointer(e);
+    return {
+      screenX:  e.clientX - rect.left,
+      screenY:  e.clientY - rect.top,
+      worldX:   w.x,
+      worldY:   w.y,
+      altKey:   e.altKey,
+      shiftKey: e.shiftKey,
+    };
+  }
 
-    // ヒットテスト: ハンドル優先 → アンカー
-    const hitHandle = hitTestHandle(screenX, screenY);
-    const hitAnchor = hitHandle ? -1 : hitTestAnchor(screenX, screenY);
-    if (!hitHandle && hitAnchor < 0) return;
+  // DOM capture mousedown: 現ツールの onPointerDown を呼び、'consumed' なら
+  // document-level mousemove/up でドラッグ追跡し、fabric 伝播を抑止する。
+  upperCanvas.addEventListener('mousedown', (e: MouseEvent) => {
+    const tool = tools[currentMode];
+    const result = tool.onPointerDown(buildPointerInput(e), toolHost);
+    if (result !== 'consumed') return;
 
     e.stopImmediatePropagation();
     e.preventDefault();
 
-    const startPath = fromFabricPath((path as any).path as ReadonlyArray<ReadonlyArray<unknown>>);
-    const lastPointer = canvas.getPointer(e);
-
-    if (hitHandle) {
-      // ── ハンドル (制御点) ドラッグ ──────────────────────────────
-      handleDrag = {
-        pathObj: path,
-        handle: hitHandle.handle,
-        startPath,
-        lastPointer,
-      };
-
-      const onMove = (me: MouseEvent) => {
-        if (!handleDrag) return;
-        const pointer = canvas.getPointer(me);
-        const worldDx = pointer.x - handleDrag.lastPointer.x;
-        const worldDy = pointer.y - handleDrag.lastPointer.y;
-        const local = worldToLocalDelta(handleDrag.pathObj, worldDx, worldDy);
-
-        const curPath = fromFabricPath((handleDrag.pathObj as any).path);
-        const newPath = moveHandle(curPath, handleDrag.handle, local.dx, local.dy);
-        (handleDrag.pathObj as any).path = toFabricPath(newPath);
-        (handleDrag.pathObj as any).dirty = true;
-        handleDrag.lastPointer = pointer;
-        canvas.requestRenderAll();
-      };
-
-      const onUp = () => {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        if (handleDrag) {
-          finalizeDrag(handleDrag.pathObj);
-          handleDrag = null;
-        }
-        canvas.requestRenderAll();
-      };
-
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    } else {
-      // ── アンカードラッグ (既存) ────────────────────────────────
-      anchorDrag = {
-        pathObj: path,
-        anchorIndex: hitAnchor,
-        startPath,
-        lastPointer,
-      };
-
-      const onMove = (me: MouseEvent) => {
-        if (!anchorDrag) return;
-        const pointer = canvas.getPointer(me);
-        const worldDx = pointer.x - anchorDrag.lastPointer.x;
-        const worldDy = pointer.y - anchorDrag.lastPointer.y;
-        const local = worldToLocalDelta(anchorDrag.pathObj, worldDx, worldDy);
-
-        const curPath = fromFabricPath((anchorDrag.pathObj as any).path);
-        const newPath = moveAnchorRigid(curPath, anchorDrag.anchorIndex, local.dx, local.dy);
-        (anchorDrag.pathObj as any).path = toFabricPath(newPath);
-        (anchorDrag.pathObj as any).dirty = true;
-        anchorDrag.lastPointer = pointer;
-        canvas.requestRenderAll();
-      };
-
-      const onUp = () => {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        if (anchorDrag) {
-          finalizeDrag(anchorDrag.pathObj);
-          anchorDrag = null;
-        }
-        canvas.requestRenderAll();
-      };
-
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    }
+    const onMove = (me: MouseEvent) => {
+      tool.onPointerMove(buildPointerInput(me), toolHost);
+    };
+    const onUp = (me: MouseEvent) => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      tool.onPointerUp(buildPointerInput(me), toolHost);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }, true);
 
-  // ホバー時のカーソル変更
+  // hover カーソル更新: ドラッグ中はドキュメント level handler が動いているので
+  // upperCanvas mousemove は idle のときだけツールに通知する。
   upperCanvas.addEventListener('mousemove', (e: MouseEvent) => {
-    if (anchorDrag || handleDrag) return;
-    const path = getEditablePath();
-    if (!path) {
-      upperCanvas.style.cursor = '';
-      return;
-    }
-    const rect = upperCanvas.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
-    const hHit = hitTestHandle(screenX, screenY);
-    if (hHit) { upperCanvas.style.cursor = 'pointer'; return; }
-    const aidx = hitTestAnchor(screenX, screenY);
-    upperCanvas.style.cursor = aidx >= 0 ? 'move' : '';
+    const tool = tools[currentMode];
+    if (tool.isDragging()) return;
+    tool.onPointerMove(buildPointerInput(e), toolHost);
   }, true);
 
-  // ── +/- ペンツール ──────────────────────────────────────────────────────
+  // fabric の mouse:down (fabric の hit-test 後)。TextTool が空き領域クリックで
+  // IText を生成するのに使う。他ツールは no-op 実装になっている。
+  canvas.on('mouse:down', (opt) => {
+    const w = canvas.getPointer(opt.e as MouseEvent);
+    tools[currentMode].onCanvasMouseDown({
+      worldX: w.x, worldY: w.y, hasTarget: !!opt.target,
+    }, toolHost);
+  });
 
-  const PEN_HIT_THRESHOLD = 8; // セグメントヒットの画面ピクセル閾値
-  const PEN_SAMPLES       = 50; // セグメントあたりのサンプル数
+  // ペンツール (PenAddTool / PenRemoveTool) と関連ヘルパは core/tools/* に抽出済み。
+  // 上記の DOM mousedown/move dispatcher が現在ツールを呼ぶので、ここに専用 handler は無い。
 
-  /** スクリーン座標 → パスローカル座標 */
-  function screenToPathLocal(
-    screenX: number, screenY: number, path: fabric.Path,
-  ): { x: number; y: number } {
-    const vt = canvas.viewportTransform!;
-    const invVt = fabric.util.invertTransform(vt);
-    const world = fabric.util.transformPoint(
-      { x: screenX, y: screenY } as fabric.Point, invVt,
-    );
-    const mat = path.calcTransformMatrix();
-    const invMat = fabric.util.invertTransform(mat);
-    const local = fabric.util.transformPoint(world, invMat);
-    const po = (path as any).pathOffset as { x: number; y: number };
-    return { x: local.x + po.x, y: local.y + po.y };
-  }
-
-  interface SegmentHit {
-    cmdIndex: number;
-    t: number;
-    dist: number;
-  }
-
-  /** パス上の最近傍セグメントを探索 (スクリーン座標ベースの距離比較) */
-  function findClosestSegment(
-    path: fabric.Path, screenX: number, screenY: number,
-  ): SegmentHit | null {
-    const rawCmds = (path as any).path as ReadonlyArray<ReadonlyArray<unknown>> | undefined;
-    if (!rawCmds) return null;
-    const cmds = fromFabricPath(rawCmds);
-
-    let best: SegmentHit | null = null;
-    let cur: Point = { x: 0, y: 0 };
-
-    for (let i = 0; i < cmds.length; i++) {
-      const cmd = cmds[i];
-
-      if (cmd.type === 'M') { cur = cmd.to; continue; }
-      if (cmd.type === 'Z') { continue; }
-
-      for (let s = 0; s <= PEN_SAMPLES; s++) {
-        const t = s / PEN_SAMPLES;
-        let p: Point;
-
-        if (cmd.type === 'C') {
-          p = evalCubicAt(cur, cmd.c1, cmd.c2, cmd.to, t);
-        } else if (cmd.type === 'Q') {
-          p = evalQuadAt(cur, cmd.c, cmd.to, t);
-        } else {
-          // L
-          p = { x: cur.x + t * (cmd.to.x - cur.x), y: cur.y + t * (cmd.to.y - cur.y) };
-        }
-
-        const scr = anchorLocalToScreen(p.x, p.y, path);
-        const d = Math.hypot(scr.sx - screenX, scr.sy - screenY);
-        if (d < PEN_HIT_THRESHOLD && (!best || d < best.dist)) {
-          best = { cmdIndex: i, t, dist: d };
-        }
-      }
-
-      // 現在点を更新 (C/Q/L はすべて .to を持つ)
-      cur = cmd.to;
-    }
-
-    return best;
-  }
-
-  // +ペンツール: セグメント上クリックでアンカー追加
-  // -ペンツール: アンカー上クリックでアンカー削除
-  upperCanvas.addEventListener('mousedown', (e: MouseEvent) => {
-    if (currentMode !== 'pen-add' && currentMode !== 'pen-remove') return;
-
-    const path = getEditablePath();
-    if (!path) return;
-
-    const rect = upperCanvas.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
-
-    if (currentMode === 'pen-add') {
-      const hit = findClosestSegment(path, screenX, screenY);
-      if (!hit) return;
-
-      e.stopImmediatePropagation();
-      e.preventDefault();
-
-      const cmds = fromFabricPath((path as any).path as ReadonlyArray<ReadonlyArray<unknown>>);
-      const origCmd = cmds[hit.cmdIndex];
-      const origCmdType = origCmd.type;
-      const newPath = splitSegment(cmds, hit.cmdIndex, hit.t);
-      (path as any).path = toFabricPath(newPath);
-      (path as any).dirty = true;
-
-      logger.debug(`[pen-add] origCmdType=${origCmdType} cmdIndex=${hit.cmdIndex} t=${hit.t}`);
-
-      // 新アンカーの位置 (分割で生成された first half の終点)。
-      // splitSegment は M/Z に対しては分割せず元配列を返すので、ここでの type は C/Q/L のいずれか。
-      const firstCmd = newPath[hit.cmdIndex];
-      if (firstCmd.type !== 'C' && firstCmd.type !== 'Q' && firstCmd.type !== 'L') return;
-      const anchorPt = firstCmd.to;
-      const anchorX = anchorPt.x, anchorY = anchorPt.y;
-      const secondIdx = hit.cmdIndex + 1;
-
-      // L→C 変換用: 前後のアンカー位置を記録
-      const prevPt = getSegmentStart(newPath, hit.cmdIndex);
-      const nextCmd = newPath[secondIdx];
-      if (nextCmd.type !== 'C' && nextCmd.type !== 'Q' && nextCmd.type !== 'L') return;
-      const prevX = prevPt ? prevPt.x : anchorX;
-      const prevY = prevPt ? prevPt.y : anchorY;
-      const nextX = nextCmd.to.x;
-      const nextY = nextCmd.to.y;
-
-      logger.debug(`[pen-add] drag mode. anchor=(${anchorX.toFixed(1)},${anchorY.toFixed(1)}) prev=(${prevX.toFixed(1)},${prevY.toFixed(1)}) next=(${nextX.toFixed(1)},${nextY.toFixed(1)})`);
-
-      const onMove = (me: MouseEvent) => {
-        const r = upperCanvas.getBoundingClientRect();
-        const mx = me.clientX - r.left;
-        const my = me.clientY - r.top;
-        const local = screenToPathLocal(mx, my, path);
-        const dx = local.x - anchorX;
-        const dy = local.y - anchorY;
-        logger.debug(`[pen-add:onMove] delta=(${dx.toFixed(1)},${dy.toFixed(1)})`);
-
-        const curPath = fromFabricPath((path as any).path);
-        const updated: PathCommand[] = curPath.slice();
-
-        const curFirst = curPath[hit.cmdIndex];
-        const curSecond = curPath[secondIdx];
-
-        // 全セグメントタイプ共通: C コマンドでハンドルを設定。
-        // L/Q を分割した場合は C に変換してからハンドルを付与。
-        // 元が C ならその c1/c2 を保ち、それ以外は3等分点でデフォルトハンドルを生成。
-        const firstC1: Point = origCmdType === 'C' && curFirst.type === 'C'
-          ? curFirst.c1
-          : { x: prevX + (anchorX - prevX) / 3, y: prevY + (anchorY - prevY) / 3 };
-        updated[hit.cmdIndex] = {
-          type: 'C',
-          c1: firstC1,
-          c2: { x: anchorX - dx, y: anchorY - dy },
-          to: { x: anchorX, y: anchorY },
-        };
-
-        const secondC2: Point = origCmdType === 'C' && curSecond.type === 'C'
-          ? curSecond.c2
-          : { x: anchorX + 2 * (nextX - anchorX) / 3, y: anchorY + 2 * (nextY - anchorY) / 3 };
-        updated[secondIdx] = {
-          type: 'C',
-          c1: { x: anchorX + dx, y: anchorY + dy },
-          c2: secondC2,
-          to: { x: nextX, y: nextY },
-        };
-
-        (path as any).path = toFabricPath(updated);
-        (path as any).dirty = true;
-        canvas.requestRenderAll();
-      };
-
-      const onUp = () => {
-        logger.debug('[pen-add:onUp] mouseup fired');
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        finalizeDrag(path);
-        canvas.requestRenderAll();
-      };
-
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-      canvas.requestRenderAll();
-
-    } else {
-      // pen-remove: アンカーのヒットテスト
-      const aidx = hitTestAnchor(screenX, screenY);
-      if (aidx < 0) return;
-
-      e.stopImmediatePropagation();
-      e.preventDefault();
-
-      const cmds = fromFabricPath((path as any).path as ReadonlyArray<ReadonlyArray<unknown>>);
-      const newPath = removeAnchor(cmds, aidx);
-
-      // removeAnchor が操作を拒否した場合 (アンカー数不足) は長さが同じ
-      if (newPath.length === cmds.length) return;
-
-      (path as any).path = toFabricPath(newPath);
-      (path as any).dirty = true;
-      finalizeDrag(path);
-      canvas.requestRenderAll();
-    }
-  }, true);
-
-  // ペンモードのホバーカーソル
-  upperCanvas.addEventListener('mousemove', (e: MouseEvent) => {
-    if (currentMode !== 'pen-add' && currentMode !== 'pen-remove') return;
-
-    const path = getEditablePath();
-    if (!path) {
-      upperCanvas.style.cursor = '';
-      return;
-    }
-
-    const rect = upperCanvas.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
-
-    if (currentMode === 'pen-add') {
-      const hit = findClosestSegment(path, screenX, screenY);
-      upperCanvas.style.cursor = hit ? 'copy' : '';
-    } else {
-      const aidx = hitTestAnchor(screenX, screenY);
-      upperCanvas.style.cursor = aidx >= 0 ? 'pointer' : '';
-    }
-  }, true);
-
-  // モード・選択変更時のクリーンアップ
+  // 選択イベント: contextTop の overlay クリア → 現ツールの onSelectionChanged
+  // (黒矢印は groupId 自動展開) → toolbar 同期。
   canvas.on('selection:cleared', clearAnchorState);
   canvas.on('selection:created', () => {
     clearAnchorState();
-    if (currentMode === 'select-group') expandSelectionToGroup();
+    tools[currentMode].onSelectionChanged(toolHost);
     syncToolbarToSelection();
   });
   canvas.on('selection:updated', () => {
     clearAnchorState();
-    if (currentMode === 'select-group') expandSelectionToGroup();
+    tools[currentMode].onSelectionChanged(toolHost);
     syncToolbarToSelection();
   });
-  canvas.on('object:removed', (e: fabric.IEvent) => {
-    if ((anchorDrag && e.target === anchorDrag.pathObj) ||
-        (handleDrag && e.target === handleDrag.pathObj)) {
-      clearAnchorState();
-    }
+  canvas.on('object:removed', () => {
+    // 各ツール内のドラッグ状態は onPointerUp / onDeactivate で解除される。
+    // selection:cleared が同時発火する場合 clearAnchorState は上で処理済み。
   });
 
   // ── 選択オブジェクトを透過 PNG としてクリップボードにコピー ────────────
