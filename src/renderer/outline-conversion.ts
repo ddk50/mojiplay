@@ -7,11 +7,10 @@
 //
 // canvas 操作 (選択・追加削除) を含む outlineSelection / isOutlineable / ボタン
 // バインドは app.ts 側に残す。ここは「Text 1 個 → Path 1 個」の純粋寄り変換だけ。
-//
-// 依存 (cross-file globals):
-//   - parseStyle (font-enumeration.ts)
-//   - logger (logger.ts)
-//   - computeOutlinePathPosition (core/outline-position.ts)
+
+import { parseStyle } from './font-enumeration';
+import { logger } from './logger';
+import { computeOutlinePathPosition } from '../core/outline-position';
 
 // family|weight|italic をキーに fontkit.Font をキャッシュ。失敗時も null を
 // キャッシュして再試行のコストを避ける。
@@ -86,7 +85,7 @@ function getFontkitFont(
   return fresh;
 }
 
-async function outlineTextToPath(ft: fabric.Text): Promise<fabric.Path | null> {
+export async function outlineTextToPath(ft: fabric.Text): Promise<fabric.Path | null> {
   const text = ft.text || '';
   if (!text.trim()) return null;
 

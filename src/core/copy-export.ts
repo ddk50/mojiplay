@@ -13,11 +13,9 @@
 //   1. 型システム: ExportableObject.toCanvasElement の引数が
 //      { multiplier?: number } なので、数値を直接渡すとコンパイルエラー
 //   2. テスト: モックで出力サイズを検証し、multiplier が正しく渡されることを保証
-//
-// outline-position.ts と同じ dual-mode パターン。
 
 /** toCanvasElement を持つオブジェクトの最小インターフェース */
-interface ExportableObject {
+export interface ExportableObject {
   toCanvasElement(options: { multiplier?: number }): {
     width: number;
     height: number;
@@ -25,13 +23,13 @@ interface ExportableObject {
   };
 }
 
-interface ExportResult {
+export interface ExportResult {
   dataUrl: string;
   width: number;
   height: number;
 }
 
-function exportObjectToPngDataUrl(
+export function exportObjectToPngDataUrl(
   obj: ExportableObject,
   multiplier: number,
 ): ExportResult {
@@ -44,11 +42,4 @@ function exportObjectToPngDataUrl(
     width: el.width,
     height: el.height,
   };
-}
-
-// Dual-mode export
-// @ts-ignore
-if (typeof module !== 'undefined' && module.exports) {
-  // @ts-ignore
-  module.exports.exportObjectToPngDataUrl = exportObjectToPngDataUrl;
 }

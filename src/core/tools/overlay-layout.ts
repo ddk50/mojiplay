@@ -4,31 +4,23 @@
 // 導出する。fabric / DOM に触れないので unit test 可能。
 //
 // 利用側:
-//   - SelectCharTool: pointer 入力ごとに最新パスから fresh に layout を計算し、
-//     hit-test に使う。
+//   - SelectCharTool / PenAddTool / PenRemoveTool: pointer 入力ごとに最新パスから
+//     fresh に layout を計算し、hit-test に使う。
 //   - app.ts の drawAnchorOverlay: 描画前に layout を計算してマーカーを描く。
-//
-// dual-mode export: ブラウザではグローバル関数、Node test では module.exports。
 
-// Node test では本ファイルが require される時点で他 core/* モジュールの関数が
-// 解決されている必要がある。各依存をここで pre-load し、それぞれの bottom block で
-// globalThis に注入されるようにする。ブラウザでは require は未定義なのでこの
-// ガード節は dead code になる (module: "none" のグローバル参照で解決)。
-// @ts-ignore
-if (typeof require === 'function' && typeof module !== 'undefined') {
-  // @ts-ignore
-  require('../path/coords');
-  // @ts-ignore
-  require('../path/anchors');
-}
+import type { HandleRef } from '../path/types';
+import { extractAnchors, getHandlePoint } from '../path/anchors';
+import type { Mat2x3, PathTransform } from '../path/coords';
+import { pathLocalToScreen } from '../path/coords';
+import type { PathSnapshot } from './tool-interface';
 
-interface AnchorScreenPos {
+export interface AnchorScreenPos {
   readonly anchorIndex: number;
   readonly sx: number;
   readonly sy: number;
 }
 
-interface HandleScreenPos {
+export interface HandleScreenPos {
   readonly anchorIndex: number;
   readonly which: 'in' | 'out';
   readonly handle: HandleRef;
@@ -36,17 +28,17 @@ interface HandleScreenPos {
   readonly sy: number;
 }
 
-interface OverlayScreenLayout {
+export interface OverlayScreenLayout {
   readonly anchors: ReadonlyArray<AnchorScreenPos>;
   readonly handles: ReadonlyArray<HandleScreenPos>;
 }
 
 // 黒矢印 / pen ツールのヒット半径と統一された数値。
 // 必要なら呼び出し側で上書きできるよう hit-test 関数は radius 引数を取る。
-const ANCHOR_HIT_RADIUS = 6;
-const HANDLE_HIT_RADIUS = 5;
+export const ANCHOR_HIT_RADIUS = 6;
+export const HANDLE_HIT_RADIUS = 5;
 
-function computeOverlayLayout(
+export function computeOverlayLayout(
   snapshot: PathSnapshot,
   viewportMatrix: Mat2x3,
 ): OverlayScreenLayout {
@@ -83,7 +75,7 @@ function computeOverlayLayout(
   return { anchors: aOut, handles: hOut };
 }
 
-function hitTestAnchorAt(
+export function hitTestAnchorAt(
   layout: OverlayScreenLayout,
   screenX: number, screenY: number,
   radius: number = ANCHOR_HIT_RADIUS,
@@ -102,7 +94,7 @@ function hitTestAnchorAt(
   return bestIdx;
 }
 
-function hitTestHandleAt(
+export function hitTestHandleAt(
   layout: OverlayScreenLayout,
   screenX: number, screenY: number,
   radius: number = HANDLE_HIT_RADIUS,
@@ -119,26 +111,4 @@ function hitTestHandleAt(
     }
   }
   return best;
-}
-
-// Dual-mode export
-// @ts-ignore
-if (typeof module !== 'undefined' && module.exports) {
-  // @ts-ignore
-  module.exports.computeOverlayLayout = computeOverlayLayout;
-  // @ts-ignore
-  module.exports.hitTestAnchorAt = hitTestAnchorAt;
-  // @ts-ignore
-  module.exports.hitTestHandleAt = hitTestHandleAt;
-  // @ts-ignore
-  module.exports.ANCHOR_HIT_RADIUS = ANCHOR_HIT_RADIUS;
-  // @ts-ignore
-  module.exports.HANDLE_HIT_RADIUS = HANDLE_HIT_RADIUS;
-
-  // Node test 用 globalThis 注入 (詳細は path/anchors.ts のコメント参照)
-  // @ts-ignore
-  const G: any = globalThis;
-  G.computeOverlayLayout = computeOverlayLayout;
-  G.hitTestAnchorAt      = hitTestAnchorAt;
-  G.hitTestHandleAt      = hitTestHandleAt;
 }

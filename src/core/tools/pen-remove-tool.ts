@@ -5,7 +5,14 @@
 //
 // hover 時はアンカー上で 'pointer' カーソルにする。
 
-class PenRemoveTool implements Tool {
+import { removeAnchor } from '../path/anchors';
+import { computeOverlayLayout, hitTestAnchorAt } from './overlay-layout';
+import type {
+  Tool, ToolHost, PointerInput, PointerHandled,
+  MovingTarget, CanvasMouseDownInput,
+} from './tool-interface';
+
+export class PenRemoveTool implements Tool {
   onActivate(_host: ToolHost): void { /* no-op */ }
   onDeactivate(host: ToolHost): void { host.setCursor(''); }
 
@@ -45,22 +52,4 @@ class PenRemoveTool implements Tool {
   onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _host: ToolHost): void { /* no-op */ }
   onSelectionChanged(_host: ToolHost): void { /* no-op */ }
   onCanvasMouseDown(_e: CanvasMouseDownInput, _host: ToolHost): void { /* no-op */ }
-}
-
-// Dual-mode export
-// @ts-ignore
-if (typeof module !== 'undefined' && module.exports) {
-  // @ts-ignore
-  module.exports.PenRemoveTool = PenRemoveTool;
-}
-
-// Node test 時に依存モジュールを pre-load
-// @ts-ignore
-if (typeof require === 'function' && typeof module !== 'undefined') {
-  // @ts-ignore
-  require('../path/coords');
-  // @ts-ignore
-  require('../path/anchors');
-  // @ts-ignore
-  require('./overlay-layout');
 }

@@ -11,82 +11,13 @@
 //   - hover 時のカーソル: handle → 'pointer', anchor → 'move', miss → ''
 //   - object:moving で snap (Alt 押下中はバイパス)
 
-type Point = { readonly x: number; readonly y: number };
-type Mat2x3 = readonly [number, number, number, number, number, number];
-
-type PathCommand =
-  | { readonly type: 'M'; readonly to: Point }
-  | { readonly type: 'L'; readonly to: Point }
-  | { readonly type: 'C'; readonly c1: Point; readonly c2: Point; readonly to: Point }
-  | { readonly type: 'Q'; readonly c: Point; readonly to: Point }
-  | { readonly type: 'Z' };
-
-type HandleRef =
-  | { readonly kind: 'C-c1'; readonly cmdIndex: number }
-  | { readonly kind: 'C-c2'; readonly cmdIndex: number }
-  | { readonly kind: 'Q-c';  readonly cmdIndex: number };
-
-interface PathSnapshot {
-  readonly commands: ReadonlyArray<PathCommand>;
-  readonly pathMatrix: Mat2x3;
-  readonly pathOffset: Point;
-}
-
-interface PathHandle {
-  snapshot(): PathSnapshot;
-  setCommands(cmds: ReadonlyArray<PathCommand>): void;
-  finalizeEdit(): void;
-}
-
-interface PointerInput {
-  readonly screenX: number; readonly screenY: number;
-  readonly worldX:  number; readonly worldY:  number;
-  readonly altKey: boolean; readonly shiftKey: boolean;
-}
-
-interface MovingTarget {
-  getLeft(): number; getTop(): number;
-  setLeft(v: number): void; setTop(v: number): void;
-}
-
-interface ObjectHandle { getGroupId(): string | undefined }
-interface TextCreateProps {
-  readonly fontFamily: string;
-  readonly fontSize:   number;
-  readonly fontWeight: number | string;
-  readonly fontStyle:  'normal' | 'italic';
-  readonly fill:       string;
-}
-
-interface ToolHost {
-  getActivePath(): PathHandle | null;
-  getViewportMatrix(): Mat2x3;
-  requestRerender(): void;
-  setCursor(c: string): void;
-  getActiveObjects(): ReadonlyArray<ObjectHandle>;
-  getAllObjects():    ReadonlyArray<ObjectHandle>;
-  setActiveSelection(objs: ReadonlyArray<ObjectHandle>): void;
-  createTextAt(x: number, y: number, props: TextCreateProps): void;
-}
-
-type PointerHandled = 'consumed' | 'pass';
-
-interface SnapConfig { readonly enabled: boolean; readonly pitch: number; readonly threshold: number }
-
-interface SelectCharToolI {
-  setSnapConfig(c: SnapConfig): void;
-  isDragging(): boolean;
-  onActivate(host: ToolHost): void;
-  onDeactivate(host: ToolHost): void;
-  onPointerDown(e: PointerInput, host: ToolHost): PointerHandled;
-  onPointerMove(e: PointerInput, host: ToolHost): void;
-  onPointerUp(e: PointerInput, host: ToolHost): void;
-  onObjectMoving(t: MovingTarget, e: { altKey: boolean }, host: ToolHost): void;
-}
-
-const { SelectCharTool } = require('../src/core/tools/select-char-tool') as {
-  SelectCharTool: new () => SelectCharToolI;
-};
+import type { PathCommand } from '../src/core/path/types';
+import type { Mat2x3 } from '../src/core/path/coords';
+import type {
+  PathHandle, PathSnapshot, PointerInput, ToolHost,
+  ObjectHandle, TextCreateProps,
+} from '../src/core/tools/tool-interface';
+import { SelectCharTool } from '../src/core/tools/select-char-tool';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 
@@ -372,4 +303,3 @@ describe('SelectCharTool: deactivate', () => {
   });
 });
 
-export {};

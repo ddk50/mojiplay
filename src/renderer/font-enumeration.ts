@@ -2,11 +2,10 @@
 //
 // Electron 29 / Chromium 122+ に標準搭載。main 側で local-fonts 権限を許可済み。
 // 取得失敗時は index.html のフォールバック Arial / Regular がそのまま残る。
-//
-// `parseStyle` / `WEIGHT_MAP` / `StyleInfo` は outline-conversion.ts からも
-// クロスファイル参照される (module: "none"、同一グローバルスコープ)。
 
-type StyleInfo = { label: string; weight: number; italic: boolean };
+import { logger } from './logger';
+
+export type StyleInfo = { label: string; weight: number; italic: boolean };
 
 const WEIGHT_MAP: Record<string, number> = {
   thin: 100, hairline: 100,
@@ -20,7 +19,7 @@ const WEIGHT_MAP: Record<string, number> = {
   black: 900, heavy: 900,
 };
 
-function parseStyle(s: string): StyleInfo {
+export function parseStyle(s: string): StyleInfo {
   const lower = s.toLowerCase();
   const italic = /italic|oblique/.test(lower);
   const key = lower.replace(/italic|oblique/g, '').replace(/\s+/g, '');
@@ -28,16 +27,16 @@ function parseStyle(s: string): StyleInfo {
   return { label: s || 'Regular', weight, italic };
 }
 
-const fontsByFamily = new Map<string, StyleInfo[]>();
+export const fontsByFamily = new Map<string, StyleInfo[]>();
 
-const fontFamilySel = document.getElementById('font-family') as HTMLSelectElement;
-const fontStyleSel  = document.getElementById('font-style')  as HTMLSelectElement;
+export const fontFamilySel = document.getElementById('font-family') as HTMLSelectElement;
+export const fontStyleSel  = document.getElementById('font-style')  as HTMLSelectElement;
 
-function styleValue(weight: number, italic: boolean): string {
+export function styleValue(weight: number, italic: boolean): string {
   return `${weight}|${italic ? 'italic' : 'normal'}`;
 }
 
-function populateStyleList(family: string): void {
+export function populateStyleList(family: string): void {
   const styles = fontsByFamily.get(family);
   const previous = fontStyleSel.value;
   fontStyleSel.innerHTML = '';
@@ -62,7 +61,7 @@ function populateStyleList(family: string): void {
   }
 }
 
-async function populateFontList(): Promise<void> {
+export async function populateFontList(): Promise<void> {
   if (typeof window.queryLocalFonts !== 'function') return;
   try {
     const fonts = await window.queryLocalFonts();

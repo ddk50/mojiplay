@@ -15,14 +15,13 @@
 //     現実装は app.ts 側の adapter が担う。test では FakeToolHost を渡す。
 //
 // 各ツール実装は本ファイルの型に依存し、本ファイルは fabric を一切知らない。
-//
-// 共通型 (Point / PathCommand / HandleRef) は ../path/types.ts のグローバル
-// 宣言を参照する (module: "none" によるクロスファイル global 共有)。
-// Mat2x3 / PathTransform は ../path/coords.ts。
+
+import type { Point, PathCommand } from '../path/types';
+import type { Mat2x3 } from '../path/coords';
 
 // ── 入力 ─────────────────────────────────────────────────────────────────
 
-interface PointerInput {
+export interface PointerInput {
   readonly screenX: number;  // upperCanvas DOM の topleft 基準 (px)
   readonly screenY: number;
   readonly worldX: number;   // canvas オブジェクト空間
@@ -33,7 +32,7 @@ interface PointerInput {
 
 // fabric の object:moving イベントで対象オブジェクトに使う最小 API。
 // snap 等で left/top を読み書きするだけなので fabric.Object は露出させない。
-interface MovingTarget {
+export interface MovingTarget {
   getLeft(): number;
   getTop(): number;
   setLeft(v: number): void;
@@ -43,7 +42,7 @@ interface MovingTarget {
 // fabric の mouse:down イベント (fabric の hit-test 後) を抽象化。
 // TextTool は target が無いキャンバス空き領域クリックで IText を生成するため
 // hasTarget が必要。
-interface CanvasMouseDownInput {
+export interface CanvasMouseDownInput {
   readonly worldX: number;
   readonly worldY: number;
   readonly hasTarget: boolean;
@@ -58,13 +57,13 @@ interface CanvasMouseDownInput {
 // 対しては必ず同じ handle instance を返すこと (canonical 化)。SelectGroupTool は
 // 「現在の選択 == 展開後の選択」を identity 比較で判定するため、毎回別 instance を
 // 返すと無限再帰に陥る。
-interface ObjectHandle {
+export interface ObjectHandle {
   getGroupId(): string | undefined;
 }
 
 // TextTool が host に渡す生成リクエストのフォントプロパティ。
 // fabric.IText の生成に必要な最小セット。
-interface TextCreateProps {
+export interface TextCreateProps {
   readonly fontFamily:  string;
   readonly fontSize:    number;
   readonly fontWeight:  number | string;
@@ -74,13 +73,13 @@ interface TextCreateProps {
 
 // ── パスへの副作用 ──────────────────────────────────────────────────────
 
-interface PathSnapshot {
+export interface PathSnapshot {
   readonly commands: ReadonlyArray<PathCommand>;
   readonly pathMatrix: Mat2x3;     // calcTransformMatrix の結果 (local-pathOffset → world)
   readonly pathOffset: Point;
 }
 
-interface PathHandle {
+export interface PathHandle {
   // 現時点のコマンド配列 + 変換行列 + pathOffset を読み出す。
   // tool が連続呼び出しする前提なので副作用無し。
   snapshot(): PathSnapshot;
@@ -94,7 +93,7 @@ interface PathHandle {
 
 // ── ツールホスト (renderer ファサード) ─────────────────────────────────
 
-interface ToolHost {
+export interface ToolHost {
   // 現在編集対象のパス (アウトライン化済 fabric.Path)。それ以外なら null。
   getActivePath(): PathHandle | null;
 
@@ -118,9 +117,9 @@ interface ToolHost {
 
 // ── ツール ──────────────────────────────────────────────────────────────
 
-type PointerHandled = 'consumed' | 'pass';
+export type PointerHandled = 'consumed' | 'pass';
 
-interface Tool {
+export interface Tool {
   onActivate(host: ToolHost): void;
   onDeactivate(host: ToolHost): void;
 
@@ -144,7 +143,3 @@ interface Tool {
   // DOM capture mousedown より後、fabric の選択処理の一部として発火する。
   onCanvasMouseDown(e: CanvasMouseDownInput, host: ToolHost): void;
 }
-
-// 型のみのファイルだが、tsconfig.test の include に入れるために .ts として置く。
-// runtime 出力は空。dual-mode export は不要 (型のみ)。
-const __toolsTypesPlaceholder: 0 = 0; void __toolsTypesPlaceholder;

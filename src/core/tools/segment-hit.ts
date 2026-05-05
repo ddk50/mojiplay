@@ -6,13 +6,18 @@
 //
 // fabric / DOM 非依存。座標変換は coords.ts の pathLocalToScreen を使う。
 
-interface SegmentHit {
+import type { Point, PathCommand } from '../path/types';
+import { evalCubicAt, evalQuadAt } from '../path/anchors';
+import type { PathTransform } from '../path/coords';
+import { pathLocalToScreen } from '../path/coords';
+
+export interface SegmentHit {
   readonly cmdIndex: number;
   readonly t:        number;
   readonly dist:     number;
 }
 
-function findClosestSegment(
+export function findClosestSegment(
   cmds: ReadonlyArray<PathCommand>,
   screenX: number, screenY: number,
   pathTransform: PathTransform,
@@ -55,25 +60,4 @@ function findClosestSegment(
   }
 
   return best;
-}
-
-// Dual-mode export
-// @ts-ignore
-if (typeof module !== 'undefined' && module.exports) {
-  // @ts-ignore
-  module.exports.findClosestSegment = findClosestSegment;
-
-  // Node test 用 globalThis 注入
-  // @ts-ignore
-  const G: any = globalThis;
-  G.findClosestSegment = findClosestSegment;
-}
-
-// Node test 時に依存モジュールを pre-load
-// @ts-ignore
-if (typeof require === 'function' && typeof module !== 'undefined') {
-  // @ts-ignore
-  require('../path/coords');
-  // @ts-ignore
-  require('../path/anchors');
 }

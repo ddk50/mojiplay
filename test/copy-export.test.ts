@@ -11,16 +11,7 @@
 // 防ぐため、テストでは主に「正しい multiplier で正しいサイズの canvas が返るか」
 // という振る舞い (出力サイズ) を検証する。
 
-interface ExportResult {
-  dataUrl: string;
-  width: number;
-  height: number;
-}
-
-const { exportObjectToPngDataUrl } =
-  require('../src/core/copy-export') as {
-    exportObjectToPngDataUrl: (obj: any, multiplier: number) => ExportResult;
-  };
+import { exportObjectToPngDataUrl } from '../src/core/copy-export';
 
 // fabric.Object.prototype.toCanvasElement の振る舞いを模倣するモック。
 // options.multiplier を読んで canvas サイズを決定する。
@@ -100,4 +91,3 @@ describe('exportObjectToPngDataUrl', () => {
   });
 });
 
-export {};

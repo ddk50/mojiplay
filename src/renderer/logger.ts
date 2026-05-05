@@ -1,7 +1,6 @@
 // IPC → electron-log + DevTools console を束ねるロガー。
-// renderer 内のすべてのファイルから参照可能 (module: "none" によりグローバル)。
 
-const logger = {
+export const logger = {
   debug: (msg: string) => {
     console.debug(msg);
     void window.electronAPI?.log?.debug(msg);

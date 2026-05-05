@@ -7,15 +7,13 @@
 // 戻り値の alreadyExpanded は「現在の選択が既に group 全体と一致しているか」。
 // SelectGroupTool は selection:created/updated 内で呼ぶため、再展開時に
 // setActiveSelection が再帰発火してループに入るのを防ぐ no-op 判定に使う。
-//
-// dual-mode export パターン。
 
-interface GroupExpansionResult<T> {
+export interface GroupExpansionResult<T> {
   readonly expanded: ReadonlyArray<T>;
   readonly alreadyExpanded: boolean;
 }
 
-function computeGroupExpansion<T>(
+export function computeGroupExpansion<T>(
   current: ReadonlyArray<T>,
   all:     ReadonlyArray<T>,
   getGroupId: (o: T) => string | undefined,
@@ -44,16 +42,4 @@ function computeGroupExpansion<T>(
     current.every(o => expanded.indexOf(o) >= 0);
 
   return { expanded, alreadyExpanded };
-}
-
-// Dual-mode export
-// @ts-ignore
-if (typeof module !== 'undefined' && module.exports) {
-  // @ts-ignore
-  module.exports.computeGroupExpansion = computeGroupExpansion;
-
-  // Node test 用 globalThis 注入
-  // @ts-ignore
-  const G: any = globalThis;
-  G.computeGroupExpansion = computeGroupExpansion;
 }

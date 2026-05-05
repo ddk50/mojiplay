@@ -1,17 +1,6 @@
 // computeGroupExpansion の単体テスト。
 
-interface GroupExpansionResult<T> {
-  readonly expanded: ReadonlyArray<T>;
-  readonly alreadyExpanded: boolean;
-}
-
-const { computeGroupExpansion } = require('../src/core/tools/group-selection') as {
-  computeGroupExpansion: <T>(
-    current: ReadonlyArray<T>,
-    all: ReadonlyArray<T>,
-    getGroupId: (o: T) => string | undefined,
-  ) => GroupExpansionResult<T>;
-};
+import { computeGroupExpansion } from '../src/core/tools/group-selection';
 
 interface Obj { id: string; gid?: string }
 const getGid = (o: Obj) => o.gid;
@@ -80,4 +69,3 @@ describe('computeGroupExpansion', () => {
   });
 });
 
-export {};

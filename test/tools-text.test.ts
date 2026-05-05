@@ -1,38 +1,9 @@
 // TextTool の単体テスト。
 
-interface TextCreateProps {
-  readonly fontFamily: string;
-  readonly fontSize:   number;
-  readonly fontWeight: number | string;
-  readonly fontStyle:  'normal' | 'italic';
-  readonly fill:       string;
-}
-
-interface CanvasMouseDownInput {
-  readonly worldX: number;
-  readonly worldY: number;
-  readonly hasTarget: boolean;
-}
-
-interface ToolHost {
-  createTextAt(x: number, y: number, props: TextCreateProps): void;
-  // 他は使わないので緩く
-  getActivePath():        any;
-  getViewportMatrix():    any;
-  requestRerender():      void;
-  setCursor(c: string):   void;
-  getActiveObjects():     any;
-  getAllObjects():        any;
-  setActiveSelection(...args: any[]): void;
-}
-
-interface TextToolI {
-  onCanvasMouseDown(e: CanvasMouseDownInput, host: ToolHost): void;
-}
-
-const { TextTool } = require('../src/core/tools/text-tool') as {
-  TextTool: new (getFontProps: () => TextCreateProps) => TextToolI;
-};
+import type {
+  TextCreateProps, CanvasMouseDownInput, ToolHost, ObjectHandle,
+} from '../src/core/tools/tool-interface';
+import { TextTool } from '../src/core/tools/text-tool';
 
 class FakeHost implements ToolHost {
   public createCalls: Array<[number, number, TextCreateProps]> = [];
@@ -81,4 +52,3 @@ describe('TextTool', () => {
   });
 });
 
-export {};

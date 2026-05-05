@@ -11,6 +11,16 @@
 //
 // hover カーソルはセグメント上で 'copy'。
 
+import type { Point, PathCommand } from '../path/types';
+import { splitSegment, getSegmentStart } from '../path/anchors';
+import type { PathTransform } from '../path/coords';
+import { screenToPathLocal } from '../path/coords';
+import { findClosestSegment } from './segment-hit';
+import type {
+  Tool, ToolHost, PathHandle, PointerInput, PointerHandled,
+  MovingTarget, CanvasMouseDownInput,
+} from './tool-interface';
+
 interface PenAddDragState {
   readonly cmdIndex: number;        // 分割した命令の前半 (新アンカー終端) の index
   readonly origCmdType: 'C' | 'Q' | 'L';
@@ -22,7 +32,7 @@ interface PenAddDragState {
 const PEN_HIT_THRESHOLD = 8;
 const PEN_SAMPLES       = 50;
 
-class PenAddTool implements Tool {
+export class PenAddTool implements Tool {
   private drag: PenAddDragState | null = null;
   private dragPath: PathHandle | null = null;
 
@@ -158,22 +168,4 @@ class PenAddTool implements Tool {
   onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _host: ToolHost): void { /* no-op */ }
   onSelectionChanged(_host: ToolHost): void { /* no-op */ }
   onCanvasMouseDown(_e: CanvasMouseDownInput, _host: ToolHost): void { /* no-op */ }
-}
-
-// Dual-mode export
-// @ts-ignore
-if (typeof module !== 'undefined' && module.exports) {
-  // @ts-ignore
-  module.exports.PenAddTool = PenAddTool;
-}
-
-// Node test 時に依存モジュールを pre-load
-// @ts-ignore
-if (typeof require === 'function' && typeof module !== 'undefined') {
-  // @ts-ignore
-  require('../path/coords');
-  // @ts-ignore
-  require('../path/anchors');
-  // @ts-ignore
-  require('./segment-hit');
 }
