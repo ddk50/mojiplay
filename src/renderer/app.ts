@@ -135,7 +135,14 @@
     const isPenMode    = m === 'pen-add' || m === 'pen-remove';
     canvas.selection     = isSelectMode;
     canvas.defaultCursor = m === 'text' ? 'text' : 'default';
-    canvas.hoverCursor   = m === 'text' ? 'text' : 'move';
+    // 白矢印 (select-char) はアンカー編集モードなので、Illustrator の Direct
+    // Selection 同様に標準アローを維持する (path 本体のホバーで move カーソルに
+    // 切り替わるのは「十字」表示になり混乱の原因)。
+    // 黒矢印 (select-group) は文字列丸ごと移動が主用途なので move を維持。
+    canvas.hoverCursor   =
+      m === 'text'        ? 'text' :
+      m === 'select-char' ? 'default' :
+      'move';
 
     canvas.forEachObject(o => {
       o.selectable = isSelectMode;
@@ -296,17 +303,41 @@
 
   function expandSelectionToGroup(): void {
     const active = canvas.getActiveObject();
-    if (!active || active.type === 'activeSelection') return;
+    if (!active) return;
 
-    const gid = (active as any).data?.groupId;
-    if (!gid) return;
+    // 単独オブジェクトでも activeSelection (marquee 選択) でも groupId を集約。
+    // marquee で複数文字を範囲選択した場合、それぞれが属する全 group に展開する
+    // (黒矢印モードは「文字列単位」が選択粒度のため、部分選択を許さない)。
+    const currentObjs: fabric.Object[] = active.type === 'activeSelection'
+      ? (active as fabric.ActiveSelection).getObjects()
+      : [active];
 
-    const groupObjs = canvas.getObjects().filter(o => (o as any).data?.groupId === gid);
-    if (groupObjs.length <= 1) return;
+    const gids = new Set<string>();
+    for (const o of currentObjs) {
+      const gid = (o as any).data?.groupId;
+      if (gid) gids.add(gid);
+    }
+    if (gids.size === 0) return;
+
+    const groupObjs = canvas.getObjects().filter(o => {
+      const gid = (o as any).data?.groupId;
+      return gid !== undefined && gids.has(gid);
+    });
+
+    // 既に完全展開済み (現在の選択 = group 全体) なら no-op。
+    // selection:updated の再帰発火で無限ループに入るのを防ぐ。
+    if (currentObjs.length === groupObjs.length &&
+        currentObjs.every(o => groupObjs.includes(o))) {
+      return;
+    }
 
     canvas.discardActiveObject();
-    const sel = new fabric.ActiveSelection(groupObjs, { canvas });
-    canvas.setActiveObject(sel);
+    if (groupObjs.length === 1) {
+      canvas.setActiveObject(groupObjs[0]);
+    } else {
+      const sel = new fabric.ActiveSelection(groupObjs, { canvas });
+      canvas.setActiveObject(sel);
+    }
     canvas.requestRenderAll();
   }
 
