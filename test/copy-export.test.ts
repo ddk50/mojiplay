@@ -18,7 +18,7 @@ interface ExportResult {
 }
 
 const { exportObjectToPngDataUrl } =
-  require('../src/renderer/copy-export') as {
+  require('../src/core/copy-export') as {
     exportObjectToPngDataUrl: (obj: any, multiplier: number) => ExportResult;
   };
 

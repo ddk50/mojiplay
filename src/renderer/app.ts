@@ -1,73 +1,12 @@
 (function () {
   'use strict';
 
-  // ── Logger (IPC → electron-log + DevTools console) ───────────────────────
-  const logger = {
-    debug: (msg: string) => {
-      console.debug(msg);
-      void window.electronAPI?.log?.debug(msg);
-    },
-    info: (msg: string) => {
-      console.info(msg);
-      void window.electronAPI?.log?.info(msg);
-    },
-    warn: (msg: string) => {
-      console.warn(msg);
-      void window.electronAPI?.log?.warn(msg);
-    },
-    error: (msg: string, err?: unknown) => {
-      const stack = err instanceof Error
-        ? `\n${err.stack ?? err.message}`
-        : (err != null ? `\n${String(err)}` : '');
-      const full = msg + stack;
-      console.error(full);
-      void window.electronAPI?.log?.error(full);
-    },
-  };
-
-  // ── Custom menu bar (Claude Desktop 風 HTML メニュー) ──────────────────
-
-  function initMenuBar(): void {
-    const menuItems = document.querySelectorAll('#menu-bar .menu-item');
-
-    function closeAll(): void {
-      menuItems.forEach(mi => mi.classList.remove('is-open'));
-    }
-
-    menuItems.forEach(item => {
-      const label = item.querySelector('.menu-label');
-      if (!label) return;
-
-      label.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const wasOpen = item.classList.contains('is-open');
-        closeAll();
-        if (!wasOpen) item.classList.add('is-open');
-      });
-
-      // ホバーで切り替え (他メニューが開いている時)
-      label.addEventListener('mouseenter', () => {
-        const anyOpen = document.querySelector('#menu-bar .menu-item.is-open');
-        if (anyOpen && anyOpen !== item) {
-          closeAll();
-          item.classList.add('is-open');
-        }
-      });
-    });
-
-    // 外クリックで閉じる
-    document.addEventListener('click', closeAll);
-
-    // アクション実行
-    document.querySelectorAll('#menu-bar .menu-dropdown button[data-action]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const action = (btn as HTMLElement).dataset.action;
-        closeAll();
-        handleMenuAction(action || '');
-      });
-    });
-  }
+  // ロガー: renderer/logger.ts (logger)
+  // トースト: renderer/toast.ts (showToast)
+  // メニュー UI: renderer/menu-bar.ts (initMenuBar)
+  // フォント列挙: renderer/font-enumeration.ts (parseStyle, fontsByFamily,
+  //   populateStyleList, populateFontList, fontFamilySel, fontStyleSel)
+  // アウトライン化変換: renderer/outline-conversion.ts (outlineTextToPath, getFontkitFont)
 
   // メニューアクション → 後で canvas 初期化後に使う関数を参照するため
   // handleMenuAction は関数宣言 (hoisted) で定義し、canvas 依存部分は
@@ -111,7 +50,7 @@
     }
   }
 
-  initMenuBar();
+  initMenuBar(handleMenuAction);
 
   // ── Canvas setup ──────────────────────────────────────────────────────────
 
@@ -133,9 +72,8 @@
   resizeCanvas();
 
   // ── Toolbar references ────────────────────────────────────────────────────
+  // fontFamilySel / fontStyleSel は renderer/font-enumeration.ts で定義済み (cross-file global)。
 
-  const fontFamilySel      = document.getElementById('font-family')          as HTMLSelectElement;
-  const fontStyleSel       = document.getElementById('font-style')            as HTMLSelectElement;
   const fontSizeInput      = document.getElementById('font-size')             as HTMLInputElement;
   const fontColorInput     = document.getElementById('font-color')            as HTMLInputElement;
   const rotationInput      = document.getElementById('rotation')              as HTMLInputElement;
@@ -148,100 +86,9 @@
   const snapPitchInput     = document.getElementById('snap-pitch')            as HTMLInputElement;
   const snapThresholdInput = document.getElementById('snap-threshold')        as HTMLInputElement;
 
-  // ── システムフォント列挙 (Local Font Access API) ──────────────────────────
-  // Electron 29 / Chromium 122+ に標準搭載。main 側で local-fonts 権限を許可済み。
-  // 取得失敗時は index.html のフォールバック Arial / Regular がそのまま残る。
-
-  type StyleInfo = { label: string; weight: number; italic: boolean };
-
-  const WEIGHT_MAP: Record<string, number> = {
-    thin: 100, hairline: 100,
-    extralight: 200, ultralight: 200,
-    light: 300,
-    '': 400, normal: 400, regular: 400, book: 400,
-    medium: 500,
-    semibold: 600, demibold: 600,
-    bold: 700,
-    extrabold: 800, ultrabold: 800,
-    black: 900, heavy: 900,
-  };
-
-  function parseStyle(s: string): StyleInfo {
-    const lower = s.toLowerCase();
-    const italic = /italic|oblique/.test(lower);
-    const key = lower.replace(/italic|oblique/g, '').replace(/\s+/g, '');
-    const weight = WEIGHT_MAP[key] ?? 400;
-    return { label: s || 'Regular', weight, italic };
-  }
-
-  const fontsByFamily = new Map<string, StyleInfo[]>();
-
-  function styleValue(weight: number, italic: boolean): string {
-    return `${weight}|${italic ? 'italic' : 'normal'}`;
-  }
-
-  function populateStyleList(family: string): void {
-    const styles = fontsByFamily.get(family);
-    const previous = fontStyleSel.value;
-    fontStyleSel.innerHTML = '';
-
-    const list: StyleInfo[] = (styles && styles.length > 0)
-      ? styles
-      : [{ label: 'Regular', weight: 400, italic: false }];
-
-    for (const s of list) {
-      const opt = document.createElement('option');
-      opt.value = styleValue(s.weight, s.italic);
-      opt.textContent = s.label;
-      fontStyleSel.appendChild(opt);
-    }
-
-    const values = list.map(s => styleValue(s.weight, s.italic));
-    if (values.includes(previous)) {
-      fontStyleSel.value = previous;
-    } else {
-      const regular = styleValue(400, false);
-      fontStyleSel.value = values.includes(regular) ? regular : values[0];
-    }
-  }
-
-  async function populateFontList(): Promise<void> {
-    if (typeof window.queryLocalFonts !== 'function') return;
-    try {
-      const fonts = await window.queryLocalFonts();
-      if (!fonts.length) return;
-
-      fontsByFamily.clear();
-      for (const f of fonts) {
-        const info = parseStyle(f.style);
-        let arr = fontsByFamily.get(f.family);
-        if (!arr) { arr = []; fontsByFamily.set(f.family, arr); }
-        if (!arr.some(x => x.weight === info.weight && x.italic === info.italic)) {
-          arr.push(info);
-        }
-      }
-      for (const arr of fontsByFamily.values()) {
-        arr.sort((a, b) => (a.weight - b.weight) || (Number(a.italic) - Number(b.italic)));
-      }
-
-      const families = Array.from(fontsByFamily.keys())
-        .sort((a, b) => a.localeCompare(b, 'ja'));
-
-      const previous = fontFamilySel.value;
-      fontFamilySel.innerHTML = '';
-      for (const family of families) {
-        const opt = document.createElement('option');
-        opt.value = family;
-        opt.textContent = family;
-        fontFamilySel.appendChild(opt);
-      }
-      fontFamilySel.value = families.includes(previous) ? previous : families[0];
-      populateStyleList(fontFamilySel.value);
-    } catch (err) {
-      logger.error('[fonts] queryLocalFonts failed', err);
-    }
-  }
-  populateFontList();
+  // システムフォント列挙は renderer/font-enumeration.ts に移動済み。
+  // (parseStyle, fontsByFamily, populateStyleList, populateFontList,
+  //  fontFamilySel, fontStyleSel, styleValue, StyleInfo)
 
   // ── Snap state (select-char モード専用) ──────────────────────────────────
 
@@ -635,186 +482,12 @@
     }
   });
 
-  // ── Toast ─────────────────────────────────────────────────────────────────
+  // showToast は renderer/toast.ts に移動済み。
 
-  function showToast(message: string, isError = false): void {
-    const toast = document.createElement('div');
-    toast.className = 'toast' + (isError ? ' toast-error' : '');
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-  }
-
-  // ── アウトライン化: fabric.Text → fabric.Path ──────────────────────────────
-  // fontkit でフォントファイルを解析し、グリフパスを取得して fabric.Path に
-  // 差し替える。Illustrator の「アウトライン作成」(Cmd+Shift+O) 相当。
-  // fontkit は TTC (TrueType Collection) もネイティブ対応しているため Windows の
-  // 日本語フォント (Meiryo / Yu Gothic / MS Gothic 等) でも動作する。
-  // Phase 1 は変換のみ。アンカー編集は Phase 2 で実装予定のため、今は generic な
-  // fabric.Path として扱う (移動・回転・選択は既存ロジックで動く)。
-
-  // family|weight|italic をキーに fontkit.Font をキャッシュ。失敗時も null を
-  // キャッシュして再試行のコストを避ける。
-  const fontkitFontCache = new Map<string, Promise<fontkit.Font | null>>();
-
-  // TTC の場合 fontkit.create の第2引数で postscriptName を渡してサブフォントを
-  // 選択する必要があるため、{blob, postscriptName} の組で返す。
-  async function loadFontData(
-    family: string, weight: number, italic: boolean
-  ): Promise<{ blob: Blob; postscriptName: string } | null> {
-    if (typeof window.queryLocalFonts !== 'function') return null;
-    try {
-      const all = await window.queryLocalFonts();
-      const sameFamily = all.filter(f => f.family === family);
-      if (sameFamily.length === 0) return null;
-
-      // 1) weight と italic が完全一致するものを優先
-      const exact = sameFamily.find(f => {
-        const info = parseStyle(f.style);
-        return info.weight === weight && info.italic === italic;
-      });
-      let pick: FontData | undefined = exact;
-
-      // 2) なければ italic を合わせつつ最も近い weight
-      if (!pick) {
-        const byDistance = sameFamily
-          .map(f => ({ f, info: parseStyle(f.style) }))
-          .filter(x => x.info.italic === italic)
-          .sort((a, b) =>
-            Math.abs(a.info.weight - weight) - Math.abs(b.info.weight - weight));
-        pick = byDistance[0]?.f ?? sameFamily[0];
-      }
-
-      const blob = await pick.blob();
-      return { blob, postscriptName: pick.postscriptName };
-    } catch (err) {
-      logger.error('[outline] loadFontData failed', err);
-      return null;
-    }
-  }
-
-  function getFontkitFont(
-    family: string, weight: number, italic: boolean
-  ): Promise<fontkit.Font | null> {
-    const key = `${family}|${weight}|${italic}`;
-    const cached = fontkitFontCache.get(key);
-    if (cached) return cached;
-    const fresh = (async () => {
-      const result = await loadFontData(family, weight, italic);
-      if (!result) return null;
-      try {
-        const ab = await result.blob.arrayBuffer();
-        const buf = new Uint8Array(ab);
-
-        // fontkit.create(buf, postscriptName) は、
-        //   - TTC (先頭 'ttcf')          → サブフォント選択
-        //   - 単体フォント (TTF/OTF/...)  → Variable Font のバリエーション選択
-        // という 2 つの意味を持つ。単体フォントで postscriptName を渡すと
-        // fvar/gvar/CFF2 テーブルが必要になり、通常の Arial 等では throw
-        // する。したがって TTC のときだけ postscriptName を渡す。
-        const isTTC = buf[0] === 0x74 && buf[1] === 0x74 &&
-                      buf[2] === 0x63 && buf[3] === 0x66;
-        return isTTC
-          ? fontkit.create(buf, result.postscriptName)
-          : fontkit.create(buf);
-      } catch (err) {
-        logger.error(`[outline] fontkit.create failed for ${key}`, err);
-        return null;
-      }
-    })();
-    fontkitFontCache.set(key, fresh);
-    return fresh;
-  }
-
-  async function outlineTextToPath(ft: fabric.Text): Promise<fabric.Path | null> {
-    const text = ft.text || '';
-    if (!text.trim()) return null;
-
-    const family     = ft.fontFamily || 'Arial';
-    const rawWeight  = ft.fontWeight;
-    const weight     = typeof rawWeight === 'number'
-      ? rawWeight
-      : (String(rawWeight).toLowerCase() === 'bold' ? 700 : 400);
-    const italic     = ft.fontStyle === 'italic';
-    const fontSize   = (ft.fontSize as number) || 72;
-
-    const font = await getFontkitFont(family, weight, italic);
-    if (!font) return null;
-
-    // 単文字前提 (commitIText で 1 文字ごとに分割済み)
-    const cp = text.codePointAt(0);
-    if (cp === undefined) return null;
-    const glyph = font.glyphForCodePoint(cp);
-    if (!glyph) {
-      logger.warn(`[outline] ${family}: no glyph for U+${cp.toString(16).padStart(4, '0')}`);
-      return null;
-    }
-
-    // fontkit のグリフパスは design units (Y-up、baseline=0)。
-    // fabric / canvas は pixel + Y-down なので scale(fs/UPM, -fs/UPM) で
-    // スケール + Y 反転を同時に行う。結果のパスは opentype.js と同じ座標系
-    // (baseline=0、ascender=負値、descender=正値) になる。
-    const scale = fontSize / font.unitsPerEm;
-    const scaledPath = glyph.path.scale(scale, -scale);
-    const pathData = scaledPath.toSVG();
-    const bb = scaledPath.bbox; // { minX, minY, maxX, maxY }
-
-    // 位置計算は純粋関数 computeOutlinePathPosition に切り出し済み
-    // (src/renderer/outline-position.ts, ユニットテストあり)。
-    const { left: pathLeft, top: pathTop } = computeOutlinePathPosition(
-      {
-        left:             ft.left ?? 0,
-        top:              ft.top  ?? 0,
-        fontSize,
-        fontSizeMult:     (ft as any)._fontSizeMult,
-        fontSizeFraction: (ft as any)._fontSizeFraction,
-      },
-      { minX: bb.minX, minY: bb.minY },
-    );
-
-    const ftRect = ft.getBoundingRect(true, true);
-    logger.debug(
-      `[outline] char="${text}" cp=U+${cp.toString(16).padStart(4, '0')}` +
-      ` ft=(${ft.left},${ft.top}) fontSize=${fontSize}` +
-      ` ft.width=${ft.width} ft.height=${ft.height}` +
-      ` ft.boundingRect=(${ftRect.left.toFixed(2)},${ftRect.top.toFixed(2)},${ftRect.width.toFixed(2)},${ftRect.height.toFixed(2)})` +
-      ` bb=(${bb.minX.toFixed(2)},${bb.minY.toFixed(2)},${bb.maxX.toFixed(2)},${bb.maxY.toFixed(2)})` +
-      ` → path=(${pathLeft.toFixed(2)},${pathTop.toFixed(2)})`
-    );
-
-    const sx = (ft.scaleX as number) ?? 1;
-    const sy = (ft.scaleY as number) ?? 1;
-    const origData = (ft as any).data || {};
-
-    // NOTE: angle != 0 の場合、fabric.Path は ink bbox 中心を pivot に回転するため
-    // 元の fabric.Text (text bbox 中心 pivot) とズレが生じる。Phase 2 で修正予定。
-    const p = new fabric.Path(pathData, {
-      left:        pathLeft,
-      top:         pathTop,
-      fill:        ft.fill,
-      angle:       ft.angle,
-      scaleX:      sx,
-      scaleY:      sy,
-      selectable:  ft.selectable,
-      evented:     ft.evented,
-      hasControls: false,
-      hasBorders:  true,
-    } as fabric.IPathOptions);
-    (p as any).data = { ...origData, outlined: true };
-
-    // デバッグ: fabric が実際に保持している値をダンプ。
-    const po = (p as any).pathOffset;
-    const rect = p.getBoundingRect(true, true);
-    logger.debug(
-      `[outline] fabric.Path post-init: p.left=${p.left} p.top=${p.top}` +
-      ` p.width=${p.width} p.height=${p.height}` +
-      ` pathOffset=(${po?.x},${po?.y})` +
-      ` originX=${p.originX} originY=${p.originY}` +
-      ` boundingRect=(${rect.left.toFixed(2)},${rect.top.toFixed(2)},${rect.width.toFixed(2)},${rect.height.toFixed(2)})`
-    );
-
-    return p;
-  }
+  // ── アウトライン化: 選択処理とボタンバインド ─────────────────────────────
+  // 純粋寄りの変換 (outlineTextToPath, getFontkitFont, loadFontData,
+  // fontkitFontCache) は renderer/outline-conversion.ts に移動済み。
+  // canvas 操作を含む outlineSelection / isOutlineable とボタンバインドはここに残す。
 
   function isOutlineable(obj: fabric.Object): boolean {
     const anyObj = obj as any;

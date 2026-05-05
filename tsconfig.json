@@ -8,5 +8,5 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src/main.ts", "src/preload.ts", "src/types/**/*.d.ts"]
+  "include": ["src/main.ts", "src/preload.ts", "src/globals/**/*.d.ts"]
 }

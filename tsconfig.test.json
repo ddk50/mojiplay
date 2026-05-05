@@ -9,5 +9,10 @@
     "rootDir": ".",
     "types": ["node", "jest"]
   },
-  "include": ["test/**/*.ts"]
+  "include": [
+    "test/**/*.ts",
+    "src/core/path/types.ts",
+    "src/core/path/anchors.ts",
+    "src/core/path/fabric-adapter.ts"
+  ]
 }

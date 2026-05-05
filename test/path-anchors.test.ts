@@ -18,8 +18,8 @@
 //   { kind: 'C-c2', cmdIndex }   C の c2 (= 末尾アンカーの incoming)
 //   { kind: 'Q-c',  cmdIndex }   Q の制御点
 //
-// fabric は生タプル形式 (['M', 0, 0] 等) を扱うので、境界変換に
-// fromFabricPath / toFabricPath を使う。
+// fabric の生タプル形式との境界変換 (fromFabricPath / toFabricPath) は
+// path-fabric-adapter.test.ts でテスト。
 
 type Point = { readonly x: number; readonly y: number };
 
@@ -43,18 +43,10 @@ interface PathAnchor {
   readonly subpathStart: boolean;
 }
 
-type FabricPathCommand =
-  | ['M', number, number]
-  | ['L', number, number]
-  | ['C', number, number, number, number, number, number]
-  | ['Q', number, number, number, number]
-  | ['Z'];
-
 const {
   extractAnchors, moveAnchorRigid, moveHandle, evalCubicAt, evalQuadAt,
-  getSegmentStart, splitSegment, removeAnchor,
-  fromFabricPath, toFabricPath, getHandlePoint,
-} = require('../src/renderer/path-anchors') as {
+  getSegmentStart, splitSegment, removeAnchor, getHandlePoint,
+} = require('../src/core/path/anchors') as {
   extractAnchors: (path: ReadonlyArray<PathCommand>) => PathAnchor[];
   moveAnchorRigid: (path: ReadonlyArray<PathCommand>, anchorIndex: number, dx: number, dy: number) => PathCommand[];
   moveHandle: (path: ReadonlyArray<PathCommand>, handle: HandleRef, dx: number, dy: number) => PathCommand[];
@@ -63,8 +55,6 @@ const {
   getSegmentStart: (path: ReadonlyArray<PathCommand>, cmdIndex: number) => Point | null;
   splitSegment: (path: ReadonlyArray<PathCommand>, cmdIndex: number, t: number) => PathCommand[];
   removeAnchor: (path: ReadonlyArray<PathCommand>, anchorIndex: number) => PathCommand[];
-  fromFabricPath: (raw: ReadonlyArray<ReadonlyArray<unknown>>) => PathCommand[];
-  toFabricPath: (path: ReadonlyArray<PathCommand>) => FabricPathCommand[];
   getHandlePoint: (cmd: PathCommand, ref: HandleRef) => Point | null;
 };
 
@@ -548,34 +538,6 @@ describe('removeAnchor', () => {
     expect(result[1]).toEqual(path[1]); // 第1 C は不変
     expect(result[2]).toEqual(L(0, 50)); // (50,100)→(0,50) が直線化
     expect(result[3]).toEqual(path[4]); // 最後の C は不変
-  });
-});
-
-// ── 境界アダプタ ────────────────────────────────────────────────────────
-
-describe('fromFabricPath / toFabricPath', () => {
-  test('全コマンド種別の往復変換が一致', () => {
-    const raw: FabricPathCommand[] = [
-      ['M', 0, 0],
-      ['L', 10, 0],
-      ['C', 1, 2, 3, 4, 5, 5],
-      ['Q', 6, 7, 8, 8],
-      ['Z'],
-    ];
-    const obj = fromFabricPath(raw);
-    expect(obj).toHaveLength(5);
-    expect(obj[0]).toEqual(M(0, 0));
-    expect(obj[1]).toEqual(L(10, 0));
-    expect(obj[2]).toEqual(C(1, 2, 3, 4, 5, 5));
-    expect(obj[3]).toEqual(Q(6, 7, 8, 8));
-    expect(obj[4]).toEqual(Z());
-
-    const roundtrip = toFabricPath(obj);
-    expect(roundtrip).toEqual(raw);
-  });
-
-  test('未知コマンドで例外', () => {
-    expect(() => fromFabricPath([['X', 0, 0]])).toThrow();
   });
 });
 

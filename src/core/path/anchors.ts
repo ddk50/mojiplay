@@ -4,129 +4,12 @@
 // 個別アンカーの剛体移動 (アンカー + 付属ベジェハンドル) を行う。
 // fabric / DOM 非依存で単体テスト可能。
 //
-// outline-position.ts と同様の dual-mode パターン:
-// ブラウザでは module が未定義なのでグローバル関数として機能。
+// 共通型 (Point / PathCommand / HandleRef / PathAnchor) と assertNever は
+// ./types.ts に定義され、module: "none" のグローバル宣言として共有される。
+// fabric.js 生タプル ↔ PathCommand の境界変換は ./fabric-adapter.ts。
+//
+// dual-mode export パターン: ブラウザではグローバル関数として機能、
 // Node test では module.exports として export。
-
-// ── SVG パスコマンド型 (オブジェクト ADT) ────────────────────────────────
-//
-// fabric.Path.path に格納されるのは生タプル形式 (['M', 0, 0] 等) だが、
-// このモジュール内部ではオブジェクト ADT として扱い、
-// 境界の fromFabricPath / toFabricPath で相互変換する。
-//
-// 各コマンドの意味:
-//
-// M / L
-//   to = アンカー位置 (M はサブパス開始、L は直線で繋ぐ)
-//
-// C (Cubic Bézier)
-//   始点      = 直前コマンドの to (現在点)
-//   c1        = 始点側制御点 = 直前アンカーの outgoing handle
-//   c2        = 終点側制御点 = このアンカーの incoming handle
-//   to        = 終点 (このアンカー)
-//
-// Q (Quadratic Bézier)
-//   始点      = 直前コマンドの to
-//   c         = 唯一の制御点 (前後アンカーで共有)
-//   to        = 終点
-//
-// Z
-//   ClosePath。サブパス先頭 M に直線で戻る。
-
-type Point = { readonly x: number; readonly y: number };
-
-type PathCommand =
-  | { readonly type: 'M'; readonly to: Point }
-  | { readonly type: 'L'; readonly to: Point }
-  | { readonly type: 'C'; readonly c1: Point; readonly c2: Point; readonly to: Point }
-  | { readonly type: 'Q'; readonly c: Point; readonly to: Point }
-  | { readonly type: 'Z' };
-
-// ハンドル参照は「どのコマンドの、意味的にどの制御点か」で表現する。
-// paramIndices: [3,4] のようなマジックナンバーを排除し、
-// kind 経由で型安全に該当 Point フィールドにアクセスできる。
-type HandleRef =
-  | { readonly kind: 'C-c1'; readonly cmdIndex: number }  // C命令の c1 (= 直前アンカーの outgoing)
-  | { readonly kind: 'C-c2'; readonly cmdIndex: number }  // C命令の c2 (= 末尾アンカーの incoming)
-  | { readonly kind: 'Q-c';  readonly cmdIndex: number }; // Q命令の c
-
-interface PathAnchor {
-  readonly cmdIndex: number;
-  readonly point: Point;
-  incomingHandle: HandleRef | null;
-  outgoingHandle: HandleRef | null;
-  readonly subpathStart: boolean;
-}
-
-// fabric.js が扱う生タプル形式。境界変換専用。
-type FabricPathCommand =
-  | ['M', number, number]
-  | ['L', number, number]
-  | ['C', number, number, number, number, number, number]
-  | ['Q', number, number, number, number]
-  | ['Z'];
-
-function assertNever(x: never): never {
-  throw new Error(`unexpected variant: ${JSON.stringify(x)}`);
-}
-
-// ── 境界アダプタ ────────────────────────────────────────────────────────
-//
-// fabric.Path.path は ['M', x, y] のようなタプル配列なので、
-// 内部 ADT との境界で必ず変換する。
-
-function fromFabricPath(raw: ReadonlyArray<ReadonlyArray<unknown>>): PathCommand[] {
-  const out: PathCommand[] = [];
-  for (let i = 0; i < raw.length; i++) {
-    const r = raw[i];
-    const t = r[0];
-    switch (t) {
-      case 'M':
-        out.push({ type: 'M', to: { x: r[1] as number, y: r[2] as number } });
-        break;
-      case 'L':
-        out.push({ type: 'L', to: { x: r[1] as number, y: r[2] as number } });
-        break;
-      case 'C':
-        out.push({
-          type: 'C',
-          c1: { x: r[1] as number, y: r[2] as number },
-          c2: { x: r[3] as number, y: r[4] as number },
-          to: { x: r[5] as number, y: r[6] as number },
-        });
-        break;
-      case 'Q':
-        out.push({
-          type: 'Q',
-          c:  { x: r[1] as number, y: r[2] as number },
-          to: { x: r[3] as number, y: r[4] as number },
-        });
-        break;
-      case 'Z':
-        out.push({ type: 'Z' });
-        break;
-      default:
-        throw new Error(`unknown fabric path command: ${String(t)}`);
-    }
-  }
-  return out;
-}
-
-function toFabricPath(path: ReadonlyArray<PathCommand>): FabricPathCommand[] {
-  const out: FabricPathCommand[] = [];
-  for (let i = 0; i < path.length; i++) {
-    const c = path[i];
-    switch (c.type) {
-      case 'M': out.push(['M', c.to.x, c.to.y]); break;
-      case 'L': out.push(['L', c.to.x, c.to.y]); break;
-      case 'C': out.push(['C', c.c1.x, c.c1.y, c.c2.x, c.c2.y, c.to.x, c.to.y]); break;
-      case 'Q': out.push(['Q', c.c.x, c.c.y, c.to.x, c.to.y]); break;
-      case 'Z': out.push(['Z']); break;
-      default: assertNever(c);
-    }
-  }
-  return out;
-}
 
 // ── HandleRef → Point アクセサ ──────────────────────────────────────────
 
@@ -518,10 +401,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports.splitSegment = splitSegment;
   // @ts-ignore
   module.exports.removeAnchor = removeAnchor;
-  // @ts-ignore
-  module.exports.fromFabricPath = fromFabricPath;
-  // @ts-ignore
-  module.exports.toFabricPath = toFabricPath;
   // @ts-ignore
   module.exports.getHandlePoint = getHandlePoint;
 }
