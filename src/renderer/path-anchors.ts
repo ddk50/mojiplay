@@ -52,6 +52,10 @@ type PathCommand =
   | ['Q', number, number, number, number]
   | ['Z'];
 
+function assertNever(x: never): never {
+  throw new Error(`unexpected variant: ${JSON.stringify(x)}`);
+}
+
 interface HandleRef {
   readonly cmdIndex: number;
   readonly paramIndices: readonly [number, number];
@@ -148,6 +152,9 @@ function extractAnchors(path: PathCommand[]): PathAnchor[] {
         }
         break;
       }
+
+      default:
+        assertNever(cmd);
     }
   }
 
@@ -200,6 +207,11 @@ function moveAnchorRigid(
     case 'Q':
       shiftParams(anchor.cmdIndex, 3, 4);
       break;
+    case 'Z':
+      // anchor.cmdIndex は extractAnchors により M/L/C/Q のいずれかしか指さない
+      break;
+    default:
+      assertNever(cmd);
   }
 
   // 付属ハンドルを平行移動
@@ -291,6 +303,8 @@ function getSegmentStart(
       case 'L': return [c[1], c[2]];
       case 'C': return [c[5], c[6]];
       case 'Q': return [c[3], c[4]];
+      case 'Z': break; // Z は始点情報を持たない、さらに前を探す
+      default: assertNever(c);
     }
   }
   return null;
@@ -316,48 +330,58 @@ function splitSegment(
   let first: PathCommand;
   let second: PathCommand;
 
-  if (cmd[0] === 'C') {
-    const [, c1x, c1y, c2x, c2y, p3x, p3y] = cmd;
-    const u = 1 - t;
-    // De Casteljau level 1
-    const q0x = u * p0x + t * c1x;
-    const q0y = u * p0y + t * c1y;
-    const q1x = u * c1x + t * c2x;
-    const q1y = u * c1y + t * c2y;
-    const q2x = u * c2x + t * p3x;
-    const q2y = u * c2y + t * p3y;
-    // level 2
-    const r0x = u * q0x + t * q1x;
-    const r0y = u * q0y + t * q1y;
-    const r1x = u * q1x + t * q2x;
-    const r1y = u * q1y + t * q2y;
-    // level 3 — 分割点
-    const sx = u * r0x + t * r1x;
-    const sy = u * r0y + t * r1y;
+  switch (cmd[0]) {
+    case 'C': {
+      const [, c1x, c1y, c2x, c2y, p3x, p3y] = cmd;
+      const u = 1 - t;
+      // De Casteljau level 1
+      const q0x = u * p0x + t * c1x;
+      const q0y = u * p0y + t * c1y;
+      const q1x = u * c1x + t * c2x;
+      const q1y = u * c1y + t * c2y;
+      const q2x = u * c2x + t * p3x;
+      const q2y = u * c2y + t * p3y;
+      // level 2
+      const r0x = u * q0x + t * q1x;
+      const r0y = u * q0y + t * q1y;
+      const r1x = u * q1x + t * q2x;
+      const r1y = u * q1y + t * q2y;
+      // level 3 — 分割点
+      const sx = u * r0x + t * r1x;
+      const sy = u * r0y + t * r1y;
 
-    first  = ['C', q0x, q0y, r0x, r0y, sx, sy];
-    second = ['C', r1x, r1y, q2x, q2y, p3x, p3y];
-  } else if (cmd[0] === 'Q') {
-    const [, c1x, c1y, p2x, p2y] = cmd;
-    const u = 1 - t;
-    const q0x = u * p0x + t * c1x;
-    const q0y = u * p0y + t * c1y;
-    const q1x = u * c1x + t * p2x;
-    const q1y = u * c1y + t * p2y;
-    const sx = u * q0x + t * q1x;
-    const sy = u * q0y + t * q1y;
+      first  = ['C', q0x, q0y, r0x, r0y, sx, sy];
+      second = ['C', r1x, r1y, q2x, q2y, p3x, p3y];
+      break;
+    }
+    case 'Q': {
+      const [, c1x, c1y, p2x, p2y] = cmd;
+      const u = 1 - t;
+      const q0x = u * p0x + t * c1x;
+      const q0y = u * p0y + t * c1y;
+      const q1x = u * c1x + t * p2x;
+      const q1y = u * c1y + t * p2y;
+      const sx = u * q0x + t * q1x;
+      const sy = u * q0y + t * q1y;
 
-    first  = ['Q', q0x, q0y, sx, sy];
-    second = ['Q', q1x, q1y, p2x, p2y];
-  } else if (cmd[0] === 'L') {
-    const [, lx, ly] = cmd;
-    const sx = p0x + t * (lx - p0x);
-    const sy = p0y + t * (ly - p0y);
+      first  = ['Q', q0x, q0y, sx, sy];
+      second = ['Q', q1x, q1y, p2x, p2y];
+      break;
+    }
+    case 'L': {
+      const [, lx, ly] = cmd;
+      const sx = p0x + t * (lx - p0x);
+      const sy = p0y + t * (ly - p0y);
 
-    first  = ['L', sx, sy];
-    second = ['L', lx, ly];
-  } else {
-    return path.slice() as PathCommand[];
+      first  = ['L', sx, sy];
+      second = ['L', lx, ly];
+      break;
+    }
+    case 'M':
+    case 'Z':
+      return path.slice() as PathCommand[];
+    default:
+      return assertNever(cmd);
   }
 
   const result: PathCommand[] = [];
