@@ -149,6 +149,46 @@ esbuild が import グラフを follow して自動でバンドルに含める�
 - `data` にテキスト専用のフィールドを追加しないでください（以前は `data.baselineY` がありましたが、この方針のために削除されました）。
 - Illustrator、Photoshop、FigmaなどのUX慣習を優先してください（例：Altキーによる一時的な制約解除、Cmd+Shift+Oによるアウトライン化など）。これらは明確な意図を持った操作体系です。
 
+## 将来的な構造改善: ドメイン層に `Selection` を一級概念として置く
+
+現在「現在の選択は何か」というドメイン概念が複数の場所に分散して住んでいます:
+
+- `canvas.getActiveObject()` (fabric の生状態)
+- `host.getActiveObjects()` / `setActiveSelection()` (一応の boundary だが書き手の一つに過ぎない)
+- `menuSelectAll` / `outlineSelection` 等は host を経由せず直接 fabric API を叩く
+- `commitIText` は `hasControls` 等の選択時挙動を per-object のプロパティとして埋め込む
+- `select-char` モードの fabric 自然 selection event は host 不経由
+- アンカー / ハンドルの選択は tool ローカルの `drag` フィールドで管理
+
+加えて `active.type === 'activeSelection'` のような **fabric の文字列型タグでドメインが分岐** しているコードもあり (`syncToolbarToSelection` など)、抽象化の漏れが起きています。
+
+### なぜ必要か
+
+1. **不変条件が構造で守れない**: 例えば「N=1 でも N≥2 でも変形可能なエンティティで wrap される」という cardinality 不変条件が、複数の経路に依存するため一箇所では担保できない。実際 1 文字選択時にハンドルが出ないバグ (`commitIText` の `hasControls: false` を per-object に埋め込んでいたことに起因) はこの分散の結果。
+2. **テストできない**: 選択の振る舞いが fabric の event / 各 tool / 各 menu にまたがって決まるため、純粋関数として spec を書けない。pure function でテスト可能な不変条件にするにはドメイン側が一級概念を持つ必要がある。
+3. **path/anchor 編集の複雑化**: 今後ハンドル選択 / アンカー選択 / 文字選択 / 複数アンカー同時選択 が混在する。一級概念の `Selection` がないと整理しきれなくなる。
+
+### 目指す構造
+
+```
+┌──────────────────────────────────┐
+│  Selection (domain, single SoT)  │  ← 全 read/write はこれ経由
+└─────────┬─────────────┬──────────┘
+          │             │
+   ┌──────▼─────┐  ┌────▼──────────┐
+   │ fabric     │  │ toolbar /     │
+   │ adapter    │  │ tools         │
+   │ (render)   │  │ (subscribe)   │
+   └────────────┘  └───────────────┘
+```
+
+- fabric の selection event は adapter 経由で `Selection` を更新
+- tool / toolbar / outline 等は `Selection` を読み、変更は `Selection` API のみ
+- `Selection` は N=1 / N≥2 / アンカー選択 / ハンドル選択を統一的に表現
+- fabric は render backend として扱う (state holder ではない)
+
+導入タイミングは Phase 2d 以降の選択複雑化が始まる手前あたりが目安。新しい機能を足す際、この方向と整合する形で実装してください (例: 新しい選択経路を追加するなら host 経由を徹底し、fabric API 直叩きを増やさない)。
+
 ## UI言語
 
 ツールバーのラベル、ツールチップ、トーストメッセージには**日本語**を使用しています。新しいユーザー向け文字列を追加する場合も、これに合わせて日本語を維持してください。
