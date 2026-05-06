@@ -1,7 +1,7 @@
 // パス操作の共通型定義 (ドメイン語彙)。
 //
-// path/anchors.ts / path/fabric-adapter.ts などが共有する型と
-// 網羅性チェック用の assertNever ヘルパ。
+// path/anchors.ts / path/fabric-adapter.ts などが共有する型を提供する。
+// 網羅性チェックは `x satisfies never` 構文を使用 (TS 4.9+)。
 
 export type Point = { readonly x: number; readonly y: number };
 
@@ -45,6 +45,3 @@ export interface PathAnchor {
   readonly subpathStart: boolean;
 }
 
-export function assertNever(x: never): never {
-  throw new Error(`unexpected variant: ${JSON.stringify(x)}`);
-}

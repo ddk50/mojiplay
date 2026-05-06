@@ -5,7 +5,6 @@
 // このモジュールは両者の橋渡しを行う唯一の場所。
 
 import type { PathCommand } from './types';
-import { assertNever } from './types';
 
 // fabric.js が扱う生タプル形式
 export type FabricPathCommand =
@@ -62,7 +61,7 @@ export function toFabricPath(path: ReadonlyArray<PathCommand>): FabricPathComman
       case 'C': out.push(['C', c.c1.x, c.c1.y, c.c2.x, c.c2.y, c.to.x, c.to.y]); break;
       case 'Q': out.push(['Q', c.c.x, c.c.y, c.to.x, c.to.y]); break;
       case 'Z': out.push(['Z']); break;
-      default: assertNever(c);
+      default: c satisfies never;
     }
   }
   return out;

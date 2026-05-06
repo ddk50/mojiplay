@@ -7,7 +7,6 @@
 // fabric.js 生タプル ↔ PathCommand の境界変換は ./fabric-adapter.ts。
 
 import type { Point, PathCommand, HandleRef, PathAnchor } from './types';
-import { assertNever } from './types';
 
 // ── HandleRef → Point アクセサ ──────────────────────────────────────────
 
@@ -50,7 +49,7 @@ function withAnchorBodyMoved(cmd: PathCommand, dx: number, dy: number): PathComm
       // anchor.cmdIndex は extractAnchors の仕様により M/L/C/Q のいずれか
       return cmd;
     default:
-      return assertNever(cmd);
+      return cmd satisfies never;
   }
 }
 
@@ -127,7 +126,7 @@ export function extractAnchors(path: ReadonlyArray<PathCommand>): PathAnchor[] {
       }
 
       default:
-        assertNever(cmd);
+        cmd satisfies never;
     }
   }
 
@@ -234,7 +233,7 @@ export function getSegmentStart(
       case 'C': return c.to;
       case 'Q': return c.to;
       case 'Z': break; // Z は始点情報を持たない、さらに前を探す
-      default: assertNever(c);
+      default: c satisfies never;
     }
   }
   return null;
@@ -305,7 +304,7 @@ export function splitSegment(
     case 'Z':
       return path.slice();
     default:
-      return assertNever(cmd);
+      return cmd satisfies never;
   }
 
   const result: PathCommand[] = [];
