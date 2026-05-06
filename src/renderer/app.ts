@@ -200,6 +200,7 @@ function commitIText(it: fabric.IText): void {
     canvas.remove(it);
     canvas.requestRenderAll();
     return;
+    
   }
 
   const groupId    = generateGroupId();
@@ -246,7 +247,7 @@ function commitIText(it: fabric.IText): void {
         fill,
         selectable:  currentMode !== 'text',
         evented:     currentMode !== 'text',
-        hasControls: false,
+        hasControls: true,
         hasBorders:  true,
         data: { groupId, charIndex, sourceText: text }
       });
