@@ -10,6 +10,38 @@
 //   3. onPointerUp で finalize。
 //
 // hover カーソルはセグメント上で 'copy'。
+//
+// ── 分割アルゴリズム (De Casteljau) ────────────────────────────────────
+//
+// onPointerDown が呼ぶ splitSegment(path, cmdIndex, t) は De Casteljau の
+// アルゴリズムでベジェ曲線を 2 本に分割する。Illustrator の「アンカーポイント追加」
+// (+ペン) と同じ操作で、要点は「ヒットした位置 t に新アンカーを打っても
+// 曲線形状を厳密に維持する」こと。
+//
+// なぜ「t における点の位置を求めるだけ」ではダメか:
+//   evalCubicAt(t) で B(t) は出せるが、その点をアンカーにして前後を直線で
+//   繋ぐと元の曲線形状が壊れる。De Casteljau は「分割点」と「分割後の
+//   2 本のベジェに必要な新しい制御点群」を同時に出してくれる。連結すれば
+//   元の曲線と数学的に完全一致 (損失なし)。
+//
+// アルゴリズム本体 (3 次ベジェの場合):
+//   元の制御点 (p0, c1, c2, p3) と t を入力に、線形補間を 3 段重ねる:
+//     level 1: 隣接ペアを t で内分 → q0, q1, q2
+//     level 2: q を内分             → r0, r1
+//     level 3: r を内分             → s (= 分割点 = 新アンカー位置)
+//   分割後の前半は (p0, q0, r0, s)、後半は (s, r1, q2, p3) として連結。
+//   2 次ベジェは 2 段、直線 (L) は単純な内分一発で同じ性質を持つ。
+//   実装は core/path/anchors.ts の splitSegment 内。
+//
+// この時点ではまだ曲線形状は元と同一。ユーザーがドラッグを始めると
+// onPointerMove 内で前後セグメントの一方のハンドル (新アンカー側の
+// c2 / c1) を pointer 方向に向けて再配置するため、ここで初めて
+// 曲線形状が変わる。これは「アンカー追加 → そのままドラッグでハンドル
+// を引っ張り出して曲線を作る」という Illustrator 流の操作感を再現。
+//
+// 関連:
+//   逆操作 (アンカー削除 / -ペンツール) は curve fitting の問題で
+//   De Casteljau では戻せない。pen-remove-tool.ts 参照。
 
 import type { Point, PathCommand } from '../path/types';
 import { splitSegment, getSegmentStart } from '../path/anchors';
