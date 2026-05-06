@@ -136,11 +136,16 @@ esbuild が import グラフを follow して自動でバンドルに含める�
 
 ## 長期的方向性 (新しいコードを書く際の指針)
 
-アウトライン化とアンカーポイント移動 (Phase 2a) は実装済みです。今後は以下を段階的に実装予定:
+実装済み:
+
+- **Phase 2a**: アウトライン化とアンカーポイント移動
+- **Phase 2c**: ベジェハンドル (制御点) の表示・編集 (`core/path/types.ts` の `HandleRef` / `incomingHandle` / `outgoingHandle`、`anchors.ts` の `getHandlePoint` / `moveHandle`、`overlay-layout.ts` の `HandleScreenPos` / `hitTestHandleAt`、`select-char-tool.ts` の handle drag)
+- **Phase 2d (一部)**: アンカーの追加/削除 (`core/tools/pen-add-tool.ts` / `pen-remove-tool.ts`)
+
+今後実装予定:
 
 - **Phase 2b**: bbox 再計算の改善、Undo/Redo、複数アンカー同時選択
-- **Phase 2c**: ベジェハンドル (制御点) の表示・編集
-- **Phase 2d**: アンカーの追加/削除、スムーズ/コーナー変換
+- **Phase 2d (残り)**: スムーズ/コーナー変換
 - **Phase 2e**: アンカードラッグ時のグリッドスナップ
 
 新機能への指針:
