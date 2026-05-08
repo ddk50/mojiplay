@@ -11,6 +11,7 @@
 import { parseStyle } from './font-enumeration';
 import { logger } from './logger';
 import { computeOutlinePathPosition } from '../core/outline-position';
+import { ensureObjectId } from '../core/object-id';
 
 // family|weight|italic をキーに fontkit.Font をキャッシュ。失敗時も null を
 // キャッシュして再試行のコストを避ける。
@@ -168,7 +169,11 @@ export async function outlineTextToPath(ft: fabric.Text): Promise<fabric.Path | 
     hasControls: false,
     hasBorders:  true,
   } as fabric.IPathOptions);
-  (p as any).data = { ...origData, outlined: true };
+  // 元 Text の data から objectId / type を除外してコピー (Path は新 entity なので
+  // 新規 ID を発行する。CLAUDE.md「type が変わる操作は新規 ID を発行する」参照)
+  const { objectId: _oid, type: _t, ...restData } = origData;
+  (p as any).data = { ...restData, outlined: true };
+  ensureObjectId(p as any, 'path');
 
   // デバッグ: fabric が実際に保持している値をダンプ。
   const po = (p as any).pathOffset;

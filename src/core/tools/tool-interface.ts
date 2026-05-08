@@ -18,6 +18,8 @@
 
 import type { Point, PathCommand } from '../path/types';
 import type { Mat2x3 } from '../path/coords';
+import type { Command, ObjectSnapshot } from '../history/types';
+import type { ObjectId } from '../object-id';
 
 // ── 入力 ─────────────────────────────────────────────────────────────────
 
@@ -111,6 +113,11 @@ export interface PathHandle {
 
   // ドラッグ終了時に呼ぶ。bbox / pathOffset 再計算と object:modified 通知をまとめる。
   finalizeEdit(): void;
+
+  // History Command 構築用: object の identity と state-jump 用 snapshot。
+  // pointerDown 時に before を、finalizeEdit 後に after を捕捉して Command に詰める。
+  getId(): ObjectId;
+  captureForHistory(): ObjectSnapshot;
 }
 
 // ── ツールホスト (renderer ファサード) ─────────────────────────────────
@@ -135,6 +142,11 @@ export interface ToolHost {
 
   // テキスト生成 (TextTool が利用)。fabric.IText の生成と編集モード突入は host に閉じる。
   createTextAt(x: number, y: number, props: TextCreateProps): void;
+
+  // History に Command を push する。tool が history を直接持たず host 経由で
+  // push する形にすることで、tool 側を fabric / history 実装から切り離す。
+  // 詳細は CLAUDE.md「Undo/Redo + 永続化に向けた State / Viewport 分離モデル」参照。
+  pushCommand(cmd: Command): void;
 }
 
 // ── ツール ──────────────────────────────────────────────────────────────

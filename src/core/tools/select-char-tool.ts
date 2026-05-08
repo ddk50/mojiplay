@@ -21,6 +21,7 @@ import type {
   Tool, ToolDescriptor, ToolHost, PathHandle, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
+import type { ObjectSnapshot } from '../history/types';
 
 export interface SnapConfig {
   readonly enabled: boolean;
@@ -54,6 +55,8 @@ export class SelectCharTool implements Tool {
   private snap: SnapConfig = { enabled: true, pitch: 8, threshold: 5 };
   private drag: SelectCharDragState | null = null;
   private dragPath: PathHandle | null = null;
+  // History 用: drag 開始時の snapshot を保持し、drag 終了時に Command を構築する
+  private beforeSnapshot: ObjectSnapshot | null = null;
 
   setSnapConfig(cfg: SnapConfig): void {
     this.snap = cfg;
@@ -68,6 +71,7 @@ export class SelectCharTool implements Tool {
   onDeactivate(host: ToolHost): void {
     this.drag = null;
     this.dragPath = null;
+    this.beforeSnapshot = null;
     host.setCursor('');
   }
 
@@ -87,6 +91,7 @@ export class SelectCharTool implements Tool {
         lastWorld: { x: e.worldX, y: e.worldY },
       };
       this.dragPath = path;
+      this.beforeSnapshot = path.captureForHistory();
       return 'consumed';
     }
 
@@ -98,6 +103,7 @@ export class SelectCharTool implements Tool {
         lastWorld: { x: e.worldX, y: e.worldY },
       };
       this.dragPath = path;
+      this.beforeSnapshot = path.captureForHistory();
       return 'consumed';
     }
 
@@ -147,10 +153,26 @@ export class SelectCharTool implements Tool {
   onPointerUp(_e: PointerInput, host: ToolHost): void {
     if (!this.drag || !this.dragPath) return;
     const p = this.dragPath;
+    const before = this.beforeSnapshot;
     this.drag = null;
     this.dragPath = null;
+    this.beforeSnapshot = null;
     p.finalizeEdit();
     host.requestRerender();
+
+    // History: anchor / handle drag が完了したら Command を push。
+    // before/after が同一なら drag が ノーオペだったとみなして push しない。
+    if (before) {
+      const after = p.captureForHistory();
+      if (JSON.stringify(after) !== JSON.stringify(before)) {
+        host.pushCommand({
+          kind: 'objectChanged',
+          objectId: p.getId(),
+          before,
+          after,
+        });
+      }
+    }
   }
 
   onObjectMoving(target: MovingTarget, e: { altKey: boolean }, _host: ToolHost): void {

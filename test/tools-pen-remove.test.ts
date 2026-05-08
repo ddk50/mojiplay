@@ -18,6 +18,10 @@ class FakePathHandle implements PathHandle {
   }
   setCommands(cmds: ReadonlyArray<PathCommand>): void { this.commands = cmds.slice(); }
   finalizeEdit(): void { this.finalizeCount++; }
+  getId(): any { return 'fake-id-1'; }
+  captureForHistory(): any {
+    return { type: 'path', data: { objectId: 'fake-id-1', type: 'path' }, commands: this.commands.slice() };
+  }
 }
 
 class FakeHost implements ToolHost {
@@ -33,6 +37,7 @@ class FakeHost implements ToolHost {
   getAllObjects()      { return []; }
   setActiveSelection() { /* no-op */ }
   createTextAt() { /* no-op */ }
+  pushCommand() { /* no-op */ }
 }
 
 function pointer(x: number, y: number): PointerInput {

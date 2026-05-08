@@ -18,7 +18,8 @@
     "test": "jest"
   },
   "dependencies": {
-    "electron-log": "^5.4.3"
+    "electron-log": "^5.4.3",
+    "ulid": "^3.0.2"
   },
   "devDependencies": {
     "@types/fabric": "^5.3.11",

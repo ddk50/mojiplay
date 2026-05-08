@@ -1,14 +1,12 @@
 // renderer エントリーポイント。esbuild が IIFE format でバンドル出力するので
 // 本ファイルを真の ES モジュールとして書く (top-level コードはバンドルの IIFE 内で実行)。
 
-import type { PathCommand } from '../core/path/types';
 import type { Mat2x3, PathTransform } from '../core/path/coords';
 import { pathLocalToScreen } from '../core/path/coords';
-import { fromFabricPath, toFabricPath } from '../core/path/fabric-adapter';
+import { fromFabricPath } from '../core/path/fabric-adapter';
 import { computeOverlayLayout } from '../core/tools/overlay-layout';
 import type {
-  Tool, ToolHost, ObjectHandle, PathHandle, PathSnapshot,
-  PointerInput, TextCreateProps,
+  Tool, PointerInput, TextCreateProps,
 } from '../core/tools/tool-interface';
 import { SelectCharTool } from '../core/tools/select-char-tool';
 import { SelectGroupTool } from '../core/tools/select-group-tool';
@@ -16,8 +14,11 @@ import { TextTool } from '../core/tools/text-tool';
 import { PenAddTool } from '../core/tools/pen-add-tool';
 import { PenRemoveTool } from '../core/tools/pen-remove-tool';
 import { exportObjectToPngDataUrl } from '../core/copy-export';
+import { ensureObjectId } from '../core/object-id';
+import type { ObjectId } from '../core/object-id';
+import type { Command } from '../core/history/types';
 
-import { logger } from './logger';
+import { logger, fmtObj } from './logger';
 import { showToast } from './toast';
 import { initMenuBar } from './menu-bar';
 import {
@@ -25,6 +26,7 @@ import {
 } from './font-enumeration';
 import { outlineTextToPath } from './outline-conversion';
 import { buildToolbar } from './toolbar';
+import { createState } from './state';
 
 // メニューアクション → 後で canvas 初期化後に使う関数を参照するため
 // handleMenuAction は関数宣言 (hoisted) で定義し、canvas 依存部分は
@@ -36,10 +38,10 @@ function handleMenuAction(action: string): void {
       if (typeof doCopy === 'function') doCopy();
       break;
     case 'undo':
-      void window.electronAPI?.undo();
+      handleUndo();
       break;
     case 'redo':
-      void window.electronAPI?.redo();
+      handleRedo();
       break;
     case 'paste':
       void window.electronAPI?.paste();
@@ -94,6 +96,11 @@ function resizeCanvas(): void {
 
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
+
+// State: fabric を内包し、ToolHost interface + History API + 永続化 API を提供。
+// fabric event hook (mouse:down / object:modified による history 配線) も state 内部。
+// 詳細は CLAUDE.md「Tool との関係」「Tool-driven vs fabric-driven の区別」参照。
+const state = createState(canvas, { historyMax: 100 });
 
 // ── Toolbar references ────────────────────────────────────────────────────
 // fontFamilySel / fontStyleSel は renderer/font-enumeration.ts で定義済み (cross-file global)。
@@ -155,8 +162,8 @@ function setMode(m: Mode): void {
   }
 
   if (prev !== m) {
-    tools[prev].onDeactivate(toolHost);
-    tools[m].onActivate(toolHost);
+    tools[prev].onDeactivate(state);
+    tools[m].onActivate(state);
   }
 
   const isSelectMode = m === 'select-group' || m === 'select-char';
@@ -227,6 +234,11 @@ function commitIText(it: fabric.IText): void {
   const lineHeightPx = fontSize * ((it.lineHeight as number) || 1.16);
 
   let charIndex = 0;
+  // History: 作成された各 char を objectCreated Command として捕捉、commit 後に
+  // 一括で compound として push (= 1 step で N 個の char をまとめて undo/redo)。
+  // IText 自体は ephemeral (編集中にしか存在しない) なので履歴対象外。undo は
+  // 「commit 直前の canvas 状態」 = 「これらの char が無い状態」に戻す。
+  const createdCommands: Command[] = [];
 
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li];
@@ -251,14 +263,29 @@ function commitIText(it: fabric.IText): void {
         hasBorders:  true,
         data: { groupId, charIndex, sourceText: text }
       });
+      const objectId = ensureObjectId(obj as any, 'text');
 
       canvas.add(obj);
+      createdCommands.push({
+        kind: 'objectCreated',
+        objectId,
+        after: state.captureObjectSnapshot(obj),
+      });
       charIndex++;
     }
   }
 
   canvas.remove(it);
   canvas.requestRenderAll();
+
+  if (createdCommands.length === 1) {
+    state.pushCommand(createdCommands[0]);
+  } else if (createdCommands.length > 1) {
+    state.pushCommand({ kind: 'compound', commands: createdCommands });
+  }
+  if (createdCommands.length > 0) {
+    logger.debug(`[history] push commitIText: ${createdCommands.length} chars`);
+  }
 
   const vt = canvas.viewportTransform;
   logger.debug(
@@ -268,17 +295,10 @@ function commitIText(it: fabric.IText): void {
   );
 }
 
-// オブジェクトが移動／スケール／回転された時の最終位置をログ
-canvas.on('object:modified', (e: fabric.IEvent) => {
-  const o = e.target as any;
-  if (!o) return;
-  const vt = canvas.viewportTransform;
-  logger.debug(
-    `[object:modified] type=${o.type} left=${o.left} top=${o.top}` +
-    ` data.groupId=${o.data?.groupId ?? '-'}` +
-    ` vt=[${vt?.map((n: number) => n.toFixed(3)).join(',')}]`
-  );
-});
+// fabric-driven な transform (drag / scale / rotate via selection controls) を
+// objectChanged Command として履歴に積む処理は state.ts (createState 内の
+// canvas event hook) に移動した。tool-driven な finalizeDrag からの fire は
+// e.action が無いので state 側で skip される。
 
 // テキスト生成 (mouse:down) は TextTool に分離済み。配線は後段の
 // ツールディスパッチャで onCanvasMouseDown を呼ぶ形に統一されている。
@@ -310,8 +330,28 @@ canvas.on('text:editing:exited', (e: fabric.IEvent) => {
 function applyToSelection(props: Partial<fabric.ITextOptions>): void {
   const active = canvas.getActiveObjects();
   if (!active.length) return;
-  active.forEach(obj => obj.set(props as Partial<fabric.Object>));
+
+  // History: 各 object の before/after snapshot を取って Command 化
+  const cmds: Command[] = [];
+  for (const obj of active) {
+    const id = (obj as any).data?.objectId as ObjectId | undefined;
+    if (!id) continue;
+    const before = state.captureObjectSnapshot(obj);
+    obj.set(props as Partial<fabric.Object>);
+    const after = state.captureObjectSnapshot(obj);
+    if (JSON.stringify(after) !== JSON.stringify(before)) {
+      cmds.push({ kind: 'objectChanged', objectId: id, before, after });
+    }
+  }
   canvas.requestRenderAll();
+
+  if (cmds.length === 1) {
+    state.pushCommand(cmds[0]);
+    logger.debug('[history] push toolbar property change');
+  } else if (cmds.length > 1) {
+    state.pushCommand({ kind: 'compound', commands: cmds });
+    logger.debug(`[history] push compound (toolbar) ${cmds.length} changes`);
+  }
 }
 
 function currentFontStyle(): { fontWeight: number; fontStyle: 'normal' | 'italic' } {
@@ -389,7 +429,7 @@ canvas.on('object:moving', (e: fabric.IEvent) => {
       setTop:  (v: number) => target.set({ top:  v }),
     },
     { altKey: !!mouseEvt?.altKey },
-    toolHost,
+    state,
   );
 
   target.setCoords();
@@ -431,9 +471,32 @@ function menuSelectAll(): void {
 function menuDeleteSelection(): void {
   const selected = canvas.getActiveObjects();
   if (!selected.length) return;
+
+  // History: 削除前に各 object の snapshot を捕捉、compound として push。
+  const cmds: Command[] = [];
+  for (const obj of selected) {
+    const id = (obj as any).data?.objectId as ObjectId | undefined;
+    if (id) {
+      cmds.push({
+        kind: 'objectDeleted',
+        objectId: id,
+        before: state.captureObjectSnapshot(obj),
+      });
+    }
+  }
+
   selected.forEach(obj => canvas.remove(obj));
   canvas.discardActiveObject();
   canvas.renderAll();
+
+  if (cmds.length === 1) {
+    state.pushCommand(cmds[0]);
+  } else if (cmds.length > 1) {
+    state.pushCommand({ kind: 'compound', commands: cmds });
+  }
+  if (cmds.length > 0) {
+    logger.debug(`[history] push delete: ${cmds.length} object(s)`);
+  }
 }
 
 (document.getElementById('btn-select-all') as HTMLButtonElement).addEventListener('click', menuSelectAll);
@@ -531,9 +594,32 @@ async function outlineSelection(): Promise<void> {
 
   // discardActiveObject は最上部で既に実行済み (ActiveSelection の子の座標を
   // 世界座標に戻すため)。ここでは不要。
+  // History: 各 Text→Path 変換を「Text 削除 + Path 作成」の compound として
+  // まとめて 1 step push (= undo すれば全 Text が戻り、redo すれば全 Path が再生成)。
+  const outlineCommands: Command[] = [];
   for (const { ft, path } of succeeded) {
+    const ftId = (ft as any).data?.objectId as ObjectId | undefined;
+    const pathId = (path as any).data?.objectId as ObjectId | undefined;
+    if (ftId) outlineCommands.push({
+      kind: 'objectDeleted',
+      objectId: ftId,
+      before: state.captureObjectSnapshot(ft),
+    });
     canvas.remove(ft);
     canvas.add(path);
+    if (pathId) outlineCommands.push({
+      kind: 'objectCreated',
+      objectId: pathId,
+      after: state.captureObjectSnapshot(path),
+    });
+  }
+  if (outlineCommands.length === 1) {
+    state.pushCommand(outlineCommands[0]);
+  } else if (outlineCommands.length > 1) {
+    state.pushCommand({ kind: 'compound', commands: outlineCommands });
+  }
+  if (outlineCommands.length > 0) {
+    logger.debug(`[history] push outline: ${succeeded.length} text(s) outlined`);
   }
 
   // NOTE: ここで setActiveObject(path) を呼ぶと 'selection:created' が発火し、
@@ -581,35 +667,21 @@ const HANDLE_STROKE     = '#0066ff';
 // 描画ごとに layout を計算しても十分軽い)。ヒットテスト関数も core/tools/
 // overlay-layout.ts の hitTestAnchorAt / hitTestHandleAt を直接ツールが利用する。
 
-function getEditablePath(): fabric.Path | null {
-  if (currentMode !== 'select-char' && currentMode !== 'pen-add' && currentMode !== 'pen-remove') return null;
-  const obj = canvas.getActiveObject();
-  if (!obj || obj.type !== 'path') return null;
-  if (!(obj as any).data?.outlined) return null;
-  return obj as fabric.Path;
-}
-
 function drawAnchorOverlay(): void {
+  // 編集モードでなければ overlay 描画は不要。fabric は contextTop に範囲選択
+  // (marquee) や free-drawing を描画するので、我々が無条件に clearContext すると
+  // それらが消えてしまう (回帰防止)。
+  if (currentMode !== 'select-char' && currentMode !== 'pen-add' && currentMode !== 'pen-remove') return;
+  const path = state.getActivePath();
+  if (!path) return;
   const ctx = (canvas as any).contextTop as CanvasRenderingContext2D;
-  const path = getEditablePath();
-  if (!path || !ctx) {
-    // 編集対象パスが無い場合は contextTop に手を出さない。
-    // fabric は contextTop に範囲選択 (marquee) や free-drawing を描画するので、
-    // 我々が無条件に clearContext すると marquee が消えてしまう (回帰防止)。
-    return;
-  }
+  if (!ctx) return;
   canvas.clearContext(ctx);
 
-  const rawCmds = (path as any).path as ReadonlyArray<ReadonlyArray<unknown>> | undefined;
-  if (!rawCmds) return;
-  const cmds = fromFabricPath(rawCmds);
+  const snapshot = path.snapshot();
 
   const half = ANCHOR_MARKER_PX / 2;
-  const layout = computeOverlayLayout(
-    { commands: cmds, pathMatrix: path.calcTransformMatrix() as unknown as Mat2x3,
-      pathOffset: { x: (path as any).pathOffset.x, y: (path as any).pathOffset.y } },
-    canvas.viewportTransform as unknown as Mat2x3,
-  );
+  const layout = computeOverlayLayout(snapshot, state.getViewportMatrix());
   const aCache = layout.anchors;
   const hCache = layout.handles;
 
@@ -660,79 +732,17 @@ function clearAnchorState(): void {
   if (ctx) canvas.clearContext(ctx);
 }
 
-// ── 共通ヘルパー ────────────────────────────────────────────────────
-
-/** ドラッグ終了時の bbox 再計算 + pathOffset 補正 */
-function finalizeDrag(p: fabric.Path): void {
-  const oldPO = { x: (p as any).pathOffset.x, y: (p as any).pathOffset.y };
-  (fabric.Polyline.prototype as any)._setPositionDimensions.call(p, {
-    left: p.left,
-    top: p.top,
-  });
-  const newPO = (p as any).pathOffset as { x: number; y: number };
-  const dxLocal = oldPO.x - newPO.x;
-  const dyLocal = oldPO.y - newPO.y;
-  const sx = (p.scaleX as number) ?? 1;
-  const sy = (p.scaleY as number) ?? 1;
-  const rad = ((p.angle as number) ?? 0) * Math.PI / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  p.left = (p.left ?? 0) + dxLocal * sx * cos - dyLocal * sy * sin;
-  p.top  = (p.top  ?? 0) + dxLocal * sx * sin + dyLocal * sy * cos;
-  p.setCoords();
-  canvas.fire('object:modified', { target: p } as any);
-}
-
 // ── SelectCharTool 配線 ────────────────────────────────────────────
 //
 // 白矢印モードのアンカー/ハンドルドラッグとホバー判定は core/tools/select-char-tool.ts に
-// 抽出済み。ここでは fabric.Path をツール抽象 (PathHandle) に橋渡しする adapter と、
-// DOM/fabric イベントを現在ツールへ転送する dispatcher。
-// 各ツールは core/tools/* に抽象化されており、本ブロックは fabric.Path /
-// fabric.IText / fabric.ActiveSelection との橋渡しのみを行う。
+// 抽出済み。fabric.Path → PathHandle の橋渡しと finalizeDrag は
+// renderer/fabric-path-handle.ts に抽出済み (history adapter からも参照される)。
+// ここでは DOM/fabric イベントを現在ツールへ転送する dispatcher を担当する。
 
 const upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement;
 
-function makeFabricPathHandle(p: fabric.Path): PathHandle {
-  return {
-    snapshot(): PathSnapshot {
-      return {
-        commands:   fromFabricPath((p as any).path as ReadonlyArray<ReadonlyArray<unknown>>),
-        pathMatrix: p.calcTransformMatrix() as unknown as Mat2x3,
-        pathOffset: { x: (p as any).pathOffset.x, y: (p as any).pathOffset.y },
-      };
-    },
-    setCommands(cmds: ReadonlyArray<PathCommand>): void {
-      (p as any).path = toFabricPath(cmds);
-      (p as any).dirty = true;
-    },
-    finalizeEdit(): void {
-      finalizeDrag(p);
-    },
-  };
-}
-
-// ObjectHandle は SelectGroupTool 用。fabric.Object との対応関係を内部に保つので
-// setActiveSelection では _obj を取り出して fabric API を呼ぶ。
-//
-// 重要: 同じ fabric.Object に対しては常に同じ handle instance を返す
-// (canonical 化)。SelectGroupTool は alreadyExpanded 判定で identity (===) を
-// 使うため、毎回別 instance を返すと「展開済み」を検出できず無限再帰し、
-// fabric の drag state を破壊する (オブジェクトが画面外に飛ぶ・mouseup で
-// 選択解除されない等の症状)。WeakMap で fabric.Object が GC されると自動で
-// 抜けるのでメモリリークも無い。
-const objectHandleCache = new WeakMap<fabric.Object, ObjectHandle & { _obj: fabric.Object }>();
-function makeFabricObjectHandle(o: fabric.Object): ObjectHandle & { _obj: fabric.Object } {
-  let h = objectHandleCache.get(o);
-  if (!h) {
-    h = {
-      getGroupId: () => (o as any).data?.groupId,
-      _obj: o,
-    };
-    objectHandleCache.set(o, h);
-  }
-  return h;
-}
+// ObjectHandle のキャッシュ + makeFabricObjectHandle / makeFabricPathHandle は
+// renderer/state.ts に移動済 (state が canonical 化を内包)。
 
 function currentTextProps(): TextCreateProps {
   const { fontWeight, fontStyle } = currentFontStyle();
@@ -745,60 +755,32 @@ function currentTextProps(): TextCreateProps {
   };
 }
 
-const toolHost: ToolHost = {
-  getActivePath(): PathHandle | null {
-    const p = getEditablePath();
-    return p ? makeFabricPathHandle(p) : null;
-  },
-  getViewportMatrix(): Mat2x3 {
-    return canvas.viewportTransform as unknown as Mat2x3;
-  },
-  requestRerender(): void {
-    canvas.requestRenderAll();
-  },
-  setCursor(c: string): void {
-    upperCanvas.style.cursor = c;
-  },
-  getActiveObjects(): ReadonlyArray<ObjectHandle> {
-    const active = canvas.getActiveObject();
-    if (!active) return [];
-    const objs: fabric.Object[] = active.type === 'activeSelection'
-      ? (active as fabric.ActiveSelection).getObjects()
-      : [active];
-    return objs.map(makeFabricObjectHandle);
-  },
-  getAllObjects(): ReadonlyArray<ObjectHandle> {
-    return canvas.getObjects().map(makeFabricObjectHandle);
-  },
-  setActiveSelection(handles: ReadonlyArray<ObjectHandle>): void {
-    const objs = handles.map(h => (h as any)._obj as fabric.Object);
-    canvas.discardActiveObject();
-    if (objs.length === 1) {
-      canvas.setActiveObject(objs[0]);
-    } else if (objs.length > 1) {
-      const sel = new fabric.ActiveSelection(objs, { canvas });
-      canvas.setActiveObject(sel);
-    }
-    canvas.requestRenderAll();
-  },
-  createTextAt(x: number, y: number, props: TextCreateProps): void {
-    const it = new fabric.IText('', {
-      left:       x,
-      top:        y,
-      fontFamily: props.fontFamily,
-      fontSize:   props.fontSize,
-      fontWeight: props.fontWeight,
-      fontStyle:  props.fontStyle,
-      fill:       props.fill,
-      selectable: true,
-      evented:    true,
-    });
-    canvas.add(it);
-    canvas.setActiveObject(it);
-    it.enterEditing();
-    (it as any).hiddenTextarea?.focus();
-  },
-};
+// FabricToolHost / makeFabricObjectHandle / fabric event hook / handleUndo /
+// handleRedo / historyStack / makeFabricPathHandle / snapshot / history-adapter は
+// 全て renderer/state.ts の createState に集約済。app.ts は state を経由して
+// fabric を操作する (CLAUDE.md「Tool との関係」参照)。
+
+function handleUndo(): void { state.undo(); }
+function handleRedo(): void { state.redo(); }
+
+// Cmd/Ctrl+Z = undo、Cmd/Ctrl+Shift+Z = redo。
+// IText 編集中は browser 任せ (= bypass) — fabric.IText は内蔵 undo を持たないので
+// 文字編集の細かい undo は無いが、global undo で commit 前の text が消えるのを避ける。
+document.addEventListener('keydown', (e: KeyboardEvent) => {
+  const active = canvas.getActiveObject() as fabric.IText | null;
+  if ((active as any)?.isEditing) return;
+  const meta = e.ctrlKey || e.metaKey;
+  if (!meta) return;
+  if (e.key === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    e.stopPropagation();
+    handleUndo();
+  } else if ((e.key === 'Z') || (e.key === 'z' && e.shiftKey)) {
+    e.preventDefault();
+    e.stopPropagation();
+    handleRedo();
+  }
+}, true);
 
 // ツールインスタンス。SelectCharTool だけは snap 設定の動的注入があるので
 // 個別変数で保持し、map にも入れる。
@@ -851,19 +833,19 @@ function buildPointerInput(e: MouseEvent): PointerInput {
 // document-level mousemove/up でドラッグ追跡し、fabric 伝播を抑止する。
 upperCanvas.addEventListener('mousedown', (e: MouseEvent) => {
   const tool = tools[currentMode];
-  const result = tool.onPointerDown(buildPointerInput(e), toolHost);
+  const result = tool.onPointerDown(buildPointerInput(e), state);
   if (result !== 'consumed') return;
 
   e.stopImmediatePropagation();
   e.preventDefault();
 
   const onMove = (me: MouseEvent) => {
-    tool.onPointerMove(buildPointerInput(me), toolHost);
+    tool.onPointerMove(buildPointerInput(me), state);
   };
   const onUp = (me: MouseEvent) => {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
-    tool.onPointerUp(buildPointerInput(me), toolHost);
+    tool.onPointerUp(buildPointerInput(me), state);
   };
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
@@ -874,7 +856,7 @@ upperCanvas.addEventListener('mousedown', (e: MouseEvent) => {
 upperCanvas.addEventListener('mousemove', (e: MouseEvent) => {
   const tool = tools[currentMode];
   if (tool.isDragging()) return;
-  tool.onPointerMove(buildPointerInput(e), toolHost);
+  tool.onPointerMove(buildPointerInput(e), state);
 }, true);
 
 // fabric の mouse:down (fabric の hit-test 後)。TextTool が空き領域クリックで
@@ -883,7 +865,7 @@ canvas.on('mouse:down', (opt) => {
   const w = canvas.getPointer(opt.e as MouseEvent);
   tools[currentMode].onCanvasMouseDown({
     worldX: w.x, worldY: w.y, hasTarget: !!opt.target,
-  }, toolHost);
+  }, state);
 });
 
 // ペンツール (PenAddTool / PenRemoveTool) と関連ヘルパは core/tools/* に抽出済み。
@@ -894,12 +876,12 @@ canvas.on('mouse:down', (opt) => {
 canvas.on('selection:cleared', clearAnchorState);
 canvas.on('selection:created', () => {
   clearAnchorState();
-  tools[currentMode].onSelectionChanged(toolHost);
+  tools[currentMode].onSelectionChanged(state);
   syncToolbarToSelection();
 });
 canvas.on('selection:updated', () => {
   clearAnchorState();
-  tools[currentMode].onSelectionChanged(toolHost);
+  tools[currentMode].onSelectionChanged(state);
   syncToolbarToSelection();
 });
 canvas.on('object:removed', () => {
@@ -923,7 +905,7 @@ async function copySelectionAsPng(): Promise<void> {
     logger.debug('[copy] no active object, skipping');
     return;
   }
-  logger.debug(`[copy] active type=${active.type}`);
+  logger.debug(`[copy] active=${fmtObj(active)}`);
 
   try {
     // exportObjectToPngDataUrl は typed wrapper で、toCanvasElement に

@@ -44,6 +44,11 @@ class FakePathHandle implements PathHandle {
   finalizeEdit(): void {
     this.finalizeCount++;
   }
+  getId(): any { return 'fake-id-1'; }
+  captureForHistory(): any {
+    // テスト用 snapshot: 現在の commands を含めて return (前後比較で diff が分かるように)
+    return { type: 'path', data: { objectId: 'fake-id-1', type: 'path' }, commands: this.commands.slice() };
+  }
 }
 
 class FakeHost implements ToolHost {
@@ -59,6 +64,8 @@ class FakeHost implements ToolHost {
   getAllObjects():    ReadonlyArray<ObjectHandle> { return []; }
   setActiveSelection(_objs: ReadonlyArray<ObjectHandle>): void { /* no-op */ }
   createTextAt(_x: number, _y: number, _props: TextCreateProps): void { /* no-op */ }
+  public commands: any[] = [];
+  pushCommand(cmd: any): void { this.commands.push(cmd); }
 }
 
 function pointer(opts: Partial<PointerInput> & { x: number; y: number }): PointerInput {

@@ -17,6 +17,7 @@ class FakeHost implements ToolHost {
   getActiveObjects()  { return []; }
   getAllObjects()     { return []; }
   setActiveSelection(){}
+  pushCommand()       {}
 }
 
 const PROPS: TextCreateProps = {

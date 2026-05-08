@@ -40,9 +40,18 @@ export class PenRemoveTool implements Tool {
     // removeAnchor が拒否した場合 (アンカー数不足) は配列長が同じなので変更しない
     if (newCmds.length === snapshot.commands.length) return 'consumed';
 
+    // History: 削除前に before を捕捉
+    const before = path.captureForHistory();
     path.setCommands(newCmds);
     path.finalizeEdit();
     host.requestRerender();
+
+    host.pushCommand({
+      kind: 'objectChanged',
+      objectId: path.getId(),
+      before,
+      after: path.captureForHistory(),
+    });
     return 'consumed';
   }
 

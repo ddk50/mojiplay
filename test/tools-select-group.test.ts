@@ -24,6 +24,7 @@ class FakeHost implements ToolHost {
   requestRerender()   { /* no-op */ }
   setCursor(_c: string) { /* no-op */ }
   createTextAt() { /* no-op */ }
+  pushCommand() { /* no-op */ }
 }
 
 describe('SelectGroupTool', () => {
@@ -135,6 +136,7 @@ describe('SelectGroupTool: canonical handle contract (回帰テスト)', () => {
       requestRerender()   { /* no-op */ },
       setCursor(_c)       { /* no-op */ },
       createTextAt()      { /* no-op */ },
+      pushCommand()       { /* no-op */ },
     };
 
     tool.onSelectionChanged(host);
@@ -165,6 +167,7 @@ describe('SelectGroupTool: canonical handle contract (回帰テスト)', () => {
       requestRerender()   { /* no-op */ },
       setCursor(_c)       { /* no-op */ },
       createTextAt()      { /* no-op */ },
+      pushCommand()       { /* no-op */ },
     };
 
     tool.onSelectionChanged(buggyHost);

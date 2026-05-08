@@ -1,5 +1,21 @@
 // IPC → electron-log + DevTools console を束ねるロガー。
 
+/**
+ * fabric.Object を log に埋めるときの formatter。
+ * 例: "text:01HK7A12" / "path:01HK7B34" / "<noid:i-text>" / "<null>"
+ *
+ * 規律: log 出力で fabric.Object を識別したい場合は必ずこの関数を経由する
+ * (生 ULID を log に出さない)。
+ */
+export function fmtObj(obj: fabric.Object | null | undefined): string {
+  if (!obj) return '<null>';
+  const d = (obj as any).data;
+  if (d?.type && d?.objectId) {
+    return `${d.type}:${String(d.objectId).slice(0, 8)}`;
+  }
+  return `<noid:${(obj as any).type ?? '?'}>`;
+}
+
 export const logger = {
   debug: (msg: string) => {
     console.debug(msg);

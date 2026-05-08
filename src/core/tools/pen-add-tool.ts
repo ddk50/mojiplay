@@ -48,6 +48,7 @@ import { splitSegment, getSegmentStart } from '../path/anchors';
 import type { PathTransform } from '../path/coords';
 import { screenToPathLocal } from '../path/coords';
 import { findClosestSegment } from './segment-hit';
+import type { ObjectSnapshot } from '../history/types';
 import type {
   Tool, ToolDescriptor, ToolHost, PathHandle, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
@@ -79,6 +80,7 @@ export class PenAddTool implements Tool {
 
   private drag: PenAddDragState | null = null;
   private dragPath: PathHandle | null = null;
+  private beforeSnapshot: ObjectSnapshot | null = null;
 
   isDragging(): boolean { return this.drag !== null; }
 
@@ -86,6 +88,7 @@ export class PenAddTool implements Tool {
   onDeactivate(host: ToolHost): void {
     this.drag = null;
     this.dragPath = null;
+    this.beforeSnapshot = null;
     host.setCursor('');
   }
 
@@ -123,6 +126,7 @@ export class PenAddTool implements Tool {
     const prev = prevPt ?? anchor;
     const next = nextCmd.to;
 
+    this.beforeSnapshot = path.captureForHistory();
     path.setCommands(newPath);
     this.drag = { cmdIndex: hit.cmdIndex, origCmdType, anchor, prev, next };
     this.dragPath = path;
@@ -203,10 +207,22 @@ export class PenAddTool implements Tool {
   onPointerUp(_e: PointerInput, host: ToolHost): void {
     if (!this.drag || !this.dragPath) return;
     const p = this.dragPath;
+    const before = this.beforeSnapshot;
     this.drag = null;
     this.dragPath = null;
+    this.beforeSnapshot = null;
     p.finalizeEdit();
     host.requestRerender();
+
+    // History: アンカー追加が完了したら Command を push (anchor 追加は必ず差分が出る)
+    if (before) {
+      host.pushCommand({
+        kind: 'objectChanged',
+        objectId: p.getId(),
+        before,
+        after: p.captureForHistory(),
+      });
+    }
   }
 
   onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _host: ToolHost): void { /* no-op */ }
