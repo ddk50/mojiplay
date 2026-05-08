@@ -55,6 +55,15 @@ function withAnchorBodyMoved(cmd: PathCommand, dx: number, dy: number): PathComm
 
 // ── extractAnchors ──────────────────────────────────────────────────────
 
+// 同一点判定の許容誤差。fontkit の toSVG() は座標を 0.01 精度に丸めるので、
+// 同じ glyph 点は浮動小数点的に厳密一致するはず。1e-6 で十分。
+const COINCIDENT_EPSILON = 1e-6;
+
+function pointsEqual(a: Point, b: Point): boolean {
+  return Math.abs(a.x - b.x) < COINCIDENT_EPSILON &&
+         Math.abs(a.y - b.y) < COINCIDENT_EPSILON;
+}
+
 export function extractAnchors(path: ReadonlyArray<PathCommand>): PathAnchor[] {
   const anchors: PathAnchor[] = [];
   let subpathStartIdx = -1;
@@ -70,6 +79,7 @@ export function extractAnchors(path: ReadonlyArray<PathCommand>): PathAnchor[] {
           incomingHandle: null,
           outgoingHandle: null,
           subpathStart: true,
+          coincidentClosingCmdIndex: null,
         });
         break;
 
@@ -80,6 +90,7 @@ export function extractAnchors(path: ReadonlyArray<PathCommand>): PathAnchor[] {
           incomingHandle: null,
           outgoingHandle: null,
           subpathStart: false,
+          coincidentClosingCmdIndex: null,
         });
         break;
 
@@ -92,6 +103,7 @@ export function extractAnchors(path: ReadonlyArray<PathCommand>): PathAnchor[] {
           incomingHandle: { kind: 'C-c2', cmdIndex: i },
           outgoingHandle: null,
           subpathStart: false,
+          coincidentClosingCmdIndex: null,
         });
         break;
       }
@@ -105,22 +117,44 @@ export function extractAnchors(path: ReadonlyArray<PathCommand>): PathAnchor[] {
           incomingHandle: { kind: 'Q-c', cmdIndex: i },
           outgoingHandle: null,
           subpathStart: false,
+          coincidentClosingCmdIndex: null,
         });
         break;
       }
 
       case 'Z': {
-        // 閉パス: 直前コマンドが C/Q の場合、サブパス先頭 M の incomingHandle を設定
+        // 閉パスの semantic 的 2 ケース:
+        //  (A) 最後の curve (C/Q) が M 点に戻ってくる (= fontkit が出す典型形):
+        //      curve で閉じている。start anchor.incoming を curve 制御点に設定し、
+        //      最後の curve の to は M 点と座標重複なので「重複した最終アンカー」
+        //      を pop する (= visual 重複の防止)。M と最後の curve の to は同位置
+        //      なので、M を動かすときは curve の to も同期する必要があるため
+        //      coincidentClosingCmdIndex に最後の curve の cmd index を記録。
+        //  (B) 最後の curve / 直線 が M 点に戻らない (= Z で straight に閉じる):
+        //      開始アンカーには curve incoming は無い。何もしない。
         if (subpathStartIdx >= 0 && subpathStartIdx < anchors.length) {
           const startAnchor = anchors[subpathStartIdx];
           const lastCmd = i > 0 ? path[i - 1] : null;
-          if (lastCmd) {
+          if (lastCmd && (lastCmd.type === 'C' || lastCmd.type === 'Q') &&
+              pointsEqual(lastCmd.to, startAnchor.point)) {
+            // ケース (A)
             if (lastCmd.type === 'C') {
               startAnchor.incomingHandle = { kind: 'C-c2', cmdIndex: i - 1 };
-            } else if (lastCmd.type === 'Q') {
+            } else {
               startAnchor.incomingHandle = { kind: 'Q-c', cmdIndex: i - 1 };
             }
+            // 直前に push された anchor は最後の curve に対応するもので、点は M と
+            // 同位置 (重複)。これを pop して「閉じる curve の cmdIndex」を start
+            // anchor に記録。
+            const lastAnchorIdx = anchors.length - 1;
+            if (lastAnchorIdx > subpathStartIdx &&
+                anchors[lastAnchorIdx].cmdIndex === i - 1) {
+              anchors.pop();
+              startAnchor.coincidentClosingCmdIndex = i - 1;
+            }
           }
+          // ケース (B) では何もしない (Z は直線 close なので start anchor の
+          // incoming は null のまま)
         }
         break;
       }
@@ -153,6 +187,14 @@ export function moveAnchorRigid(
 
   // アンカー本体を移動
   updates.set(anchor.cmdIndex, withAnchorBodyMoved(path[anchor.cmdIndex], dx, dy));
+
+  // 曲線で閉じる subpath の開始アンカーを動かす場合、最後の curve の to も同期
+  // して動かす (両者は座標重複しており、M を動かしたら curve の to もついていく
+  // 必要があるため。詳細は extractAnchors の Z 処理コメント参照)。
+  if (anchor.coincidentClosingCmdIndex !== null) {
+    const ci = anchor.coincidentClosingCmdIndex;
+    updates.set(ci, withAnchorBodyMoved(path[ci], dx, dy));
+  }
 
   // 付属ハンドルを平行移動 (アンカー本体と同じコマンドを共有する場合があるため
   // 既存の更新結果を起点にして再更新する)

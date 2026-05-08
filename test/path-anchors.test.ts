@@ -57,7 +57,9 @@ describe('extractAnchors', () => {
     expect(anchors[2].subpathStart).toBe(false);
   });
 
-  test('三次ベジェ (M C C Z) → 中間アンカーのハンドルが正しく紐付く', () => {
+  test('三次ベジェ (M C C Z) 直線 close → 中間アンカーのハンドル + 開始アンカーは incoming 無し', () => {
+    // 最後の C(...,10,10) が M(0,0) と一致しないので、Z は直線で閉じる semantic。
+    // 開始アンカーには曲線の incoming は付かない (= null)。
     const path: PathCommand[] = [
       M(0, 0),
       C(1, 2, 3, 4, 5, 5),
@@ -70,7 +72,8 @@ describe('extractAnchors', () => {
 
     expect(anchors[0]).toMatchObject({ point: { x: 0, y: 0 }, subpathStart: true });
     expect(anchors[0].outgoingHandle).toEqual({ kind: 'C-c1', cmdIndex: 1 });
-    expect(anchors[0].incomingHandle).toEqual({ kind: 'C-c2', cmdIndex: 2 });
+    expect(anchors[0].incomingHandle).toBeNull();
+    expect(anchors[0].coincidentClosingCmdIndex).toBeNull();
 
     expect(anchors[1]).toMatchObject({ point: { x: 5, y: 5 } });
     expect(anchors[1].incomingHandle).toEqual({ kind: 'C-c2', cmdIndex: 1 });
@@ -79,6 +82,31 @@ describe('extractAnchors', () => {
     expect(anchors[2]).toMatchObject({ point: { x: 10, y: 10 } });
     expect(anchors[2].incomingHandle).toEqual({ kind: 'C-c2', cmdIndex: 2 });
     expect(anchors[2].outgoingHandle).toBeNull();
+  });
+
+  test('三次ベジェ (M C C Z) 曲線 close → 重複アンカー削除 + 開始アンカーに incoming + coincident', () => {
+    // 最後の C(...,0,0) が M(0,0) と一致するので、曲線で閉じる semantic。
+    // 最後の C の to は M と座標重複なので「3 個目のアンカー」は extract されず、
+    // 開始アンカーが最後の curve の c2 を incoming として保持する。
+    // coincidentClosingCmdIndex で「M を動かす時 C.to も同期する」関係を記録。
+    const path: PathCommand[] = [
+      M(0, 0),
+      C(1, 2, 3, 4, 5, 5),
+      C(6, 7, 8, 9, 0, 0),
+      Z(),
+    ];
+    const anchors = extractAnchors(path);
+
+    expect(anchors).toHaveLength(2);
+
+    expect(anchors[0]).toMatchObject({ point: { x: 0, y: 0 }, subpathStart: true });
+    expect(anchors[0].outgoingHandle).toEqual({ kind: 'C-c1', cmdIndex: 1 });
+    expect(anchors[0].incomingHandle).toEqual({ kind: 'C-c2', cmdIndex: 2 });
+    expect(anchors[0].coincidentClosingCmdIndex).toBe(2);
+
+    expect(anchors[1]).toMatchObject({ point: { x: 5, y: 5 } });
+    expect(anchors[1].incomingHandle).toEqual({ kind: 'C-c2', cmdIndex: 1 });
+    expect(anchors[1].outgoingHandle).toEqual({ kind: 'C-c1', cmdIndex: 2 });
   });
 
   test('二次ベジェ混在 (M Q L) → Q のハンドル紐付け', () => {
@@ -108,7 +136,8 @@ describe('extractAnchors', () => {
     expect(anchors[2]).toMatchObject({ point: { x: 20, y: 20 } });
   });
 
-  test('閉曲線の M の incoming (M C C Z)', () => {
+  test('M C C Z 直線 close: 開始アンカー incoming は null', () => {
+    // 最後の C(...,6,6) が M(0,0) と一致しない → 直線 close
     const path: PathCommand[] = [
       M(0, 0),
       C(1, 1, 2, 2, 3, 3),
@@ -116,7 +145,26 @@ describe('extractAnchors', () => {
       Z(),
     ];
     const anchors = extractAnchors(path);
-    expect(anchors[0].incomingHandle).toEqual({ kind: 'C-c2', cmdIndex: 2 });
+    expect(anchors[0].incomingHandle).toBeNull();
+    expect(anchors[0].coincidentClosingCmdIndex).toBeNull();
+  });
+
+  test('M C Z 単一曲線で閉じる → 1 アンカーで両ハンドル保持', () => {
+    // M と単一 C で形成される閉ループ。C の to が M と一致するので、anchor は
+    // 1 個 (= start anchor) になり、両端ハンドル (incoming/outgoing) ともに
+    // 同じ C 命令の c2/c1 を指す。
+    const path: PathCommand[] = [
+      M(0, 0),
+      C(10, 0, 10, 20, 0, 0),
+      Z(),
+    ];
+    const anchors = extractAnchors(path);
+    expect(anchors).toHaveLength(1);
+    expect(anchors[0].point).toEqual({ x: 0, y: 0 });
+    expect(anchors[0].subpathStart).toBe(true);
+    expect(anchors[0].outgoingHandle).toEqual({ kind: 'C-c1', cmdIndex: 1 });
+    expect(anchors[0].incomingHandle).toEqual({ kind: 'C-c2', cmdIndex: 1 });
+    expect(anchors[0].coincidentClosingCmdIndex).toBe(1);
   });
 });
 
@@ -148,18 +196,24 @@ describe('moveAnchorRigid', () => {
     expect(result[3]).toEqual(Z());
   });
 
-  test('閉曲線の M 移動 → 直前 C の incoming handle も追従', () => {
+  test('閉曲線 (曲線 close) M 移動 → M.to + 前後ハンドル + 最後 C.to が同期', () => {
+    // 最後の C が M(0,0) で閉じる semantic。M を (2,3) 動かすと:
+    //  - M.to が (2,3) に移動
+    //  - 開始アンカーの outgoing (= 最初の C の c1) が追従
+    //  - 開始アンカーの incoming (= 最後の C の c2) が追従
+    //  - 最後の C の to も (0,0)→(2,3) に同期 (coincidentClosingCmdIndex 経由)
     const path: PathCommand[] = [
       M(0, 0),
       C(1, 2, 3, 4, 5, 5),
-      C(6, 7, 8, 9, 10, 10),
+      C(6, 7, 8, 9, 0, 0),
       Z(),
     ];
     const result = moveAnchorRigid(path, 0, 2, 3);
 
     expect(result[0]).toEqual(M(2, 3));
     expect(result[1]).toEqual(C(3, 5, 3, 4, 5, 5));
-    expect(result[2]).toEqual(C(6, 7, 10, 12, 10, 10));
+    // 最後 C: c1 不変、c2 追従 (incoming)、to 追従 (coincident close)
+    expect(result[2]).toEqual(C(6, 7, 10, 12, 2, 3));
   });
 
   test('immutability — 変化したコマンドだけ新規、他は同一参照', () => {
@@ -199,8 +253,17 @@ describe('回帰: 擬似「O」グリフ (4点閉曲線)', () => {
     Z(),
   ];
 
-  test('アンカー数 = 5', () => {
-    expect(extractAnchors(path)).toHaveLength(5);
+  test('アンカー数 = 4 (closed curve の重複起点を 1 個にマージ)', () => {
+    // O は top/right/bottom/left の 4 隅。最後の C が top に戻ってくるが、
+    // 重複 anchor は extract されない (Z 処理でマージ)。
+    const anchors = extractAnchors(path);
+    expect(anchors).toHaveLength(4);
+    // 開始アンカー: 両ハンドル + coincident closing index
+    expect(anchors[0].point).toEqual({ x: 50, y: 0 });
+    expect(anchors[0].subpathStart).toBe(true);
+    expect(anchors[0].outgoingHandle).toEqual({ kind: 'C-c1', cmdIndex: 1 });
+    expect(anchors[0].incomingHandle).toEqual({ kind: 'C-c2', cmdIndex: 4 });
+    expect(anchors[0].coincidentClosingCmdIndex).toBe(4);
   });
 
   test('Top (M) を下に 20px 移動', () => {
@@ -215,11 +278,13 @@ describe('回帰: 擬似「O」グリフ (4点閉曲線)', () => {
     // C[0] の c2 と to は不変
     expect(r1.c2).toEqual({ x: 100, y: 22.4 });
     expect(r1.to).toEqual({ x: 100, y: 50 });
-    // incoming handle (last C の c2) が追従
+    // 最後 C: c2 (incoming) 追従 + to (coincident close) も追従
     const r4 = result[4];
     expect(r4.type).toBe('C');
     if (r4.type !== 'C') throw new Error('expected C');
-    expect(r4.c2).toEqual({ x: 22.4, y: 20 });
+    expect(r4.c1).toEqual({ x: 0, y: 22.4 });   // 不変 (前 anchor の outgoing)
+    expect(r4.c2).toEqual({ x: 22.4, y: 20 });  // 追従 (start anchor incoming)
+    expect(r4.to).toEqual({ x: 50, y: 20 });    // 追従 (coincident close, M と同期)
     // C[2], C[3] 完全不変 (同一参照)
     expect(result[2]).toBe(path[2]);
     expect(result[3]).toBe(path[3]);

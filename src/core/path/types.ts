@@ -43,5 +43,12 @@ export interface PathAnchor {
   incomingHandle: HandleRef | null;
   outgoingHandle: HandleRef | null;
   readonly subpathStart: boolean;
+  /**
+   * 曲線で閉じる subpath (最後の C/Q の `to` が subpath 開始 M 点と一致する) で、
+   * 開始アンカー (subpathStart=true) のみセットされる「閉じる curve の cmd index」。
+   * アンカー本体を動かす際、M.to と一緒にこの curve の to も同期して動かす必要が
+   * ある (両者は概念的に同一点なので)。それ以外のアンカーでは null。
+   */
+  coincidentClosingCmdIndex: number | null;
 }
 
