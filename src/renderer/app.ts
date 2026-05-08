@@ -14,20 +14,24 @@ import { SelectGroupTool } from '../tools/select-group-tool';
 import { TextTool } from '../tools/text-tool';
 import { PenAddTool } from '../tools/pen-add-tool';
 import { PenRemoveTool } from '../tools/pen-remove-tool';
-import { exportObjectToPngDataUrl } from '../core/copy-export';
 import { ensureObjectId } from '../core/object-id';
 import type { ObjectId } from '../core/object-id';
 import type { Command } from '../core/history/types';
 
-import { logger, fmtObj } from './logger';
+import { logger } from './logger';
 import { showToast } from './toast';
 import { initMenuBar } from './menu-bar';
 import {
   fontFamilySel, fontStyleSel, populateStyleList, styleValue,
 } from './font-enumeration';
-import { outlineTextToPath } from './outline-conversion';
 import { buildToolbar } from './toolbar';
 import { State } from './state';
+import { generateGroupId } from './group-id';
+import { selectAll } from './actions/select-all';
+import { deleteSelection } from './actions/delete';
+import { duplicateSelection } from './actions/duplicate';
+import { outlineSelection } from './actions/outline';
+import { doCopy } from './actions/copy-png';
 
 // メニューアクション → 後で canvas 初期化後に使う関数を参照するため
 // handleMenuAction は関数宣言 (hoisted) で定義し、canvas 依存部分は
@@ -35,8 +39,7 @@ import { State } from './state';
 function handleMenuAction(action: string): void {
   switch (action) {
     case 'copy':
-      // doCopy は後段で定義 (hoisted function)
-      if (typeof doCopy === 'function') doCopy();
+      doCopy(canvas);
       break;
     case 'undo':
       handleUndo();
@@ -48,13 +51,13 @@ function handleMenuAction(action: string): void {
       void window.electronAPI?.paste();
       break;
     case 'delete':
-      menuDeleteSelection();
+      deleteSelection(canvas, state);
       break;
     case 'duplicate':
-      menuDuplicateSelection();
+      duplicateSelection(canvas, state);
       break;
     case 'select-all':
-      menuSelectAll();
+      selectAll(canvas);
       break;
     case 'devtools':
       void window.electronAPI?.toggleDevTools();
@@ -197,10 +200,6 @@ function setMode(m: Mode): void {
 // ツールバーボタンの click 配線は buildToolbar (後段) で行う。
 
 // ── IText 確定: 1文字ずつ fabric.Text に分割 ──────────────────────────────
-
-function generateGroupId(): string {
-  return `g-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-}
 
 function commitIText(it: fabric.IText): void {
   // 二重呼び出し防止（Enter keydown → exitEditing → text:editing:exited の流れ）
@@ -461,146 +460,8 @@ function syncToolbarToSelection(): void {
   rotationInput.value = String(Math.round(active.angle ?? 0));
 }
 
-// ── Select all / Delete (メニューとツールバーの両方から呼ばれる) ─────────
-
-function menuSelectAll(): void {
-  canvas.discardActiveObject();
-  const all = canvas.getObjects();
-  if (!all.length) return;
-  const sel = new fabric.ActiveSelection(all, { canvas });
-  canvas.setActiveObject(sel);
-  canvas.requestRenderAll();
-}
-
-// 選択オブジェクトを複製し、ややずれた位置に置いて新しい active selection にする。
-// Illustrator/Affinity 風の「Ctrl+D = duplicate」UX。連続押下で step-and-repeat
-// になるよう、複製後の選択を新オブジェクトに付け替える。
-//
-// 設計判断:
-//   - オフセットは「画面上 10px」相当 (= 10 / zoom の canvas 座標)。zoom 倍率に
-//     関わらず一貫して "ややずれて見える" よう viewport 倍率を加味する。
-//   - 同じ groupId のグループは複製側で「新しい同一 groupId」を共有する
-//     (= 黒矢印で展開した時に複製群がまとめて選択される)。
-//   - 各複製は新規 ULID を ensureObjectId で発行 (data.objectId を undefined に
-//     してから呼ぶ)。data.outlined 等の他 custom field は origData から保持。
-function menuDuplicateSelection(): void {
-  const selected = canvas.getActiveObjects();
-  if (selected.length === 0) return;
-
-  // ActiveSelection の子は left/top が group 中心相対なので、世界座標で扱うため
-  // 一旦 discardActiveObject する (outlineSelection と同じ理由)。
-  canvas.discardActiveObject();
-
-  const zoom = canvas.getZoom() || 1;
-  const OFFSET_X = 10 / zoom;
-  const OFFSET_Y = 10 / zoom;
-
-  const groupIdRemap = new Map<string, string>();
-  const cmds: Command[] = [];
-  const newObjects: fabric.Object[] = [];
-
-  for (const orig of selected) {
-    const snapshot = (orig as any).toObject(['data']) as any;
-    const origData = snapshot.data ?? {};
-    const type = snapshot.type as string;
-    const objType: 'text' | 'path' = origData.type ?? (type === 'path' ? 'path' : 'text');
-
-    // groupId 再マップ (同じ元 groupId なら同じ新 groupId を共有)
-    const oldGid = origData.groupId as string | undefined;
-    let newGid: string | undefined;
-    if (oldGid) {
-      let mapped = groupIdRemap.get(oldGid);
-      if (!mapped) { mapped = generateGroupId(); groupIdRemap.set(oldGid, mapped); }
-      newGid = mapped;
-    }
-
-    let cloned: fabric.Object;
-    if (type === 'path') {
-      const { path: pathData, type: _t, data: _d, ...opts } = snapshot;
-      cloned = new fabric.Path(pathData, opts);
-    } else if (type === 'text' || type === 'i-text') {
-      const { text: textValue, type: _t, data: _d, ...opts } = snapshot;
-      cloned = new fabric.Text(textValue, opts);
-    } else {
-      logger.warn(`[duplicate] skipping unknown type: ${type}`);
-      continue;
-    }
-
-    cloned.set({
-      left: (cloned.left ?? 0) + OFFSET_X,
-      top:  (cloned.top  ?? 0) + OFFSET_Y,
-    });
-
-    // data: 新 objectId は ensureObjectId で発行、groupId は再マップ後の値、
-    // sourceText / charIndex / outlined 等の custom field は origData から保持。
-    (cloned as any).data = {
-      ...origData,
-      objectId: undefined,
-      groupId:  newGid,
-    };
-    const newId = ensureObjectId(cloned as any, objType);
-
-    cloned.setCoords();
-    canvas.add(cloned);
-    newObjects.push(cloned);
-    cmds.push({
-      kind: 'objectCreated',
-      objectId: newId,
-      after: state.captureObjectSnapshot(cloned),
-    });
-  }
-
-  // 複製群を新しい active selection にする (= 連続 Ctrl+D で step-and-repeat)
-  if (newObjects.length === 1) {
-    canvas.setActiveObject(newObjects[0]);
-  } else if (newObjects.length > 1) {
-    const sel = new fabric.ActiveSelection(newObjects, { canvas });
-    canvas.setActiveObject(sel);
-  }
-  canvas.requestRenderAll();
-
-  if (cmds.length === 1) {
-    state.pushCommand(cmds[0]);
-  } else if (cmds.length > 1) {
-    state.pushCommand({ kind: 'compound', commands: cmds });
-  }
-  if (cmds.length > 0) {
-    logger.debug(`[history] push duplicate: ${cmds.length} object(s)`);
-  }
-}
-
-function menuDeleteSelection(): void {
-  const selected = canvas.getActiveObjects();
-  if (!selected.length) return;
-
-  // History: 削除前に各 object の snapshot を捕捉、compound として push。
-  const cmds: Command[] = [];
-  for (const obj of selected) {
-    const id = (obj as any).data?.objectId as ObjectId | undefined;
-    if (id) {
-      cmds.push({
-        kind: 'objectDeleted',
-        objectId: id,
-        before: state.captureObjectSnapshot(obj),
-      });
-    }
-  }
-
-  selected.forEach(obj => canvas.remove(obj));
-  canvas.discardActiveObject();
-  canvas.renderAll();
-
-  if (cmds.length === 1) {
-    state.pushCommand(cmds[0]);
-  } else if (cmds.length > 1) {
-    state.pushCommand({ kind: 'compound', commands: cmds });
-  }
-  if (cmds.length > 0) {
-    logger.debug(`[history] push delete: ${cmds.length} object(s)`);
-  }
-}
-
-(document.getElementById('btn-select-all') as HTMLButtonElement).addEventListener('click', menuSelectAll);
+(document.getElementById('btn-select-all') as HTMLButtonElement)
+  .addEventListener('click', () => selectAll(canvas));
 
 // ── Clear canvas ──────────────────────────────────────────────────────────
 
@@ -639,110 +500,11 @@ function menuDeleteSelection(): void {
   }
 });
 
-// showToast は renderer/toast.ts に移動済み。
-
-// ── アウトライン化: 選択処理とボタンバインド ─────────────────────────────
-// 純粋寄りの変換 (outlineTextToPath, getFontkitFont, loadFontData,
-// fontkitFontCache) は renderer/outline-conversion.ts に移動済み。
-// canvas 操作を含む outlineSelection / isOutlineable とボタンバインドはここに残す。
-
-function isOutlineable(obj: fabric.Object): boolean {
-  const anyObj = obj as any;
-  if (anyObj.data?.outlined) return false;
-  return typeof anyObj.text === 'string' && typeof anyObj.fontFamily === 'string';
-}
-
-async function outlineSelection(): Promise<void> {
-  const targets = canvas.getActiveObjects().filter(isOutlineable) as fabric.Text[];
-  if (targets.length === 0) {
-    showToast('アウトライン化する文字を選択してください', true);
-    return;
-  }
-
-  // 複数選択中 (fabric.ActiveSelection) では、子オブジェクトの .left/.top は
-  // group 中心からの相対座標で保持されている (fabric.ActiveSelection の
-  // _updateObjectsCoords が書き換えるため)。選択を解除すると destroy() →
-  // _restoreObjectsState が走って子の座標が世界座標に戻る。
-  // outlineTextToPath は .left/.top を世界座標前提で読むので、ここで先に選択を
-  // 解除して座標を確定させる必要がある。
-  // targets は配列参照で canvas 上の同じオブジェクトを指しているので、
-  // 選択解除後にも同じ fabric.Text を操作できる。
-  canvas.discardActiveObject();
-
-  const conversions = await Promise.all(
-    targets.map(async (ft) => ({ ft, path: await outlineTextToPath(ft) }))
-  );
-
-  const succeeded = conversions.filter(x => x.path) as Array<{ ft: fabric.Text; path: fabric.Path }>;
-  const failed = conversions.filter(x => !x.path);
-  const failedChars = failed.map(x => x.ft.text || '').join('');
-  const failedFamilies = Array.from(new Set(failed.map(x => x.ft.fontFamily || '?')));
-
-  if (succeeded.length === 0) {
-    const detail = failedChars
-      ? `${failedFamilies.join(', ')} には「${failedChars}」のグリフがありません`
-      : failedFamilies.join(', ');
-    showToast(`アウトライン化失敗: ${detail}`, true);
-    return;
-  }
-
-  const vt = canvas.viewportTransform;
-  logger.debug(
-    `[outline] outlineSelection: succeeded=${succeeded.length}` +
-    ` viewportTransform=[${vt?.map(n => n.toFixed(3)).join(',')}]` +
-    ` zoom=${canvas.getZoom()}`
-  );
-
-  // discardActiveObject は最上部で既に実行済み (ActiveSelection の子の座標を
-  // 世界座標に戻すため)。ここでは不要。
-  // History: 各 Text→Path 変換を「Text 削除 + Path 作成」の compound として
-  // まとめて 1 step push (= undo すれば全 Text が戻り、redo すれば全 Path が再生成)。
-  const outlineCommands: Command[] = [];
-  for (const { ft, path } of succeeded) {
-    const ftId = (ft as any).data?.objectId as ObjectId | undefined;
-    const pathId = (path as any).data?.objectId as ObjectId | undefined;
-    if (ftId) outlineCommands.push({
-      kind: 'objectDeleted',
-      objectId: ftId,
-      before: state.captureObjectSnapshot(ft),
-    });
-    canvas.remove(ft);
-    canvas.add(path);
-    if (pathId) outlineCommands.push({
-      kind: 'objectCreated',
-      objectId: pathId,
-      after: state.captureObjectSnapshot(path),
-    });
-  }
-  if (outlineCommands.length === 1) {
-    state.pushCommand(outlineCommands[0]);
-  } else if (outlineCommands.length > 1) {
-    state.pushCommand({ kind: 'compound', commands: outlineCommands });
-  }
-  if (outlineCommands.length > 0) {
-    logger.debug(`[history] push outline: ${succeeded.length} text(s) outlined`);
-  }
-
-  // NOTE: ここで setActiveObject(path) を呼ぶと 'selection:created' が発火し、
-  // select-group モードでは expandSelectionToGroup が同じ groupId のオブジェク
-  // ト全てを ActiveSelection にまとめてしまう。ActiveSelection は children の
-  // left/top を group 中心相対に書き換えるため、fabric.Path 相手だと視覚的に
-  // 飛んで見えるバグの温床になる (fabric.Text では同じロジックで問題無いが、
-  // Path では pathOffset との組み合わせが複雑で再現する)。
-  // 当面は自動選択を諦め、ユーザが手動で 1 クリックしたときに select-group の
-  // 通常動作で展開される経路に委ねる (data.groupId は保持している)。
-  canvas.requestRenderAll();
-
-  if (failed.length > 0) {
-    const detail = failedChars
-      ? `${failedFamilies.join(', ')} には「${failedChars}」のグリフがありません`
-      : failedFamilies.join(', ');
-    showToast(`一部失敗: ${detail}`, true);
-  }
-}
+// ── アウトライン化: ボタンバインド ────────────────────────────────────────
+// 実装本体は actions/outline.ts (action) / outline-conversion.ts (純粋寄り変換)。
 
 (document.getElementById('btn-outline') as HTMLButtonElement).addEventListener('click', () => {
-  void outlineSelection();
+  void outlineSelection(canvas, state);
 });
 
 // ── アンカー編集オーバーレイ (Phase 2a) ──────────────────────────────────
@@ -990,61 +752,15 @@ canvas.on('object:removed', () => {
   // selection:cleared が同時発火する場合 clearAnchorState は上で処理済み。
 });
 
-// ── 選択オブジェクトを透過 PNG としてクリップボードにコピー ────────────
-//
-// Electron のデフォルトメニュー Edit > Copy (role:'copy') は Ctrl+C を
-// ネイティブ側で捕捉し document.execCommand('copy') を呼ぶ。
-// この結果 DOM に copy イベントが dispatch される（keydown は届かない）。
-// そのため copy イベントで捕捉するのが正しいルート。
-//
-// IText 編集中は fabric 自身のテキストコピーに任せる。
-
-async function copySelectionAsPng(): Promise<void> {
-  logger.debug('[copy] copySelectionAsPng called');
-  const active = canvas.getActiveObject();
-  if (!active) {
-    logger.debug('[copy] no active object, skipping');
-    return;
-  }
-  logger.debug(`[copy] active=${fmtObj(active)}`);
-
-  try {
-    // exportObjectToPngDataUrl は typed wrapper で、toCanvasElement に
-    // options オブジェクト ({ multiplier }) を正しく渡すことを型で保証する。
-    // 詳細は src/renderer/copy-export.ts の経緯コメント参照。
-    const result = exportObjectToPngDataUrl(active as any, 10);
-    const dataUrl = result.dataUrl;
-    logger.debug(`[copy] dataUrl length=${dataUrl.length} canvas=${result.width}x${result.height}`);
-
-    if (window.electronAPI) {
-      await window.electronAPI.copyImageToClipboard(dataUrl);
-      showToast('クリップボードにコピーしました');
-      logger.info('[copy] image copied to clipboard');
-    } else {
-      logger.warn('[copy] electronAPI not available');
-    }
-  } catch (err) {
-    logger.error('[copy] failed', err);
-    showToast('コピーに失敗しました', true);
-  }
-}
-
-// メインプロセスのカスタムメニュー Edit > Copy から IPC で通知される
-let lastCopyTime = 0;
-
-function doCopy(): void {
-  const now = Date.now();
-  if (now - lastCopyTime < 200) return;
-  lastCopyTime = now;
-  void copySelectionAsPng();
-}
+// ── Edit > Copy IPC (main プロセスのカスタムメニューから IPC で通知される) ─
+// 実装本体は actions/copy-png.ts。IText 編集中は fabric 自身のテキストコピーに任せる。
 
 if (window.electronAPI) {
   window.electronAPI.onMenuCopy(() => {
     logger.debug('[copy] menu-copy IPC received');
     const active = canvas.getActiveObject() as any;
     if (active && !active.isEditing) {
-      doCopy();
+      doCopy(canvas);
     }
   });
 }
@@ -1068,14 +784,14 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
       (e.key === 'c' || e.key === 'C')) {
     if (!isToolbarInput() && canvas.getActiveObject()) {
       e.preventDefault();
-      doCopy();
+      doCopy(canvas);
     }
     return;
   }
 
   if ((e.key === 'Delete' || e.key === 'Backspace') &&
       !isToolbarInput()) {
-    menuDeleteSelection();
+    deleteSelection(canvas, state);
   }
 
   // Cmd/Ctrl+D: 選択オブジェクトを複製 (Affinity / Sketch 慣例。Illustrator 自体は
@@ -1084,7 +800,7 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
       (e.key === 'd' || e.key === 'D')) {
     if (!isToolbarInput() && canvas.getActiveObject()) {
       e.preventDefault();
-      menuDuplicateSelection();
+      duplicateSelection(canvas, state);
     }
     return;
   }
@@ -1092,7 +808,7 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
   // Cmd/Ctrl+Shift+O: 選択中テキストをアウトライン化 (Illustrator 慣例)
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'O' || e.key === 'o')) {
     e.preventDefault();
-    void outlineSelection();
+    void outlineSelection(canvas, state);
   }
 
   // F12 / Ctrl+Shift+I: DevTools を開閉 (HTML メニューの「開発者ツール」と同等)
