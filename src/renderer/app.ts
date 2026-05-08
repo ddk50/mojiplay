@@ -400,6 +400,15 @@ canvas.on('object:rotating', (e: fabric.IEvent) => {
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 20;
 
+// document.title を更新すると Electron の BrowserWindow タイトルバーが追従する
+// (BrowserWindow は title オプション未指定なので HTML の title 要素を採用)。
+const TITLE_BASE = 'Font Layout Editor';
+function updateWindowTitle(): void {
+  const pct = Math.round(canvas.getZoom() * 100);
+  document.title = `${TITLE_BASE} — ${pct}%`;
+}
+updateWindowTitle();
+
 canvas.on('mouse:wheel', (e: fabric.IEvent) => {
   const evt = e.e as WheelEvent;
   if (!evt.altKey) return;
@@ -409,6 +418,7 @@ canvas.on('mouse:wheel', (e: fabric.IEvent) => {
   zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 
   canvas.zoomToPoint({ x: evt.offsetX, y: evt.offsetY }, zoom);
+  updateWindowTitle();
   evt.preventDefault();
   evt.stopPropagation();
 });
