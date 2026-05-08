@@ -24,7 +24,7 @@ import type {
 } from '../core/state';
 import type { Mat2x3 } from '../core/path/coords';
 import type { PathCommand } from '../core/path/types';
-import { fromFabricPath, toFabricPath } from '../core/path/fabric-adapter';
+import { fromFabricPath, toFabricPath } from './path-adapter';
 import { logger, fmtObj } from './logger';
 
 export interface CreateStateOptions {

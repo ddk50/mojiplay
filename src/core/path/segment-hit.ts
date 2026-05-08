@@ -5,11 +5,14 @@
 // threshold 以内かつ最近傍となる点を返す。サンプル粒度は呼び出し側が指定。
 //
 // fabric / DOM 非依存。座標変換は coords.ts の pathLocalToScreen を使う。
+//
+// CA 上は Entity / pure 計算層。入力 (PointerInput) を受けず、cmds + screen 座標
+// から派生情報を計算するだけなので core/path/ に住む。
 
-import type { Point, PathCommand } from '../core/path/types';
-import { evalCubicAt, evalQuadAt } from '../core/path/anchors';
-import type { PathTransform } from '../core/path/coords';
-import { pathLocalToScreen } from '../core/path/coords';
+import type { Point, PathCommand } from './types';
+import { evalCubicAt, evalQuadAt } from './anchors';
+import type { PathTransform } from './coords';
+import { pathLocalToScreen } from './coords';
 
 export interface SegmentHit {
   readonly cmdIndex: number;

@@ -1,13 +1,13 @@
-// path-fabric-adapter の単体テスト
+// renderer/path-adapter の単体テスト
 //
 // fabric.js が扱う生タプル ([['M', 0, 0], ['C', ...]]) と、
-// path-anchors.ts が扱うオブジェクト ADT の相互変換をテスト。
+// core/path/anchors.ts が扱うオブジェクト ADT の相互変換をテスト。
 
 import type { PathCommand } from '../src/core/path/types';
 import {
   fromFabricPath, toFabricPath,
-} from '../src/core/path/fabric-adapter';
-import type { FabricPathCommand } from '../src/core/path/fabric-adapter';
+} from '../src/renderer/path-adapter';
+import type { FabricPathCommand } from '../src/renderer/path-adapter';
 
 const M = (x: number, y: number): PathCommand => ({ type: 'M', to: { x, y } });
 const L = (x: number, y: number): PathCommand => ({ type: 'L', to: { x, y } });
@@ -47,4 +47,3 @@ describe('fromFabricPath / toFabricPath', () => {
     expect(toFabricPath([])).toEqual([]);
   });
 });
-

@@ -1,6 +1,6 @@
 // パス操作の共通型定義 (ドメイン語彙)。
 //
-// path/anchors.ts / path/fabric-adapter.ts などが共有する型を提供する。
+// path/anchors.ts / renderer/path-adapter.ts などが共有する型を提供する。
 // 網羅性チェックは `x satisfies never` 構文を使用 (TS 4.9+)。
 
 export type Point = { readonly x: number; readonly y: number };

@@ -1,4 +1,4 @@
-// overlay-layout.ts の単体テスト。
+// core/path/overlay-layout.ts の単体テスト。
 //
 // PathSnapshot + viewportMatrix から「screen 座標つきアンカー / ハンドル一覧」
 // を計算する純粋関数と、その結果へのヒットテストを検証。
@@ -8,7 +8,7 @@ import type { Mat2x3 } from '../src/core/path/coords';
 import type { PathSnapshot } from '../src/core/state';
 import {
   computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt,
-} from '../src/tools/overlay-layout';
+} from '../src/core/path/overlay-layout';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 
@@ -125,4 +125,3 @@ describe('hitTestHandleAt', () => {
     expect(hitTestHandleAt(layout, 500, 500)).toBeNull();
   });
 });
-

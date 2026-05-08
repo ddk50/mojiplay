@@ -1,10 +1,13 @@
 // fabric.js 生タプル ↔ 内部 ADT (PathCommand) 境界変換 (純粋関数)
 //
 // fabric.Path.path は ['M', x, y] のようなタプル配列で、
-// ./anchors.ts は { type: 'M', to: {x, y} } のオブジェクト ADT で動作する。
+// core/path/anchors.ts は { type: 'M', to: {x, y} } のオブジェクト ADT で動作する。
 // このモジュールは両者の橋渡しを行う唯一の場所。
+//
+// CA 上は Interface Adapter (Gateway) 層。fabric の外部表現と core の ADT を
+// つなぐ境界変換なので renderer/ に住む (core は外部世界を知らない)。
 
-import type { PathCommand } from './types';
+import type { PathCommand } from '../core/path/types';
 
 // fabric.js が扱う生タプル形式
 export type FabricPathCommand =
@@ -66,4 +69,3 @@ export function toFabricPath(path: ReadonlyArray<PathCommand>): FabricPathComman
   }
   return out;
 }
-

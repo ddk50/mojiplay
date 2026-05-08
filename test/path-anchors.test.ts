@@ -19,7 +19,7 @@
 //   { kind: 'Q-c',  cmdIndex }   Q の制御点
 //
 // fabric の生タプル形式との境界変換 (fromFabricPath / toFabricPath) は
-// path-fabric-adapter.test.ts でテスト。
+// renderer-path-adapter.test.ts でテスト。
 
 import type { Point, PathCommand, HandleRef } from '../src/core/path/types';
 import {

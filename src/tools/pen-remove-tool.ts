@@ -6,7 +6,7 @@
 // hover 時はアンカー上で 'pointer' カーソルにする。
 
 import { removeAnchor } from '../core/path/anchors';
-import { computeOverlayLayout, hitTestAnchorAt } from './overlay-layout';
+import { computeOverlayLayout, hitTestAnchorAt } from '../core/path/overlay-layout';
 import type {
   Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,

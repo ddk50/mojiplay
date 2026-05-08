@@ -7,6 +7,10 @@
 // 戻り値の alreadyExpanded は「現在の選択が既に group 全体と一致しているか」。
 // SelectGroupTool は selection:created/updated 内で呼ぶため、再展開時に
 // setActiveSelection が再帰発火してループに入るのを防ぐ no-op 判定に使う。
+//
+// CA 上は Entity / pure 計算層。入力 (PointerInput) を受けず、generic な T 配列
+// から派生情報を計算するだけなので core/ に住む。path に依存しないので
+// core/path/ ではなく core/ 直下。
 
 export interface GroupExpansionResult<T> {
   readonly expanded: ReadonlyArray<T>;

@@ -8,7 +8,7 @@
 //
 // IText 編集中は fabric 自身のテキストコピーに任せる (呼び出し側で bypass)。
 
-import { exportObjectToPngDataUrl } from '../../core/copy-export';
+import { exportObjectToPngDataUrl } from '../copy-export';
 import { logger, fmtObj } from '../logger';
 import { showToast } from '../toast';
 
@@ -24,7 +24,7 @@ export async function copySelectionAsPng(canvas: fabric.Canvas): Promise<void> {
   try {
     // exportObjectToPngDataUrl は typed wrapper で、toCanvasElement に
     // options オブジェクト ({ multiplier }) を正しく渡すことを型で保証する。
-    // 詳細は src/core/copy-export.ts の経緯コメント参照。
+    // 詳細は src/renderer/copy-export.ts の経緯コメント参照。
     const result = exportObjectToPngDataUrl(active as any, 10);
     const dataUrl = result.dataUrl;
     logger.debug(`[copy] dataUrl length=${dataUrl.length} canvas=${result.width}x${result.height}`);

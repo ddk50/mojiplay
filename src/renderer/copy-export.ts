@@ -13,6 +13,9 @@
 //   1. 型システム: ExportableObject.toCanvasElement の引数が
 //      { multiplier?: number } なので、数値を直接渡すとコンパイルエラー
 //   2. テスト: モックで出力サイズを検証し、multiplier が正しく渡されることを保証
+//
+// CA 上は Interface Adapter (Gateway) 層。fabric.Object の API を typed wrapper
+// で包む境界モジュールなので renderer/ に住む (core は外部世界を知らない)。
 
 /** toCanvasElement を持つオブジェクトの最小インターフェース */
 export interface ExportableObject {

@@ -7,10 +7,10 @@
 // 任せる。展開は selection:created / selection:updated 後に host が呼ぶ
 // onSelectionChanged で行う。
 //
-// 中核ロジックは ./group-selection.ts の computeGroupExpansion (純粋関数)。
+// 中核ロジックは core/group-selection.ts の computeGroupExpansion (純粋関数)。
 // 本クラスは host 越しに ObjectHandle の取得 / 設定を行うだけ。
 
-import { computeGroupExpansion } from './group-selection';
+import { computeGroupExpansion } from '../core/group-selection';
 import type {
   Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,

@@ -16,7 +16,7 @@
 import type { Point, PathCommand, HandleRef } from '../core/path/types';
 import { moveAnchorRigid, moveHandle } from '../core/path/anchors';
 import { worldDeltaToPathLocalDelta } from '../core/path/coords';
-import { computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt } from './overlay-layout';
+import { computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt } from '../core/path/overlay-layout';
 import type {
   Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,

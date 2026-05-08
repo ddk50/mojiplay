@@ -7,12 +7,15 @@
 //   - SelectCharTool / PenAddTool / PenRemoveTool: pointer 入力ごとに最新パスから
 //     fresh に layout を計算し、hit-test に使う。
 //   - app.ts の drawAnchorOverlay: 描画前に layout を計算してマーカーを描く。
+//
+// CA 上は Entity / pure 計算層。入力 (PointerInput) を受けず、PathSnapshot +
+// viewport 行列から派生情報を計算するだけなので core/path/ に住む。
 
-import type { HandleRef } from '../core/path/types';
-import { extractAnchors, getHandlePoint } from '../core/path/anchors';
-import type { Mat2x3, PathTransform } from '../core/path/coords';
-import { pathLocalToScreen } from '../core/path/coords';
-import type { PathSnapshot } from '../core/state';
+import type { HandleRef } from './types';
+import { extractAnchors, getHandlePoint } from './anchors';
+import type { Mat2x3, PathTransform } from './coords';
+import { pathLocalToScreen } from './coords';
+import type { PathSnapshot } from '../state';
 
 export interface AnchorScreenPos {
   readonly anchorIndex: number;

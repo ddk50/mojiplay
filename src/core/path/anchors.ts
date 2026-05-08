@@ -4,7 +4,7 @@
 // 個別アンカーの剛体移動 (アンカー + 付属ベジェハンドル) を行う。
 // fabric / DOM 非依存で単体テスト可能。
 //
-// fabric.js 生タプル ↔ PathCommand の境界変換は ./fabric-adapter.ts。
+// fabric.js 生タプル ↔ PathCommand の境界変換は src/renderer/path-adapter.ts。
 
 import type { Point, PathCommand, HandleRef, PathAnchor } from './types';
 

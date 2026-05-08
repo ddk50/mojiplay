@@ -47,7 +47,7 @@ import type { Point, PathCommand } from '../core/path/types';
 import { splitSegment, getSegmentStart } from '../core/path/anchors';
 import type { PathTransform } from '../core/path/coords';
 import { screenToPathLocal } from '../core/path/coords';
-import { findClosestSegment } from './segment-hit';
+import { findClosestSegment } from '../core/path/segment-hit';
 import type { ObjectSnapshot } from '../core/history/types';
 import type {
   Tool, ToolDescriptor, PointerInput, PointerHandled,

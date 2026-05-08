@@ -32,14 +32,14 @@ npx jest copy-export  # 特定ファイルのみ
 - `core/path/types.ts` — 共通型定義 (Point / PathCommand / HandleRef / PathAnchor) と `assertNever`
 - `core/path/anchors.ts` — パスアンカー抽出・移動
 - `core/path/coords.ts` — 座標変換 (path local ↔ world ↔ screen)
-- `core/path/fabric-adapter.ts` — fabric 生タプル ↔ PathCommand 境界変換
+- `renderer/path-adapter.ts` — fabric 生タプル ↔ PathCommand 境界変換 (Interface Adapter)
 - `core/object-id.ts` — ObjectId / ObjectType / ensureObjectId (ulid 経由)
 - `core/history/stack.ts` — HistoryStack (ring buffer + cursor)
 - `core/outline-position.ts` — アウトライン位置計算
-- `core/copy-export.ts` — PNG エクスポート用 typed wrapper
-- `tools/group-selection.ts` — group 展開ロジック
-- `tools/segment-hit.ts` — セグメントヒットテスト
-- `tools/overlay-layout.ts` — overlay (アンカー / ハンドル) 配置
+- `renderer/copy-export.ts` — PNG エクスポート用 typed wrapper (Interface Adapter)
+- `core/group-selection.ts` — group 展開ロジック
+- `core/path/segment-hit.ts` — セグメントヒットテスト
+- `core/path/overlay-layout.ts` — overlay (アンカー / ハンドル) 配置
 - `tools/select-char-tool.ts` / `tools/pen-add-tool.ts` / `tools/pen-remove-tool.ts` / `tools/select-group-tool.ts` / `tools/text-tool.ts` — `FakePathHandle` / `FakeState` (= State interface のテストダブル) を渡して挙動を検証
 
 ## ディレクトリ構成 (4 層レイアウト)
@@ -150,7 +150,7 @@ esbuild が import グラフを follow して自動でバンドルに含める�
 
 **クリップボードコピー (Ctrl+C / メニュー Edit > Copy):**
 
-選択オブジェクトを `exportObjectToPngDataUrl()` (typed wrapper, `src/core/copy-export.ts`) 経由で 10 倍解像度の透過 PNG にレンダリングし、IPC `copy-image` でメインプロセスの `clipboard.writeImage` に渡す。
+選択オブジェクトを `exportObjectToPngDataUrl()` (typed wrapper, `src/renderer/copy-export.ts`) 経由で 10 倍解像度の透過 PNG にレンダリングし、IPC `copy-image` でメインプロセスの `clipboard.writeImage` に渡す。
 
 重要: `fabric.Object.prototype.toCanvasElement(options)` は **options オブジェクト** (`{ multiplier: 10 }`) で呼ぶ必要がある。`toCanvasElement(10)` と positional arg で渡すと `options.multiplier` が `undefined` になり 1 倍でレンダリングされる（Canvas-level の同名メソッドとは API が異なる）。この落とし穴は `copy-export.ts` の typed wrapper で型安全に防止されている。
 
@@ -161,7 +161,7 @@ esbuild が import グラフを follow して自動でバンドルに含める�
 実装済み:
 
 - **Phase 2a**: アウトライン化とアンカーポイント移動
-- **Phase 2c**: ベジェハンドル (制御点) の表示・編集 (`core/path/types.ts` の `HandleRef` / `incomingHandle` / `outgoingHandle`、`core/path/anchors.ts` の `getHandlePoint` / `moveHandle`、`tools/overlay-layout.ts` の `HandleScreenPos` / `hitTestHandleAt`、`tools/select-char-tool.ts` の handle drag)
+- **Phase 2c**: ベジェハンドル (制御点) の表示・編集 (`core/path/types.ts` の `HandleRef` / `incomingHandle` / `outgoingHandle`、`core/path/anchors.ts` の `getHandlePoint` / `moveHandle`、`core/path/overlay-layout.ts` の `HandleScreenPos` / `hitTestHandleAt`、`tools/select-char-tool.ts` の handle drag)
 - **Phase 2d (一部)**: アンカーの追加/削除 (`tools/pen-add-tool.ts` / `pen-remove-tool.ts`)
 - **State / Viewport 分離モデル + Undo/Redo**: 全 state 変更操作 (アンカー編集 / アンカー追加削除 / object 移動拡縮回転 / プロパティ変更 / 文字確定 / アウトライン化 / 削除) を履歴対象とする state-jump semantic で実装。Cmd/Ctrl+Z / Cmd/Ctrl+Shift+Z で操作。詳細は本ファイル後段「Undo/Redo + 永続化に向けた State / Viewport 分離モデル」セクション参照
 
@@ -987,21 +987,12 @@ Use Case を別 class (`MoveAnchorUseCase` 等) に切り出す ROI は現状低
 
 `core/history/stack.ts` の HistoryStack (ring buffer) は pure data 構造だが、push/undo/redo の semantic はアプリ固有 (mojiplay の undo/redo モデル)。Entity と Use Case の中間。CA 厳密には UseCase 寄りだが、pure data として core に置くのは test 容易性 + dependency 方向の保全のため。
 
-#### 4. core/copy-export.ts は規約違反 (既知)
-
-`core/copy-export.ts` は fabric.Object に直接アクセスする (`obj.toCanvasElement(options)` を typed wrap している)。fabric を import しているので **「core は fabric 不知」規約を破っている**。
-
-これは意図的: `toCanvasElement(options)` が positional arg と取り違えられる落とし穴を typed wrapper で防ぐためだけのファイル。renderer に置くべきだが、純粋な型 wrapping なので core 内に「fabric type を扱う core 補助関数」として孤立させている。
-
-新コードでは **core/copy-export.ts のような新規違反を増やさない** (= fabric を import するなら renderer か tools)。
-
 ### この整理から導かれる将来的な refactor 候補
 
 順に大きい refactor になる:
 
-1. **core/copy-export.ts を renderer/ に移動**: 1 ファイル移動 + import path 更新だけの局所 refactor。core 規約準拠化
-2. **Use Case を独立**: 現在 `tools/` / `app.ts` / `renderer/state.ts` に散在している operation logic を `src/usecases/` に切り出す。Tool は use case dispatch only にする (`UseCase.execute(input, state)` を呼ぶだけ)。中規模 refactor
-3. **Document state レイヤ導入**: State の Presenter / Use Case / Gateway 癒着を解消。`core/document/` に pure な DocumentState (Map<ObjectId, ObjectState>) を導入し、fabric は pure renderer として一方向 sync する。前述の Selection 抽象とまとめて検討する候補。大規模 refactor
+1. **Use Case を独立**: `tools/` / `app.ts` / `renderer/state.ts` に散在している operation logic の一部 (= toolbar / menu / button から呼ばれるもの) は `src/renderer/actions/` に切り出し済。残りの tool 内 operation logic を `src/usecases/` に切り出すかは検討中。中規模 refactor
+2. **Document state レイヤ導入**: State の Presenter / Use Case / Gateway 癒着を解消。`core/document/` に pure な DocumentState (Map<ObjectId, ObjectState>) を導入し、fabric は pure renderer として一方向 sync する。前述の Selection 抽象とまとめて検討する候補。大規模 refactor
 
 ### 新コードを書くときの規律
 

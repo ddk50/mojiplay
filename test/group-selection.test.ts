@@ -1,6 +1,6 @@
-// computeGroupExpansion の単体テスト。
+// core/group-selection.ts の computeGroupExpansion の単体テスト。
 
-import { computeGroupExpansion } from '../src/tools/group-selection';
+import { computeGroupExpansion } from '../src/core/group-selection';
 
 interface Obj { id: string; gid?: string }
 const getGid = (o: Obj) => o.gid;
@@ -68,4 +68,3 @@ describe('computeGroupExpansion', () => {
     expect(r.alreadyExpanded).toBe(true);
   });
 });
-

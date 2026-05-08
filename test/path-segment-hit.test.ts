@@ -1,11 +1,11 @@
-// findClosestSegment の単体テスト。
+// core/path/segment-hit.ts の findClosestSegment の単体テスト。
 //
 // PathCommand を直接構築して、screen 座標 (= identity transforms 下では local 座標)
 // でクリックしたときに正しく cmdIndex / t / dist が返るか検証。
 
 import type { PathCommand } from '../src/core/path/types';
 import type { Mat2x3, PathTransform } from '../src/core/path/coords';
-import { findClosestSegment } from '../src/tools/segment-hit';
+import { findClosestSegment } from '../src/core/path/segment-hit';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 const T: PathTransform = {
@@ -97,4 +97,3 @@ describe('findClosestSegment', () => {
     expect(findClosestSegment([{ type: 'M', to: { x: 0, y: 0 } }], 0, 0, T, 8, 50)).toBeNull();
   });
 });
-

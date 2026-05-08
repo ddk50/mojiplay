@@ -3,8 +3,8 @@
 
 import type { Mat2x3, PathTransform } from '../core/path/coords';
 import { pathLocalToScreen } from '../core/path/coords';
-import { fromFabricPath } from '../core/path/fabric-adapter';
-import { computeOverlayLayout } from '../tools/overlay-layout';
+import { fromFabricPath } from './path-adapter';
+import { computeOverlayLayout } from '../core/path/overlay-layout';
 import type {
   Tool, PointerInput,
 } from '../tools/tool-interface';
@@ -324,7 +324,7 @@ canvas.on('text:editing:exited', (e: fabric.IEvent) => {
 });
 
 // 黒矢印モードのグループ自動展開ロジックは SelectGroupTool に抽出済み
-// (tools/select-group-tool.ts + tools/group-selection.ts)。
+// (tools/select-group-tool.ts + core/group-selection.ts)。
 // 配線は後段の selection:created / selection:updated ディスパッチャから
 // onSelectionChanged 経由で呼ばれる。
 
@@ -523,7 +523,7 @@ function syncToolbarToSelection(): void {
 // パスのアンカーポイント (セグメント端点) を正方形マーカーで表示し、
 // ドラッグで個別アンカー + 付属ベジェハンドルを剛体移動する。
 
-// ヒット半径はツール側に閉じている (tools/overlay-layout.ts)。
+// ヒット半径は core/path/overlay-layout.ts に閉じている。
 // ここはマーカー描画の見た目関連のみ。
 const ANCHOR_MARKER_PX     = 7;
 const ANCHOR_FILL          = '#ffffff';
