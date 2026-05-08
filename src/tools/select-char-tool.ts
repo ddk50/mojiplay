@@ -32,14 +32,20 @@ export interface SnapConfig {
 
 type SelectCharDragState =
   | {
-      readonly kind: 'anchor';
-      readonly anchorIndex: number;
-      lastWorld: Point;
+      // 1 個 or 複数アンカーを同時に剛体移動。selectedAnchors 全件を動かす。
+      readonly kind: 'anchors';
+      readonly anchorIndices: ReadonlyArray<number>;
+      readonly startWorld: Point;
+      // pointerDown 時点のコマンド配列 snapshot。pointerMove の度に「累積 delta
+      // を original から再適用」するモデル。これにより Shift 軸ロックの mid-drag
+      // 切替が破綻せず、浮動小数点の累積誤差も防げる。
+      readonly originalCommands: ReadonlyArray<PathCommand>;
     }
   | {
       readonly kind: 'handle';
       readonly handle: HandleRef;
-      lastWorld: Point;
+      readonly startWorld: Point;
+      readonly originalCommands: ReadonlyArray<PathCommand>;
     };
 
 export class SelectCharTool implements Tool {
@@ -58,6 +64,10 @@ export class SelectCharTool implements Tool {
   private dragPath: PathHandle | null = null;
   // History 用: drag 開始時の snapshot を保持し、drag 終了時に Command を構築する
   private beforeSnapshot: ObjectSnapshot | null = null;
+  // 永続的なアンカー選択状態 (drag 開始/終了で消えない、shift クリックで蓄積)。
+  // 起点パスが切り替わったとき (object 切替 / 選択クリア) は app.ts 側から
+  // clearSelectedAnchors() を呼んで明示的にリセットする。
+  private selectedAnchors: Set<number> = new Set();
 
   setSnapConfig(cfg: SnapConfig): void {
     this.snap = cfg;
@@ -67,12 +77,58 @@ export class SelectCharTool implements Tool {
     return this.drag !== null;
   }
 
+  // 現在選択中のアンカー index 集合。app.ts の drawAnchorOverlay が
+  // 選択中アンカーを別色で描画するために参照する。
+  getSelectedAnchorIndices(): ReadonlySet<number> {
+    return this.selectedAnchors;
+  }
+
+  clearSelectedAnchors(): void {
+    this.selectedAnchors.clear();
+  }
+
+  /**
+   * 選択中の全アンカーを world delta (worldDx, worldDy) で剛体移動 + history
+   * に push。矢印キー操作のエントリポイント。選択が空ならノーオペ。
+   */
+  moveSelectedAnchorsBy(state: State, worldDx: number, worldDy: number): void {
+    if (this.selectedAnchors.size === 0) return;
+    const path = state.getActivePath();
+    if (!path) return;
+
+    const before = path.captureForHistory();
+    const snapshot = path.snapshot();
+    const localDelta = worldDeltaToPathLocalDelta(
+      { x: worldDx, y: worldDy },
+      snapshot.pathMatrix,
+    );
+
+    let updated: ReadonlyArray<PathCommand> = snapshot.commands;
+    for (const idx of this.selectedAnchors) {
+      updated = moveAnchorRigid(updated, idx, localDelta.x, localDelta.y);
+    }
+    path.setCommands(updated);
+    path.finalizeEdit();
+    state.requestRerender();
+
+    const after = path.captureForHistory();
+    if (JSON.stringify(after) !== JSON.stringify(before)) {
+      state.pushCommand({
+        kind: 'objectChanged',
+        objectId: path.getId(),
+        before,
+        after,
+      });
+    }
+  }
+
   onActivate(_state: State): void { /* no-op */ }
 
   onDeactivate(state: State): void {
     this.drag = null;
     this.dragPath = null;
     this.beforeSnapshot = null;
+    this.selectedAnchors.clear();
     state.setCursor('');
   }
 
@@ -83,13 +139,15 @@ export class SelectCharTool implements Tool {
     const snapshot = path.snapshot();
     const layout = computeOverlayLayout(snapshot, state.getViewportMatrix());
 
-    // ハンドルを優先 (アンカーと重なって見える事があるため)
+    // ハンドルを優先 (アンカーと重なって見える事があるため)。ハンドルは常に
+    // 単独 drag (= 複数選択非対応)。
     const hitHandle = hitTestHandleAt(layout, e.screenX, e.screenY);
     if (hitHandle) {
       this.drag = {
         kind: 'handle',
         handle: hitHandle.handle,
-        lastWorld: { x: e.worldX, y: e.worldY },
+        startWorld: { x: e.worldX, y: e.worldY },
+        originalCommands: snapshot.commands,
       };
       this.dragPath = path;
       this.beforeSnapshot = path.captureForHistory();
@@ -98,16 +156,46 @@ export class SelectCharTool implements Tool {
 
     const aIdx = hitTestAnchorAt(layout, e.screenX, e.screenY);
     if (aIdx >= 0) {
+      // アンカー選択 semantic:
+      //  - shift: クリックしたアンカーを selectedAnchors に toggle
+      //  - 通常 + 未選択: 既存選択をクリアし、クリックしたアンカー 1 個だけ選択
+      //  - 通常 + 既選択: 選択を維持 (= 複数選択された状態のまま drag に入れる)
+      if (e.shiftKey) {
+        if (this.selectedAnchors.has(aIdx)) {
+          this.selectedAnchors.delete(aIdx);
+        } else {
+          this.selectedAnchors.add(aIdx);
+        }
+      } else if (!this.selectedAnchors.has(aIdx)) {
+        this.selectedAnchors.clear();
+        this.selectedAnchors.add(aIdx);
+      }
+
+      // shift 操作で「クリックしたアンカーが解除された」ケースは drag を起こさない
+      // (= ユーザは選択解除しただけで動かす意図は無い)。
+      if (!this.selectedAnchors.has(aIdx)) {
+        state.requestRerender();
+        return 'consumed';
+      }
+
       this.drag = {
-        kind: 'anchor',
-        anchorIndex: aIdx,
-        lastWorld: { x: e.worldX, y: e.worldY },
+        kind: 'anchors',
+        anchorIndices: [...this.selectedAnchors],
+        startWorld: { x: e.worldX, y: e.worldY },
+        originalCommands: snapshot.commands,
       };
       this.dragPath = path;
       this.beforeSnapshot = path.captureForHistory();
+      state.requestRerender();
       return 'consumed';
     }
 
+    // 空きエリアクリック: shift なら選択保持、通常なら選択クリア。
+    // どちらでも 'pass' を返してパス全体ドラッグに道を譲る。
+    if (!e.shiftKey && this.selectedAnchors.size > 0) {
+      this.selectedAnchors.clear();
+      state.requestRerender();
+    }
     return 'pass';
   }
 
@@ -115,21 +203,38 @@ export class SelectCharTool implements Tool {
     if (this.drag && this.dragPath) {
       const path = this.dragPath;
       const snapshot = path.snapshot();
-      const worldDx = e.worldX - this.drag.lastWorld.x;
-      const worldDy = e.worldY - this.drag.lastWorld.y;
-      const localDelta = worldDeltaToPathLocalDelta(
-        { x: worldDx, y: worldDy },
+      const cumWorldDx = e.worldX - this.drag.startWorld.x;
+      const cumWorldDy = e.worldY - this.drag.startWorld.y;
+      const cumLocal = worldDeltaToPathLocalDelta(
+        { x: cumWorldDx, y: cumWorldDy },
         snapshot.pathMatrix,
       );
 
-      let updated: PathCommand[];
-      if (this.drag.kind === 'anchor') {
-        updated = moveAnchorRigid(snapshot.commands, this.drag.anchorIndex, localDelta.x, localDelta.y);
+      // Shift ホールド中は累積デルタの dominant axis のみ適用 (横/縦制限)。
+      // axis lock は毎フレーム再評価 — ユーザが drag 軌跡の方向を変えれば
+      // 切り替わる (= 「Shift を一回押し続ければ常に水平方向に固定したい」
+      // ような厳格な動作ではなく、Illustrator 風の「最も大きく動いた軸」)。
+      let dxLocal = cumLocal.x;
+      let dyLocal = cumLocal.y;
+      if (e.shiftKey) {
+        if (Math.abs(cumLocal.x) >= Math.abs(cumLocal.y)) {
+          dyLocal = 0;
+        } else {
+          dxLocal = 0;
+        }
+      }
+
+      // 累積 delta を original から再適用 (= 毎フレーム original snapshot 起点)。
+      // この設計により Shift 軸ロックの mid-drag 切替で破綻しない。
+      let updated: ReadonlyArray<PathCommand> = this.drag.originalCommands;
+      if (this.drag.kind === 'anchors') {
+        for (const idx of this.drag.anchorIndices) {
+          updated = moveAnchorRigid(updated, idx, dxLocal, dyLocal);
+        }
       } else {
-        updated = moveHandle(snapshot.commands, this.drag.handle, localDelta.x, localDelta.y);
+        updated = moveHandle(updated, this.drag.handle, dxLocal, dyLocal);
       }
       path.setCommands(updated);
-      this.drag.lastWorld = { x: e.worldX, y: e.worldY };
       state.requestRerender();
       return;
     }

@@ -315,5 +315,232 @@ describe('SelectCharTool: deactivate', () => {
     expect(tool.isDragging()).toBe(false);
     expect(host.cursor).toBe('');
   });
+
+  test('clears anchor selection on deactivate', () => {
+    const initial: PathCommand[] = [
+      { type: 'M', to: { x: 100, y: 100 } },
+      { type: 'L', to: { x: 200, y: 100 } },
+    ];
+    const path = new FakePathHandle(initial);
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    tool.onPointerDown(pointer({ x: 100, y: 100 }), host);
+    tool.onPointerUp(pointer({ x: 100, y: 100 }), host);
+    expect(tool.getSelectedAnchorIndices().size).toBe(1);
+    tool.onDeactivate(host);
+    expect(tool.getSelectedAnchorIndices().size).toBe(0);
+  });
+});
+
+// ── 複数アンカー選択 (Phase: anchor multi-selection) ──────────────────────
+
+describe('SelectCharTool: multi-anchor selection', () => {
+  function makeTriangle(): PathCommand[] {
+    return [
+      { type: 'M', to: { x: 0,   y: 0   } },  // anchor 0
+      { type: 'L', to: { x: 100, y: 0   } },  // anchor 1
+      { type: 'L', to: { x: 50,  y: 100 } },  // anchor 2
+      { type: 'Z' },
+    ];
+  }
+
+  test('単独クリックで 1 アンカーを選択', () => {
+    const path = new FakePathHandle(makeTriangle());
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    expect(tool.getSelectedAnchorIndices()).toEqual(new Set([0]));
+  });
+
+  test('Shift+クリックでアンカーを追加選択', () => {
+    const path = new FakePathHandle(makeTriangle());
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerUp(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerDown(pointer({ x: 100, y: 0, shiftKey: true }), host);
+    expect(tool.getSelectedAnchorIndices()).toEqual(new Set([0, 1]));
+  });
+
+  test('Shift+既選択アンカーをクリックで選択解除', () => {
+    const path = new FakePathHandle(makeTriangle());
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    // 2 個選択
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerUp(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerDown(pointer({ x: 100, y: 0, shiftKey: true }), host);
+    tool.onPointerUp(pointer({ x: 100, y: 0, shiftKey: true }), host);
+    // anchor 0 を Shift+解除
+    tool.onPointerDown(pointer({ x: 0, y: 0, shiftKey: true }), host);
+    expect(tool.getSelectedAnchorIndices()).toEqual(new Set([1]));
+  });
+
+  test('Shift で選択解除されたアンカーは drag を起こさない', () => {
+    const path = new FakePathHandle(makeTriangle());
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerUp(pointer({ x: 0, y: 0 }), host);
+    // Shift+同じアンカーで解除 → drag 状態にならない
+    const result = tool.onPointerDown(pointer({ x: 0, y: 0, shiftKey: true }), host);
+    expect(result).toBe('consumed');  // hit はしたが drag 起こさず
+    expect(tool.isDragging()).toBe(false);
+  });
+
+  test('未選択アンカーを通常クリックすると既存選択をクリア + 新規 1 個', () => {
+    const path = new FakePathHandle(makeTriangle());
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    // 2 個選択
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerUp(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerDown(pointer({ x: 100, y: 0, shiftKey: true }), host);
+    tool.onPointerUp(pointer({ x: 100, y: 0, shiftKey: true }), host);
+    // anchor 2 を通常クリック → クリアされて anchor 2 のみ
+    tool.onPointerDown(pointer({ x: 50, y: 100 }), host);
+    expect(tool.getSelectedAnchorIndices()).toEqual(new Set([2]));
+  });
+
+  test('既選択アンカーを通常クリックすると選択維持 (= drag に入る)', () => {
+    const path = new FakePathHandle(makeTriangle());
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerUp(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerDown(pointer({ x: 100, y: 0, shiftKey: true }), host);
+    tool.onPointerUp(pointer({ x: 100, y: 0, shiftKey: true }), host);
+    // anchor 0 (既選択) を通常クリック → 選択維持
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    expect(tool.getSelectedAnchorIndices()).toEqual(new Set([0, 1]));
+    expect(tool.isDragging()).toBe(true);
+  });
+
+  test('空きエリアの通常クリックで選択クリア + pass を返す', () => {
+    const path = new FakePathHandle(makeTriangle());
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerUp(pointer({ x: 0, y: 0 }), host);
+    expect(tool.getSelectedAnchorIndices().size).toBe(1);
+
+    const result = tool.onPointerDown(pointer({ x: 500, y: 500 }), host);
+    expect(result).toBe('pass');
+    expect(tool.getSelectedAnchorIndices().size).toBe(0);
+  });
+
+  test('空きエリア + Shift で選択保持 + pass', () => {
+    const path = new FakePathHandle(makeTriangle());
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerUp(pointer({ x: 0, y: 0 }), host);
+    const result = tool.onPointerDown(pointer({ x: 500, y: 500, shiftKey: true }), host);
+    expect(result).toBe('pass');
+    expect(tool.getSelectedAnchorIndices()).toEqual(new Set([0]));
+  });
+
+  test('複数選択アンカーを drag → 全アンカーが同じデルタで剛体移動', () => {
+    const path = new FakePathHandle(makeTriangle());
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    // anchor 0 と 1 を選択
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerUp(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerDown(pointer({ x: 100, y: 0, shiftKey: true }), host);
+    tool.onPointerUp(pointer({ x: 100, y: 0, shiftKey: true }), host);
+
+    // anchor 0 を掴んで (10, 5) drag
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerMove(pointer({ x: 10, y: 5 }), host);
+    tool.onPointerUp(pointer({ x: 10, y: 5 }), host);
+
+    // anchor 0 と 1 が両方 (10, 5) 移動。anchor 2 は不変。
+    expect(path.commands[0]).toEqual({ type: 'M', to: { x: 10, y: 5 } });
+    expect(path.commands[1]).toEqual({ type: 'L', to: { x: 110, y: 5 } });
+    expect(path.commands[2]).toEqual({ type: 'L', to: { x: 50, y: 100 } });
+  });
+
+  test('Shift+drag で水平軸ロック (横方向のみ移動)', () => {
+    const path = new FakePathHandle(makeTriangle());
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    // 累積 (12, 3) → |dx| > |dy| → 水平軸ロック
+    tool.onPointerMove(pointer({ x: 12, y: 3, shiftKey: true }), host);
+    tool.onPointerUp(pointer({ x: 12, y: 3, shiftKey: true }), host);
+
+    expect(path.commands[0]).toEqual({ type: 'M', to: { x: 12, y: 0 } });
+  });
+
+  test('Shift+drag で垂直軸ロック (縦方向のみ移動)', () => {
+    const path = new FakePathHandle(makeTriangle());
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    // 累積 (3, 12) → |dy| > |dx| → 垂直軸ロック
+    tool.onPointerMove(pointer({ x: 3, y: 12, shiftKey: true }), host);
+    tool.onPointerUp(pointer({ x: 3, y: 12, shiftKey: true }), host);
+
+    expect(path.commands[0]).toEqual({ type: 'M', to: { x: 0, y: 12 } });
+  });
+
+  test('moveSelectedAnchorsBy: 選択全アンカーを world delta で移動 + history push', () => {
+    const path = new FakePathHandle(makeTriangle());
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    // anchor 0 と 2 を選択
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerUp(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerDown(pointer({ x: 50, y: 100, shiftKey: true }), host);
+    tool.onPointerUp(pointer({ x: 50, y: 100, shiftKey: true }), host);
+
+    tool.moveSelectedAnchorsBy(host, 5, 3);
+
+    expect(path.commands[0]).toEqual({ type: 'M', to: { x: 5, y: 3 } });
+    expect(path.commands[1]).toEqual({ type: 'L', to: { x: 100, y: 0 } }); // 不変
+    expect(path.commands[2]).toEqual({ type: 'L', to: { x: 55, y: 103 } });
+    // history Command が push されている
+    expect(host.commands).toHaveLength(1);
+    expect(host.commands[0].kind).toBe('objectChanged');
+  });
+
+  test('moveSelectedAnchorsBy: 選択ゼロならノーオペ (history も path も触らない)', () => {
+    const path = new FakePathHandle(makeTriangle());
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    tool.moveSelectedAnchorsBy(host, 5, 3);
+
+    expect(path.commands[0]).toEqual({ type: 'M', to: { x: 0, y: 0 } });
+    expect(host.commands).toHaveLength(0);
+    expect(path.finalizeCount).toBe(0);
+  });
+
+  test('clearSelectedAnchors() で選択がリセットされる', () => {
+    const path = new FakePathHandle(makeTriangle());
+    const host = new FakeHost(path);
+    const tool = new SelectCharTool();
+
+    tool.onPointerDown(pointer({ x: 0, y: 0 }), host);
+    tool.onPointerUp(pointer({ x: 0, y: 0 }), host);
+    expect(tool.getSelectedAnchorIndices().size).toBe(1);
+
+    tool.clearSelectedAnchors();
+    expect(tool.getSelectedAnchorIndices().size).toBe(0);
+  });
 });
 

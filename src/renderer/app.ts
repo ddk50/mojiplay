@@ -515,9 +515,11 @@ function syncToolbarToSelection(): void {
 
 // ヒット半径はツール側に閉じている (tools/overlay-layout.ts)。
 // ここはマーカー描画の見た目関連のみ。
-const ANCHOR_MARKER_PX  = 7;
-const ANCHOR_FILL       = '#ffffff';
-const ANCHOR_STROKE     = '#0066ff';
+const ANCHOR_MARKER_PX     = 7;
+const ANCHOR_FILL          = '#ffffff';
+const ANCHOR_STROKE        = '#0066ff';
+// 選択中アンカーは塗り潰しを反転 (Illustrator 流: hollow → filled)。
+const ANCHOR_SELECTED_FILL = '#0066ff';
 
 const HANDLE_LINE_COLOR = '#0066ff';
 const HANDLE_LINE_WIDTH = 1;
@@ -574,11 +576,17 @@ function drawAnchorOverlay(): void {
     ctx.stroke();
   }
 
-  // Pass 3: アンカー四角 (最前面)
-  ctx.fillStyle = ANCHOR_FILL;
+  // Pass 3: アンカー四角 (最前面)。select-char モードでは選択中アンカーを
+  // 塗り潰し色違いで描画 (= Illustrator 流の "filled = selected")。
+  const selectedSet = currentMode === 'select-char'
+    ? selectCharTool.getSelectedAnchorIndices()
+    : null;
   ctx.strokeStyle = ANCHOR_STROKE;
   ctx.lineWidth = 1;
   for (const a of aCache) {
+    ctx.fillStyle = (selectedSet && selectedSet.has(a.anchorIndex))
+      ? ANCHOR_SELECTED_FILL
+      : ANCHOR_FILL;
     ctx.fillRect(a.sx - half, a.sy - half, ANCHOR_MARKER_PX, ANCHOR_MARKER_PX);
     ctx.strokeRect(a.sx - half, a.sy - half, ANCHOR_MARKER_PX, ANCHOR_MARKER_PX);
   }
@@ -736,14 +744,21 @@ canvas.on('mouse:down', (opt) => {
 
 // 選択イベント: contextTop の overlay クリア → 現ツールの onSelectionChanged
 // (黒矢印は groupId 自動展開) → toolbar 同期。
-canvas.on('selection:cleared', clearAnchorState);
+canvas.on('selection:cleared', () => {
+  clearAnchorState();
+  // 選択 path が外れたらアンカー選択もリセット
+  selectCharTool.clearSelectedAnchors();
+});
 canvas.on('selection:created', () => {
   clearAnchorState();
+  // 別 path に切り替わったらアンカー選択をリセット
+  selectCharTool.clearSelectedAnchors();
   tools[currentMode].onSelectionChanged(state);
   syncToolbarToSelection();
 });
 canvas.on('selection:updated', () => {
   clearAnchorState();
+  selectCharTool.clearSelectedAnchors();
   tools[currentMode].onSelectionChanged(state);
   syncToolbarToSelection();
 });
@@ -809,6 +824,25 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'O' || e.key === 'o')) {
     e.preventDefault();
     void outlineSelection(canvas, state);
+  }
+
+  // 矢印キー: select-char モードで選択中アンカーを world delta で平行移動。
+  // Photoshop 慣例で 1 unit / Shift+矢印で 10 unit。Modifier 無し前提なので
+  // Ctrl/Cmd/Alt が押されている場合はブラウザ標準動作に任せる。
+  if (currentMode === 'select-char' &&
+      !e.ctrlKey && !e.metaKey && !e.altKey && !isToolbarInput()) {
+    let dx = 0, dy = 0;
+    if      (e.key === 'ArrowLeft')  dx = -1;
+    else if (e.key === 'ArrowRight') dx =  1;
+    else if (e.key === 'ArrowUp')    dy = -1;
+    else if (e.key === 'ArrowDown')  dy =  1;
+    if (dx !== 0 || dy !== 0) {
+      const step = e.shiftKey ? 10 : 1;
+      if (selectCharTool.getSelectedAnchorIndices().size > 0) {
+        e.preventDefault();
+        selectCharTool.moveSelectedAnchorsBy(state, dx * step, dy * step);
+      }
+    }
   }
 
   // F12 / Ctrl+Shift+I: DevTools を開閉 (HTML メニューの「開発者ツール」と同等)
