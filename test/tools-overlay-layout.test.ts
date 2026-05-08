@@ -5,10 +5,10 @@
 
 import type { PathCommand } from '../src/core/path/types';
 import type { Mat2x3 } from '../src/core/path/coords';
-import type { PathSnapshot } from '../src/core/tools/tool-interface';
+import type { PathSnapshot } from '../src/core/state';
 import {
   computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt,
-} from '../src/core/tools/overlay-layout';
+} from '../src/tools/overlay-layout';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 

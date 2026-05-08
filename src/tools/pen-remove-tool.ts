@@ -5,12 +5,13 @@
 //
 // hover 時はアンカー上で 'pointer' カーソルにする。
 
-import { removeAnchor } from '../path/anchors';
+import { removeAnchor } from '../core/path/anchors';
 import { computeOverlayLayout, hitTestAnchorAt } from './overlay-layout';
 import type {
-  Tool, ToolDescriptor, ToolHost, PointerInput, PointerHandled,
+  Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
+import type { State } from '../core/state';
 
 export class PenRemoveTool implements Tool {
   readonly descriptor: ToolDescriptor = {
@@ -24,15 +25,15 @@ export class PenRemoveTool implements Tool {
       '</svg>',
   };
 
-  onActivate(_host: ToolHost): void { /* no-op */ }
-  onDeactivate(host: ToolHost): void { host.setCursor(''); }
+  onActivate(_state: State): void { /* no-op */ }
+  onDeactivate(state: State): void { state.setCursor(''); }
 
-  onPointerDown(e: PointerInput, host: ToolHost): PointerHandled {
-    const path = host.getActivePath();
+  onPointerDown(e: PointerInput, state: State): PointerHandled {
+    const path = state.getActivePath();
     if (!path) return 'pass';
 
     const snapshot = path.snapshot();
-    const layout = computeOverlayLayout(snapshot, host.getViewportMatrix());
+    const layout = computeOverlayLayout(snapshot, state.getViewportMatrix());
     const aIdx = hitTestAnchorAt(layout, e.screenX, e.screenY);
     if (aIdx < 0) return 'pass';
 
@@ -44,9 +45,9 @@ export class PenRemoveTool implements Tool {
     const before = path.captureForHistory();
     path.setCommands(newCmds);
     path.finalizeEdit();
-    host.requestRerender();
+    state.requestRerender();
 
-    host.pushCommand({
+    state.pushCommand({
       kind: 'objectChanged',
       objectId: path.getId(),
       before,
@@ -55,21 +56,21 @@ export class PenRemoveTool implements Tool {
     return 'consumed';
   }
 
-  onPointerMove(e: PointerInput, host: ToolHost): void {
-    const path = host.getActivePath();
+  onPointerMove(e: PointerInput, state: State): void {
+    const path = state.getActivePath();
     if (!path) {
-      host.setCursor('');
+      state.setCursor('');
       return;
     }
-    const layout = computeOverlayLayout(path.snapshot(), host.getViewportMatrix());
+    const layout = computeOverlayLayout(path.snapshot(), state.getViewportMatrix());
     const aIdx = hitTestAnchorAt(layout, e.screenX, e.screenY);
-    host.setCursor(aIdx >= 0 ? 'pointer' : '');
+    state.setCursor(aIdx >= 0 ? 'pointer' : '');
   }
 
-  onPointerUp(_e: PointerInput, _host: ToolHost): void { /* no-op */ }
+  onPointerUp(_e: PointerInput, _state: State): void { /* no-op */ }
   isDragging(): boolean { return false; }
 
-  onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _host: ToolHost): void { /* no-op */ }
-  onSelectionChanged(_host: ToolHost): void { /* no-op */ }
-  onCanvasMouseDown(_e: CanvasMouseDownInput, _host: ToolHost): void { /* no-op */ }
+  onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _state: State): void { /* no-op */ }
+  onSelectionChanged(_state: State): void { /* no-op */ }
+  onCanvasMouseDown(_e: CanvasMouseDownInput, _state: State): void { /* no-op */ }
 }

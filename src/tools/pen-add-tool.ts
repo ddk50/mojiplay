@@ -43,16 +43,17 @@
 //   逆操作 (アンカー削除 / -ペンツール) は curve fitting の問題で
 //   De Casteljau では戻せない。pen-remove-tool.ts 参照。
 
-import type { Point, PathCommand } from '../path/types';
-import { splitSegment, getSegmentStart } from '../path/anchors';
-import type { PathTransform } from '../path/coords';
-import { screenToPathLocal } from '../path/coords';
+import type { Point, PathCommand } from '../core/path/types';
+import { splitSegment, getSegmentStart } from '../core/path/anchors';
+import type { PathTransform } from '../core/path/coords';
+import { screenToPathLocal } from '../core/path/coords';
 import { findClosestSegment } from './segment-hit';
-import type { ObjectSnapshot } from '../history/types';
+import type { ObjectSnapshot } from '../core/history/types';
 import type {
-  Tool, ToolDescriptor, ToolHost, PathHandle, PointerInput, PointerHandled,
+  Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
+import type { State, PathHandle } from '../core/state';
 
 interface PenAddDragState {
   readonly cmdIndex: number;        // 分割した命令の前半 (新アンカー終端) の index
@@ -84,23 +85,23 @@ export class PenAddTool implements Tool {
 
   isDragging(): boolean { return this.drag !== null; }
 
-  onActivate(_host: ToolHost): void { /* no-op */ }
-  onDeactivate(host: ToolHost): void {
+  onActivate(_state: State): void { /* no-op */ }
+  onDeactivate(state: State): void {
     this.drag = null;
     this.dragPath = null;
     this.beforeSnapshot = null;
-    host.setCursor('');
+    state.setCursor('');
   }
 
-  onPointerDown(e: PointerInput, host: ToolHost): PointerHandled {
-    const path = host.getActivePath();
+  onPointerDown(e: PointerInput, state: State): PointerHandled {
+    const path = state.getActivePath();
     if (!path) return 'pass';
 
     const snapshot = path.snapshot();
     const transform: PathTransform = {
       pathMatrix:     snapshot.pathMatrix,
       pathOffset:     snapshot.pathOffset,
-      viewportMatrix: host.getViewportMatrix(),
+      viewportMatrix: state.getViewportMatrix(),
     };
     const hit = findClosestSegment(
       snapshot.commands, e.screenX, e.screenY, transform, PEN_HIT_THRESHOLD, PEN_SAMPLES,
@@ -130,18 +131,18 @@ export class PenAddTool implements Tool {
     path.setCommands(newPath);
     this.drag = { cmdIndex: hit.cmdIndex, origCmdType, anchor, prev, next };
     this.dragPath = path;
-    host.requestRerender();
+    state.requestRerender();
     return 'consumed';
   }
 
-  onPointerMove(e: PointerInput, host: ToolHost): void {
+  onPointerMove(e: PointerInput, state: State): void {
     if (this.drag && this.dragPath) {
       const path = this.dragPath;
       const snapshot = path.snapshot();
       const transform: PathTransform = {
         pathMatrix:     snapshot.pathMatrix,
         pathOffset:     snapshot.pathOffset,
-        viewportMatrix: host.getViewportMatrix(),
+        viewportMatrix: state.getViewportMatrix(),
       };
       const local = screenToPathLocal({ x: e.screenX, y: e.screenY }, transform);
       const dx = local.x - this.drag.anchor.x;
@@ -182,29 +183,29 @@ export class PenAddTool implements Tool {
       };
 
       path.setCommands(updated);
-      host.requestRerender();
+      state.requestRerender();
       return;
     }
 
     // ── Hover ────────────────────────────────────────────────────────
-    const path = host.getActivePath();
+    const path = state.getActivePath();
     if (!path) {
-      host.setCursor('');
+      state.setCursor('');
       return;
     }
     const snapshot = path.snapshot();
     const transform: PathTransform = {
       pathMatrix:     snapshot.pathMatrix,
       pathOffset:     snapshot.pathOffset,
-      viewportMatrix: host.getViewportMatrix(),
+      viewportMatrix: state.getViewportMatrix(),
     };
     const hit = findClosestSegment(
       snapshot.commands, e.screenX, e.screenY, transform, PEN_HIT_THRESHOLD, PEN_SAMPLES,
     );
-    host.setCursor(hit ? 'copy' : '');
+    state.setCursor(hit ? 'copy' : '');
   }
 
-  onPointerUp(_e: PointerInput, host: ToolHost): void {
+  onPointerUp(_e: PointerInput, state: State): void {
     if (!this.drag || !this.dragPath) return;
     const p = this.dragPath;
     const before = this.beforeSnapshot;
@@ -212,11 +213,11 @@ export class PenAddTool implements Tool {
     this.dragPath = null;
     this.beforeSnapshot = null;
     p.finalizeEdit();
-    host.requestRerender();
+    state.requestRerender();
 
     // History: アンカー追加が完了したら Command を push (anchor 追加は必ず差分が出る)
     if (before) {
-      host.pushCommand({
+      state.pushCommand({
         kind: 'objectChanged',
         objectId: p.getId(),
         before,
@@ -225,7 +226,7 @@ export class PenAddTool implements Tool {
     }
   }
 
-  onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _host: ToolHost): void { /* no-op */ }
-  onSelectionChanged(_host: ToolHost): void { /* no-op */ }
-  onCanvasMouseDown(_e: CanvasMouseDownInput, _host: ToolHost): void { /* no-op */ }
+  onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _state: State): void { /* no-op */ }
+  onSelectionChanged(_state: State): void { /* no-op */ }
+  onCanvasMouseDown(_e: CanvasMouseDownInput, _state: State): void { /* no-op */ }
 }

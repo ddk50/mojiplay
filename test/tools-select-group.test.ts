@@ -2,14 +2,14 @@
 // FakeToolHost に getActiveObjects / getAllObjects / setActiveSelection を実装し、
 // 展開の有無と再帰防止を検証する。
 
-import type { ObjectHandle, ToolHost } from '../src/core/tools/tool-interface';
-import { SelectGroupTool } from '../src/core/tools/select-group-tool';
+import type { State, ObjectHandle } from '../src/core/state';
+import { SelectGroupTool } from '../src/tools/select-group-tool';
 
 function makeHandle(gid?: string): ObjectHandle {
   return { getGroupId: () => gid };
 }
 
-class FakeHost implements ToolHost {
+class FakeHost implements State {
   public active: ObjectHandle[] = [];
   public all:    ObjectHandle[] = [];
   public setSelectionCalls: ObjectHandle[][] = [];
@@ -25,6 +25,13 @@ class FakeHost implements ToolHost {
   setCursor(_c: string) { /* no-op */ }
   createTextAt() { /* no-op */ }
   pushCommand() { /* no-op */ }
+  undo() { /* no-op */ }
+  redo() { /* no-op */ }
+  canUndo() { return false; }
+  canRedo() { return false; }
+  serialize() { return null; }
+  loadSerialized() { /* no-op */ }
+  linearizeHistory() { return []; }
 }
 
 describe('SelectGroupTool', () => {
@@ -105,7 +112,7 @@ describe('SelectGroupTool', () => {
 // 本ブロックは canonical / non-canonical 両方を fake host で再現し、契約を
 // 満たさない場合に再帰が止まらないことを明示的にテストする。
 
-interface RecursingHost extends ToolHost {
+interface RecursingHost extends State {
   active: ObjectHandle[];
   recursionDepth: number;
 }
@@ -137,6 +144,13 @@ describe('SelectGroupTool: canonical handle contract (回帰テスト)', () => {
       setCursor(_c)       { /* no-op */ },
       createTextAt()      { /* no-op */ },
       pushCommand()       { /* no-op */ },
+      undo()              { /* no-op */ },
+      redo()              { /* no-op */ },
+      canUndo()           { return false; },
+      canRedo()           { return false; },
+      serialize()         { return null; },
+      loadSerialized()    { /* no-op */ },
+      linearizeHistory()  { return []; },
     };
 
     tool.onSelectionChanged(host);
@@ -154,7 +168,7 @@ describe('SelectGroupTool: canonical handle contract (回帰テスト)', () => {
     let recursionDepth = 0;
     const MAX = 5;
 
-    const buggyHost: ToolHost = {
+    const buggyHost: State = {
       getActiveObjects() { return [{ getGroupId: () => 'g1' }]; },        // 毎回新 instance
       getAllObjects()    { return [{ getGroupId: () => 'g1' }, { getGroupId: () => 'g1' }]; },
       setActiveSelection(_objs) {
@@ -168,6 +182,13 @@ describe('SelectGroupTool: canonical handle contract (回帰テスト)', () => {
       setCursor(_c)       { /* no-op */ },
       createTextAt()      { /* no-op */ },
       pushCommand()       { /* no-op */ },
+      undo()              { /* no-op */ },
+      redo()              { /* no-op */ },
+      canUndo()           { return false; },
+      canRedo()           { return false; },
+      serialize()         { return null; },
+      loadSerialized()    { /* no-op */ },
+      linearizeHistory()  { return []; },
     };
 
     tool.onSelectionChanged(buggyHost);

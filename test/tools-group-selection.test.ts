@@ -1,6 +1,6 @@
 // computeGroupExpansion の単体テスト。
 
-import { computeGroupExpansion } from '../src/core/tools/group-selection';
+import { computeGroupExpansion } from '../src/tools/group-selection';
 
 interface Obj { id: string; gid?: string }
 const getGid = (o: Obj) => o.gid;

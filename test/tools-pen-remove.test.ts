@@ -2,10 +2,9 @@
 
 import type { PathCommand } from '../src/core/path/types';
 import type { Mat2x3 } from '../src/core/path/coords';
-import type {
-  PathHandle, PathSnapshot, PointerInput, ToolHost, ObjectHandle,
-} from '../src/core/tools/tool-interface';
-import { PenRemoveTool } from '../src/core/tools/pen-remove-tool';
+import type { PointerInput } from '../src/tools/tool-interface';
+import type { State, PathHandle, PathSnapshot } from '../src/core/state';
+import { PenRemoveTool } from '../src/tools/pen-remove-tool';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 
@@ -24,7 +23,7 @@ class FakePathHandle implements PathHandle {
   }
 }
 
-class FakeHost implements ToolHost {
+class FakeHost implements State {
   public path: PathHandle | null;
   public cursor = '';
   public rerenderCount = 0;
@@ -38,6 +37,13 @@ class FakeHost implements ToolHost {
   setActiveSelection() { /* no-op */ }
   createTextAt() { /* no-op */ }
   pushCommand() { /* no-op */ }
+  undo() { /* no-op */ }
+  redo() { /* no-op */ }
+  canUndo() { return false; }
+  canRedo() { return false; }
+  serialize() { return null; }
+  loadSerialized() { /* no-op */ }
+  linearizeHistory() { return []; }
 }
 
 function pointer(x: number, y: number): PointerInput {

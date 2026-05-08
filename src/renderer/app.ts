@@ -4,15 +4,16 @@
 import type { Mat2x3, PathTransform } from '../core/path/coords';
 import { pathLocalToScreen } from '../core/path/coords';
 import { fromFabricPath } from '../core/path/fabric-adapter';
-import { computeOverlayLayout } from '../core/tools/overlay-layout';
+import { computeOverlayLayout } from '../tools/overlay-layout';
 import type {
-  Tool, PointerInput, TextCreateProps,
-} from '../core/tools/tool-interface';
-import { SelectCharTool } from '../core/tools/select-char-tool';
-import { SelectGroupTool } from '../core/tools/select-group-tool';
-import { TextTool } from '../core/tools/text-tool';
-import { PenAddTool } from '../core/tools/pen-add-tool';
-import { PenRemoveTool } from '../core/tools/pen-remove-tool';
+  Tool, PointerInput,
+} from '../tools/tool-interface';
+import type { TextCreateProps } from '../core/state';
+import { SelectCharTool } from '../tools/select-char-tool';
+import { SelectGroupTool } from '../tools/select-group-tool';
+import { TextTool } from '../tools/text-tool';
+import { PenAddTool } from '../tools/pen-add-tool';
+import { PenRemoveTool } from '../tools/pen-remove-tool';
 import { exportObjectToPngDataUrl } from '../core/copy-export';
 import { ensureObjectId } from '../core/object-id';
 import type { ObjectId } from '../core/object-id';
@@ -26,7 +27,7 @@ import {
 } from './font-enumeration';
 import { outlineTextToPath } from './outline-conversion';
 import { buildToolbar } from './toolbar';
-import { createState } from './state';
+import { State } from './state';
 
 // メニューアクション → 後で canvas 初期化後に使う関数を参照するため
 // handleMenuAction は関数宣言 (hoisted) で定義し、canvas 依存部分は
@@ -100,7 +101,7 @@ resizeCanvas();
 // State: fabric を内包し、ToolHost interface + History API + 永続化 API を提供。
 // fabric event hook (mouse:down / object:modified による history 配線) も state 内部。
 // 詳細は CLAUDE.md「Tool との関係」「Tool-driven vs fabric-driven の区別」参照。
-const state = createState(canvas, { historyMax: 100 });
+const state = new State(canvas, { historyMax: 100 });
 
 // ── Toolbar references ────────────────────────────────────────────────────
 // fontFamilySel / fontStyleSel は renderer/font-enumeration.ts で定義済み (cross-file global)。
@@ -321,7 +322,7 @@ canvas.on('text:editing:exited', (e: fabric.IEvent) => {
 });
 
 // 黒矢印モードのグループ自動展開ロジックは SelectGroupTool に抽出済み
-// (core/tools/select-group-tool.ts + core/tools/group-selection.ts)。
+// (tools/select-group-tool.ts + tools/group-selection.ts)。
 // 配線は後段の selection:created / selection:updated ディスパッチャから
 // onSelectionChanged 経由で呼ばれる。
 
@@ -650,7 +651,7 @@ async function outlineSelection(): Promise<void> {
 // パスのアンカーポイント (セグメント端点) を正方形マーカーで表示し、
 // ドラッグで個別アンカー + 付属ベジェハンドルを剛体移動する。
 
-// ヒット半径はツール側に閉じている (core/tools/overlay-layout.ts)。
+// ヒット半径はツール側に閉じている (tools/overlay-layout.ts)。
 // ここはマーカー描画の見た目関連のみ。
 const ANCHOR_MARKER_PX  = 7;
 const ANCHOR_FILL       = '#ffffff';
@@ -664,7 +665,7 @@ const HANDLE_STROKE     = '#0066ff';
 
 // 全ツールがそれぞれ自前で computeOverlayLayout / hitTest を呼ぶようになったため、
 // app.ts レベルでのスクリーン座標キャッシュは不要になった (drawAnchorOverlay は
-// 描画ごとに layout を計算しても十分軽い)。ヒットテスト関数も core/tools/
+// 描画ごとに layout を計算しても十分軽い)。ヒットテスト関数も tools/
 // overlay-layout.ts の hitTestAnchorAt / hitTestHandleAt を直接ツールが利用する。
 
 function drawAnchorOverlay(): void {
@@ -734,7 +735,7 @@ function clearAnchorState(): void {
 
 // ── SelectCharTool 配線 ────────────────────────────────────────────
 //
-// 白矢印モードのアンカー/ハンドルドラッグとホバー判定は core/tools/select-char-tool.ts に
+// 白矢印モードのアンカー/ハンドルドラッグとホバー判定は tools/select-char-tool.ts に
 // 抽出済み。fabric.Path → PathHandle の橋渡しと finalizeDrag は
 // renderer/fabric-path-handle.ts に抽出済み (history adapter からも参照される)。
 // ここでは DOM/fabric イベントを現在ツールへ転送する dispatcher を担当する。
@@ -868,7 +869,7 @@ canvas.on('mouse:down', (opt) => {
   }, state);
 });
 
-// ペンツール (PenAddTool / PenRemoveTool) と関連ヘルパは core/tools/* に抽出済み。
+// ペンツール (PenAddTool / PenRemoveTool) と関連ヘルパは tools/* に抽出済み。
 // 上記の DOM mousedown/move dispatcher が現在ツールを呼ぶので、ここに専用 handler は無い。
 
 // 選択イベント: contextTop の overlay クリア → 現ツールの onSelectionChanged
