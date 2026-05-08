@@ -5,7 +5,7 @@
 
 import type { PathCommand } from '../src/core/path/types';
 import type { Mat2x3, PathTransform } from '../src/core/path/coords';
-import { findClosestSegment } from '../src/core/tools/segment-hit';
+import { findClosestSegment } from '../src/tools/segment-hit';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 const T: PathTransform = {

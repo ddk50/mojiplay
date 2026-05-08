@@ -8,11 +8,11 @@
 //     fresh に layout を計算し、hit-test に使う。
 //   - app.ts の drawAnchorOverlay: 描画前に layout を計算してマーカーを描く。
 
-import type { HandleRef } from '../path/types';
-import { extractAnchors, getHandlePoint } from '../path/anchors';
-import type { Mat2x3, PathTransform } from '../path/coords';
-import { pathLocalToScreen } from '../path/coords';
-import type { PathSnapshot } from './tool-interface';
+import type { HandleRef } from '../core/path/types';
+import { extractAnchors, getHandlePoint } from '../core/path/anchors';
+import type { Mat2x3, PathTransform } from '../core/path/coords';
+import { pathLocalToScreen } from '../core/path/coords';
+import type { PathSnapshot } from '../core/state';
 
 export interface AnchorScreenPos {
   readonly anchorIndex: number;

@@ -6,10 +6,10 @@
 //
 // fabric / DOM 非依存。座標変換は coords.ts の pathLocalToScreen を使う。
 
-import type { Point, PathCommand } from '../path/types';
-import { evalCubicAt, evalQuadAt } from '../path/anchors';
-import type { PathTransform } from '../path/coords';
-import { pathLocalToScreen } from '../path/coords';
+import type { Point, PathCommand } from '../core/path/types';
+import { evalCubicAt, evalQuadAt } from '../core/path/anchors';
+import type { PathTransform } from '../core/path/coords';
+import { pathLocalToScreen } from '../core/path/coords';
 
 export interface SegmentHit {
   readonly cmdIndex: number;

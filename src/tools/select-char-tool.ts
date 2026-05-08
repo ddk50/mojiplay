@@ -6,21 +6,23 @@
 //   - ホバー時にアンカー/ハンドル上ならカーソルを切替
 //   - パス全体ドラッグ中はグリッドスナップ (Alt で一時バイパス)
 //
-// 入力 (PointerInput) と出力 (PathHandle / ToolHost) は core/tools/tool-interface.ts で
-// 抽象化されており、本クラスは fabric / DOM を一切知らない。
-// テストは FakePathHandle と FakeToolHost を渡すだけで全挙動を検証可能。
+// 入力 (PointerInput) は core/tools/tool-interface.ts、State / PathHandle は
+// core/state.ts で抽象化されており、本クラスは fabric / DOM を一切知らない。
+// テストは FakePathHandle と FakeState を渡すだけで全挙動を検証可能。
 //
 // 中間ドラッグ更新は path.setCommands() で頻繁に呼び、bbox 再計算は
 // pointerUp で 1 回だけ path.finalizeEdit() を呼ぶ (コスト集約)。
 
-import type { Point, PathCommand, HandleRef } from '../path/types';
-import { moveAnchorRigid, moveHandle } from '../path/anchors';
-import { worldDeltaToPathLocalDelta } from '../path/coords';
+import type { Point, PathCommand, HandleRef } from '../core/path/types';
+import { moveAnchorRigid, moveHandle } from '../core/path/anchors';
+import { worldDeltaToPathLocalDelta } from '../core/path/coords';
 import { computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt } from './overlay-layout';
 import type {
-  Tool, ToolDescriptor, ToolHost, PathHandle, PointerInput, PointerHandled,
+  Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
+import type { State, PathHandle } from '../core/state';
+import type { ObjectSnapshot } from '../core/history/types';
 
 export interface SnapConfig {
   readonly enabled: boolean;
@@ -54,6 +56,8 @@ export class SelectCharTool implements Tool {
   private snap: SnapConfig = { enabled: true, pitch: 8, threshold: 5 };
   private drag: SelectCharDragState | null = null;
   private dragPath: PathHandle | null = null;
+  // History 用: drag 開始時の snapshot を保持し、drag 終了時に Command を構築する
+  private beforeSnapshot: ObjectSnapshot | null = null;
 
   setSnapConfig(cfg: SnapConfig): void {
     this.snap = cfg;
@@ -63,20 +67,21 @@ export class SelectCharTool implements Tool {
     return this.drag !== null;
   }
 
-  onActivate(_host: ToolHost): void { /* no-op */ }
+  onActivate(_state: State): void { /* no-op */ }
 
-  onDeactivate(host: ToolHost): void {
+  onDeactivate(state: State): void {
     this.drag = null;
     this.dragPath = null;
-    host.setCursor('');
+    this.beforeSnapshot = null;
+    state.setCursor('');
   }
 
-  onPointerDown(e: PointerInput, host: ToolHost): PointerHandled {
-    const path = host.getActivePath();
+  onPointerDown(e: PointerInput, state: State): PointerHandled {
+    const path = state.getActivePath();
     if (!path) return 'pass';
 
     const snapshot = path.snapshot();
-    const layout = computeOverlayLayout(snapshot, host.getViewportMatrix());
+    const layout = computeOverlayLayout(snapshot, state.getViewportMatrix());
 
     // ハンドルを優先 (アンカーと重なって見える事があるため)
     const hitHandle = hitTestHandleAt(layout, e.screenX, e.screenY);
@@ -87,6 +92,7 @@ export class SelectCharTool implements Tool {
         lastWorld: { x: e.worldX, y: e.worldY },
       };
       this.dragPath = path;
+      this.beforeSnapshot = path.captureForHistory();
       return 'consumed';
     }
 
@@ -98,13 +104,14 @@ export class SelectCharTool implements Tool {
         lastWorld: { x: e.worldX, y: e.worldY },
       };
       this.dragPath = path;
+      this.beforeSnapshot = path.captureForHistory();
       return 'consumed';
     }
 
     return 'pass';
   }
 
-  onPointerMove(e: PointerInput, host: ToolHost): void {
+  onPointerMove(e: PointerInput, state: State): void {
     if (this.drag && this.dragPath) {
       const path = this.dragPath;
       const snapshot = path.snapshot();
@@ -123,37 +130,53 @@ export class SelectCharTool implements Tool {
       }
       path.setCommands(updated);
       this.drag.lastWorld = { x: e.worldX, y: e.worldY };
-      host.requestRerender();
+      state.requestRerender();
       return;
     }
 
     // ── Hover cursor ────────────────────────────────────────────────
-    const path = host.getActivePath();
+    const path = state.getActivePath();
     if (!path) {
-      host.setCursor('');
+      state.setCursor('');
       return;
     }
     const snapshot = path.snapshot();
-    const layout = computeOverlayLayout(snapshot, host.getViewportMatrix());
+    const layout = computeOverlayLayout(snapshot, state.getViewportMatrix());
     if (hitTestHandleAt(layout, e.screenX, e.screenY)) {
-      host.setCursor('pointer');
+      state.setCursor('pointer');
     } else if (hitTestAnchorAt(layout, e.screenX, e.screenY) >= 0) {
-      host.setCursor('move');
+      state.setCursor('move');
     } else {
-      host.setCursor('');
+      state.setCursor('');
     }
   }
 
-  onPointerUp(_e: PointerInput, host: ToolHost): void {
+  onPointerUp(_e: PointerInput, state: State): void {
     if (!this.drag || !this.dragPath) return;
     const p = this.dragPath;
+    const before = this.beforeSnapshot;
     this.drag = null;
     this.dragPath = null;
+    this.beforeSnapshot = null;
     p.finalizeEdit();
-    host.requestRerender();
+    state.requestRerender();
+
+    // History: anchor / handle drag が完了したら Command を push。
+    // before/after が同一なら drag が ノーオペだったとみなして push しない。
+    if (before) {
+      const after = p.captureForHistory();
+      if (JSON.stringify(after) !== JSON.stringify(before)) {
+        state.pushCommand({
+          kind: 'objectChanged',
+          objectId: p.getId(),
+          before,
+          after,
+        });
+      }
+    }
   }
 
-  onObjectMoving(target: MovingTarget, e: { altKey: boolean }, _host: ToolHost): void {
+  onObjectMoving(target: MovingTarget, e: { altKey: boolean }, _state: State): void {
     if (!this.snap.enabled) return;
     if (e.altKey) return;  // Illustrator 慣例: Alt 押下中は一時バイパス
 
@@ -169,6 +192,6 @@ export class SelectCharTool implements Tool {
     if (Math.abs(freeY - nearestY) < threshold) target.setTop(nearestY);
   }
 
-  onSelectionChanged(_host: ToolHost): void { /* no-op */ }
-  onCanvasMouseDown(_e: CanvasMouseDownInput, _host: ToolHost): void { /* no-op */ }
+  onSelectionChanged(_state: State): void { /* no-op */ }
+  onCanvasMouseDown(_e: CanvasMouseDownInput, _state: State): void { /* no-op */ }
 }

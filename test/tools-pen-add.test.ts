@@ -2,10 +2,9 @@
 
 import type { PathCommand } from '../src/core/path/types';
 import type { Mat2x3 } from '../src/core/path/coords';
-import type {
-  PathHandle, PathSnapshot, PointerInput, ToolHost,
-} from '../src/core/tools/tool-interface';
-import { PenAddTool } from '../src/core/tools/pen-add-tool';
+import type { PointerInput } from '../src/tools/tool-interface';
+import type { State, PathHandle, PathSnapshot } from '../src/core/state';
+import { PenAddTool } from '../src/tools/pen-add-tool';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 
@@ -18,9 +17,13 @@ class FakePathHandle implements PathHandle {
   }
   setCommands(cmds: ReadonlyArray<PathCommand>): void { this.commands = cmds.slice(); }
   finalizeEdit(): void { this.finalizeCount++; }
+  getId(): any { return 'fake-id-1'; }
+  captureForHistory(): any {
+    return { type: 'path', data: { objectId: 'fake-id-1', type: 'path' }, commands: this.commands.slice() };
+  }
 }
 
-class FakeHost implements ToolHost {
+class FakeHost implements State {
   public path: PathHandle | null;
   public cursor = '';
   constructor(p: PathHandle | null) { this.path = p; }
@@ -32,6 +35,14 @@ class FakeHost implements ToolHost {
   getAllObjects()      { return []; }
   setActiveSelection() {}
   createTextAt() {}
+  pushCommand() {}
+  undo() {}
+  redo() {}
+  canUndo() { return false; }
+  canRedo() { return false; }
+  serialize() { return null; }
+  loadSerialized() {}
+  linearizeHistory() { return []; }
 }
 
 function pointer(x: number, y: number): PointerInput {

@@ -12,9 +12,10 @@
 
 import { computeGroupExpansion } from './group-selection';
 import type {
-  Tool, ToolDescriptor, ToolHost, ObjectHandle, PointerInput, PointerHandled,
+  Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
+import type { State, ObjectHandle } from '../core/state';
 
 export class SelectGroupTool implements Tool {
   readonly descriptor: ToolDescriptor = {
@@ -26,28 +27,28 @@ export class SelectGroupTool implements Tool {
       '</svg>',
   };
 
-  onActivate(_host: ToolHost): void { /* no-op */ }
-  onDeactivate(_host: ToolHost): void { /* no-op */ }
+  onActivate(_state: State): void { /* no-op */ }
+  onDeactivate(_state: State): void { /* no-op */ }
 
-  onPointerDown(_e: PointerInput, _host: ToolHost): PointerHandled { return 'pass'; }
-  onPointerMove(_e: PointerInput, _host: ToolHost): void { /* no-op */ }
-  onPointerUp(_e: PointerInput, _host: ToolHost): void { /* no-op */ }
+  onPointerDown(_e: PointerInput, _state: State): PointerHandled { return 'pass'; }
+  onPointerMove(_e: PointerInput, _state: State): void { /* no-op */ }
+  onPointerUp(_e: PointerInput, _state: State): void { /* no-op */ }
 
   isDragging(): boolean { return false; }
 
-  onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _host: ToolHost): void { /* no-op */ }
-  onCanvasMouseDown(_e: CanvasMouseDownInput, _host: ToolHost): void { /* no-op */ }
+  onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _state: State): void { /* no-op */ }
+  onCanvasMouseDown(_e: CanvasMouseDownInput, _state: State): void { /* no-op */ }
 
-  onSelectionChanged(host: ToolHost): void {
-    const current = host.getActiveObjects();
+  onSelectionChanged(state: State): void {
+    const current = state.getActiveObjects();
     if (current.length === 0) return;
 
-    const all = host.getAllObjects();
+    const all = state.getAllObjects();
     const r = computeGroupExpansion(current, all, (o: ObjectHandle) => o.getGroupId());
 
     // 既に完全展開済みなら setActiveSelection を呼ばない (selection:updated の
     // 再帰発火を防ぐ)。
     if (r.alreadyExpanded) return;
-    host.setActiveSelection(r.expanded);
+    state.setActiveSelection(r.expanded);
   }
 }

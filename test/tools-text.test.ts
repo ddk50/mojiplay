@@ -1,11 +1,10 @@
 // TextTool の単体テスト。
 
-import type {
-  TextCreateProps, CanvasMouseDownInput, ToolHost, ObjectHandle,
-} from '../src/core/tools/tool-interface';
-import { TextTool } from '../src/core/tools/text-tool';
+import type { CanvasMouseDownInput } from '../src/tools/tool-interface';
+import type { State, TextCreateProps } from '../src/core/state';
+import { TextTool } from '../src/tools/text-tool';
 
-class FakeHost implements ToolHost {
+class FakeHost implements State {
   public createCalls: Array<[number, number, TextCreateProps]> = [];
   createTextAt(x: number, y: number, props: TextCreateProps): void {
     this.createCalls.push([x, y, props]);
@@ -17,6 +16,14 @@ class FakeHost implements ToolHost {
   getActiveObjects()  { return []; }
   getAllObjects()     { return []; }
   setActiveSelection(){}
+  pushCommand()       {}
+  undo()              {}
+  redo()              {}
+  canUndo()           { return false; }
+  canRedo()           { return false; }
+  serialize()         { return null; }
+  loadSerialized()    {}
+  linearizeHistory()  { return []; }
 }
 
 const PROPS: TextCreateProps = {

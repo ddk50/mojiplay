@@ -13,11 +13,11 @@
 
 import type { PathCommand } from '../src/core/path/types';
 import type { Mat2x3 } from '../src/core/path/coords';
+import type { PointerInput } from '../src/tools/tool-interface';
 import type {
-  PathHandle, PathSnapshot, PointerInput, ToolHost,
-  ObjectHandle, TextCreateProps,
-} from '../src/core/tools/tool-interface';
-import { SelectCharTool } from '../src/core/tools/select-char-tool';
+  State, PathHandle, PathSnapshot, ObjectHandle, TextCreateProps,
+} from '../src/core/state';
+import { SelectCharTool } from '../src/tools/select-char-tool';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 
@@ -44,9 +44,14 @@ class FakePathHandle implements PathHandle {
   finalizeEdit(): void {
     this.finalizeCount++;
   }
+  getId(): any { return 'fake-id-1'; }
+  captureForHistory(): any {
+    // テスト用 snapshot: 現在の commands を含めて return (前後比較で diff が分かるように)
+    return { type: 'path', data: { objectId: 'fake-id-1', type: 'path' }, commands: this.commands.slice() };
+  }
 }
 
-class FakeHost implements ToolHost {
+class FakeHost implements State {
   public path: PathHandle | null;
   public cursor = '';
   public rerenderCount = 0;
@@ -59,6 +64,15 @@ class FakeHost implements ToolHost {
   getAllObjects():    ReadonlyArray<ObjectHandle> { return []; }
   setActiveSelection(_objs: ReadonlyArray<ObjectHandle>): void { /* no-op */ }
   createTextAt(_x: number, _y: number, _props: TextCreateProps): void { /* no-op */ }
+  public commands: any[] = [];
+  pushCommand(cmd: any): void { this.commands.push(cmd); }
+  undo(): void { /* no-op */ }
+  redo(): void { /* no-op */ }
+  canUndo(): boolean { return false; }
+  canRedo(): boolean { return false; }
+  serialize(): unknown { return null; }
+  loadSerialized(_data: unknown): void { /* no-op */ }
+  linearizeHistory() { return []; }
 }
 
 function pointer(opts: Partial<PointerInput> & { x: number; y: number }): PointerInput {
