@@ -1,39 +1,14 @@
 // TextTool の単体テスト。
 
-import type { CanvasMouseDownInput } from '../src/usecases/tools/tool-interface';
-import type { State, TextCreateProps } from '../src/core/state';
+import type { TextCreateProps } from '../src/core/state';
 import { TextTool } from '../src/usecases/tools/text-tool';
+import { FakeState } from './fakes';
 
-class FakeHost implements State {
+class FakeHost extends FakeState {
   public createCalls: Array<[number, number, TextCreateProps]> = [];
-  createTextAt(x: number, y: number, props: TextCreateProps): void {
+  override createTextAt(x: number, y: number, props: TextCreateProps): void {
     this.createCalls.push([x, y, props]);
   }
-  getActivePath()     { return null; }
-  getViewportMatrix() { return [1, 0, 0, 1, 0, 0] as const; }
-  requestRerender()   {}
-  setCursor()         {}
-  getActiveObjects()  { return []; }
-  getAllObjects()     { return []; }
-  setActiveSelection(){}
-  pushCommand()       {}
-  undo()              {}
-  redo()              {}
-  canUndo()           { return false; }
-  canRedo()           { return false; }
-  toSnapshot(): any   { return { format: 'mojiplay', version: 1, canvas: {} }; }
-  async applySnapshot(_s: any): Promise<void> {}
-  commitActiveText()  {}
-  getHistoryToken()   { return 0; }
-  onMutate(_cb: () => void) { return () => {}; }
-  clearHistory()      {}
-  getZoom()           { return 1; }
-  removeActiveObjects() {}
-  duplicateActiveObjects(_o: { x: number; y: number }) {}
-  selectAllObjects()  {}
-  async outlineActiveTexts() { return { succeeded: 0, failedChars: '', failedFamilies: [] }; }
-  exportActiveAsPngDataUrl(_m: number) { return null; }
-  linearizeHistory()  { return []; }
 }
 
 const PROPS: TextCreateProps = {
@@ -41,21 +16,21 @@ const PROPS: TextCreateProps = {
 };
 
 describe('TextTool', () => {
-  test('空き領域クリックで host.createTextAt が呼ばれる', () => {
+  test('空き領域クリックで host.createTextAt を呼ぶ', () => {
     const tool = new TextTool(() => PROPS);
     const host = new FakeHost();
     tool.onCanvasMouseDown({ worldX: 50, worldY: 100, hasTarget: false }, host);
     expect(host.createCalls).toEqual([[50, 100, PROPS]]);
   });
 
-  test('既存オブジェクト上クリック (hasTarget=true) は no-op', () => {
+  test('既存オブジェクト上のクリック (hasTarget=true) では createTextAt を呼ばない', () => {
     const tool = new TextTool(() => PROPS);
     const host = new FakeHost();
     tool.onCanvasMouseDown({ worldX: 50, worldY: 100, hasTarget: true }, host);
     expect(host.createCalls).toEqual([]);
   });
 
-  test('getFontProps が毎回呼ばれる (toolbar の最新値を反映)', () => {
+  test('createTextAt のたびに getFontProps を呼んで最新値を反映する', () => {
     let counter = 0;
     const tool = new TextTool((): TextCreateProps => {
       counter++;
@@ -68,4 +43,3 @@ describe('TextTool', () => {
     expect(host.createCalls[1][2].fontSize).toBe(20);
   });
 });
-

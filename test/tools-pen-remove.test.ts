@@ -1,67 +1,21 @@
 // PenRemoveTool の単体テスト。
 
-import type { PathCommand } from '../src/core/path/types';
-import type { Mat2x3 } from '../src/core/path/coords';
-import type { PointerInput } from '../src/usecases/tools/tool-interface';
-import type { State, PathHandle, PathSnapshot } from '../src/core/state';
+import type { PathHandle } from '../src/core/state';
 import { PenRemoveTool } from '../src/usecases/tools/pen-remove-tool';
+import { FakePathHandle, FakeState, pointer } from './fakes';
 
-const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
-
-class FakePathHandle implements PathHandle {
-  public commands: PathCommand[];
-  public finalizeCount = 0;
-  constructor(initial: PathCommand[]) { this.commands = initial.map(c => c); }
-  snapshot(): PathSnapshot {
-    return { commands: this.commands, pathMatrix: IDENT, pathOffset: { x: 0, y: 0 } };
-  }
-  setCommands(cmds: ReadonlyArray<PathCommand>): void { this.commands = cmds.slice(); }
-  finalizeEdit(): void { this.finalizeCount++; }
-  getId(): any { return 'fake-id-1'; }
-  captureForHistory(): any {
-    return { type: 'path', data: { objectId: 'fake-id-1', type: 'path' }, commands: this.commands.slice() };
-  }
-}
-
-class FakeHost implements State {
+class FakeHost extends FakeState {
   public path: PathHandle | null;
   public cursor = '';
   public rerenderCount = 0;
-  constructor(p: PathHandle | null) { this.path = p; }
-  getActivePath() { return this.path; }
-  getViewportMatrix() { return IDENT; }
-  requestRerender() { this.rerenderCount++; }
-  setCursor(c: string) { this.cursor = c; }
-  getActiveObjects()   { return []; }
-  getAllObjects()      { return []; }
-  setActiveSelection() { /* no-op */ }
-  createTextAt() { /* no-op */ }
-  pushCommand() { /* no-op */ }
-  undo() { /* no-op */ }
-  redo() { /* no-op */ }
-  canUndo() { return false; }
-  canRedo() { return false; }
-  toSnapshot(): any { return { format: 'mojiplay', version: 1, canvas: {} }; }
-  async applySnapshot(_s: any): Promise<void> { /* no-op */ }
-  commitActiveText() { /* no-op */ }
-  getHistoryToken() { return 0; }
-  onMutate(_cb: () => void) { return () => {}; }
-  clearHistory() { /* no-op */ }
-  getZoom() { return 1; }
-  removeActiveObjects() { /* no-op */ }
-  duplicateActiveObjects(_o: { x: number; y: number }) { /* no-op */ }
-  selectAllObjects() { /* no-op */ }
-  async outlineActiveTexts() { return { succeeded: 0, failedChars: '', failedFamilies: [] }; }
-  exportActiveAsPngDataUrl(_m: number) { return null; }
-  linearizeHistory() { return []; }
-}
-
-function pointer(x: number, y: number): PointerInput {
-  return { screenX: x, screenY: y, worldX: x, worldY: y, altKey: false, shiftKey: false };
+  constructor(p: PathHandle | null) { super(); this.path = p; }
+  override getActivePath() { return this.path; }
+  override setCursor(c: string) { this.cursor = c; }
+  override requestRerender() { this.rerenderCount++; }
 }
 
 describe('PenRemoveTool', () => {
-  test('アンカー上をクリックすると removeAnchor が走り finalizeEdit', () => {
+  test('アンカー上のクリックで removeAnchor + finalizeEdit が走る', () => {
     const path = new FakePathHandle([
       { type: 'M', to: { x: 0, y: 0 } },
       { type: 'L', to: { x: 100, y: 0 } },
@@ -79,7 +33,7 @@ describe('PenRemoveTool', () => {
     expect(path.finalizeCount).toBe(1);
   });
 
-  test('アンカー以外をクリックは pass で副作用無し', () => {
+  test('アンカー以外のクリックは pass を返して副作用を起こさない', () => {
     const path = new FakePathHandle([
       { type: 'M', to: { x: 0, y: 0 } },
       { type: 'L', to: { x: 100, y: 0 } },
@@ -94,7 +48,7 @@ describe('PenRemoveTool', () => {
     expect(path.commands.length).toBe(3);
   });
 
-  test('アンカー数下限の場合は (consumed だが) コマンド変更も finalize も無し', () => {
+  test('アンカー数下限では consumed を返すが path 変更も finalize も起こさない', () => {
     const path = new FakePathHandle([
       { type: 'M', to: { x: 0, y: 0 } },
       { type: 'L', to: { x: 100, y: 0 } },  // この L を削除すると M 単独になり拒否される
@@ -111,7 +65,7 @@ describe('PenRemoveTool', () => {
     expect(path.finalizeCount).toBe(0);
   });
 
-  test('hover: アンカー上で pointer カーソル', () => {
+  test('アンカー上の hover で pointer カーソルになる', () => {
     const path = new FakePathHandle([
       { type: 'M', to: { x: 0, y: 0 } },
       { type: 'L', to: { x: 100, y: 0 } },
@@ -126,11 +80,10 @@ describe('PenRemoveTool', () => {
     expect(host.cursor).toBe('');
   });
 
-  test('hover: パス無しならカーソル空', () => {
+  test('path 無しなら hover してもカーソルが空文字になる', () => {
     const host = new FakeHost(null);
     const tool = new PenRemoveTool();
     tool.onPointerMove(pointer(0, 0), host);
     expect(host.cursor).toBe('');
   });
 });
-

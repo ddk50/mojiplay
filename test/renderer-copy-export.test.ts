@@ -41,7 +41,7 @@ describe('exportObjectToPngDataUrl', () => {
     expect(result.height).toBe(400);
   });
 
-  test('multiplier=1 (等倍) で元サイズ', () => {
+  test('multiplier=1 (等倍) で元サイズになる', () => {
     const mock = createMockObject(100, 80);
     const result = exportObjectToPngDataUrl(mock, 1);
 
@@ -49,14 +49,14 @@ describe('exportObjectToPngDataUrl', () => {
     expect(result.height).toBe(80);
   });
 
-  test('dataUrl が data:image/png で始まる', () => {
+  test('返す dataUrl は data:image/png で始まる', () => {
     const mock = createMockObject(10, 10);
     const result = exportObjectToPngDataUrl(mock, 5);
 
     expect(result.dataUrl).toMatch(/^data:image\/png/);
   });
 
-  test('toCanvasElement に { multiplier } オブジェクトが渡される', () => {
+  test('toCanvasElement には positional ではなく { multiplier } オブジェクトを渡す', () => {
     // 今回のバグの核心: positional arg (数値) ではなく options オブジェクトで
     // multiplier が渡されることを確認。型システムでもガードされているが、
     // 型が壊れた場合 (as any キャスト等) の安全網。
@@ -70,22 +70,22 @@ describe('exportObjectToPngDataUrl', () => {
     expect(arg.multiplier).toBe(7);
   });
 
-  test('multiplier=0 → throw', () => {
+  test('multiplier=0 で例外を投げる', () => {
     const mock = createMockObject(10, 10);
     expect(() => exportObjectToPngDataUrl(mock, 0)).toThrow('invalid multiplier');
   });
 
-  test('multiplier=NaN → throw', () => {
+  test('multiplier=NaN で例外を投げる', () => {
     const mock = createMockObject(10, 10);
     expect(() => exportObjectToPngDataUrl(mock, NaN)).toThrow('invalid multiplier');
   });
 
-  test('multiplier=-5 → throw', () => {
+  test('multiplier=-5 で例外を投げる', () => {
     const mock = createMockObject(10, 10);
     expect(() => exportObjectToPngDataUrl(mock, -5)).toThrow('invalid multiplier');
   });
 
-  test('multiplier=Infinity → throw', () => {
+  test('multiplier=Infinity で例外を投げる', () => {
     const mock = createMockObject(10, 10);
     expect(() => exportObjectToPngDataUrl(mock, Infinity)).toThrow('invalid multiplier');
   });

@@ -15,7 +15,7 @@ const T: PathTransform = {
 };
 
 describe('findClosestSegment', () => {
-  test('L セグメントの中点近くをクリック', () => {
+  test('L セグメントの中点近くのクリックでヒットする', () => {
     const cmds: PathCommand[] = [
       { type: 'M', to: { x: 0, y: 0 } },
       { type: 'L', to: { x: 100, y: 0 } },
@@ -26,7 +26,7 @@ describe('findClosestSegment', () => {
     expect(hit!.t).toBeCloseTo(0.5, 1);
   });
 
-  test('閾値外はミス (null)', () => {
+  test('閾値外のクリックは null を返す', () => {
     const cmds: PathCommand[] = [
       { type: 'M', to: { x: 0, y: 0 } },
       { type: 'L', to: { x: 100, y: 0 } },
@@ -35,7 +35,7 @@ describe('findClosestSegment', () => {
     expect(hit).toBeNull();
   });
 
-  test('M / Z セグメントは候補外', () => {
+  test('M / Z セグメントは探索候補から除外する', () => {
     const cmds: PathCommand[] = [
       { type: 'M', to: { x: 0, y: 0 } },
       { type: 'L', to: { x: 100, y: 0 } },
@@ -49,7 +49,7 @@ describe('findClosestSegment', () => {
     expect(hit!.t).toBeCloseTo(0, 1);
   });
 
-  test('複数セグメントから距離最近のものを選ぶ', () => {
+  test('複数セグメント候補から距離最近のものを選ぶ', () => {
     const cmds: PathCommand[] = [
       { type: 'M', to: { x: 0, y: 0 } },
       { type: 'L', to: { x: 100, y: 0 } },   // cmdIndex 1
@@ -61,7 +61,7 @@ describe('findClosestSegment', () => {
     expect(hit!.t).toBeCloseTo(0.5, 1);
   });
 
-  test('C セグメント (cubic) 上のヒット', () => {
+  test('C セグメント (cubic) 上もヒット判定できる', () => {
     // (0,0) → (100, 0) のカーブで、頂点 (50, -75) を持つベル形
     const cmds: PathCommand[] = [
       { type: 'M', to: { x: 0, y: 0 } },
@@ -74,7 +74,7 @@ describe('findClosestSegment', () => {
     expect(hit!.t).toBeCloseTo(0.5, 1);
   });
 
-  test('viewport zoom が効く (pathTransform 経由)', () => {
+  test('viewport zoom が pathTransform 経由でヒット判定に効く', () => {
     const cmds: PathCommand[] = [
       { type: 'M', to: { x: 0, y: 0 } },
       { type: 'L', to: { x: 100, y: 0 } },
@@ -92,7 +92,7 @@ describe('findClosestSegment', () => {
     expect(findClosestSegment(cmds, 250, 0, T2, 8, 50)).toBeNull();
   });
 
-  test('空 / 非編集パスは null', () => {
+  test('空 / 非編集 path は null を返す', () => {
     expect(findClosestSegment([], 0, 0, T, 8, 50)).toBeNull();
     expect(findClosestSegment([{ type: 'M', to: { x: 0, y: 0 } }], 0, 0, T, 8, 50)).toBeNull();
   });

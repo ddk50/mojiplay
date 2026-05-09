@@ -1,66 +1,19 @@
 // PenAddTool の単体テスト。
 
-import type { PathCommand } from '../src/core/path/types';
-import type { Mat2x3 } from '../src/core/path/coords';
-import type { PointerInput } from '../src/usecases/tools/tool-interface';
-import type { State, PathHandle, PathSnapshot } from '../src/core/state';
+import type { PathHandle } from '../src/core/state';
 import { PenAddTool } from '../src/usecases/tools/pen-add-tool';
+import { FakePathHandle, FakeState, pointer } from './fakes';
 
-const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
-
-class FakePathHandle implements PathHandle {
-  public commands: PathCommand[];
-  public finalizeCount = 0;
-  constructor(initial: PathCommand[]) { this.commands = initial.map(c => c); }
-  snapshot(): PathSnapshot {
-    return { commands: this.commands, pathMatrix: IDENT, pathOffset: { x: 0, y: 0 } };
-  }
-  setCommands(cmds: ReadonlyArray<PathCommand>): void { this.commands = cmds.slice(); }
-  finalizeEdit(): void { this.finalizeCount++; }
-  getId(): any { return 'fake-id-1'; }
-  captureForHistory(): any {
-    return { type: 'path', data: { objectId: 'fake-id-1', type: 'path' }, commands: this.commands.slice() };
-  }
-}
-
-class FakeHost implements State {
+class FakeHost extends FakeState {
   public path: PathHandle | null;
   public cursor = '';
-  constructor(p: PathHandle | null) { this.path = p; }
-  getActivePath() { return this.path; }
-  getViewportMatrix() { return IDENT; }
-  requestRerender() {}
-  setCursor(c: string) { this.cursor = c; }
-  getActiveObjects()   { return []; }
-  getAllObjects()      { return []; }
-  setActiveSelection() {}
-  createTextAt() {}
-  pushCommand() {}
-  undo() {}
-  redo() {}
-  canUndo() { return false; }
-  canRedo() { return false; }
-  toSnapshot(): any { return { format: 'mojiplay', version: 1, canvas: {} }; }
-  async applySnapshot(_s: any): Promise<void> {}
-  commitActiveText() {}
-  getHistoryToken() { return 0; }
-  onMutate(_cb: () => void) { return () => {}; }
-  clearHistory() {}
-  getZoom() { return 1; }
-  removeActiveObjects() {}
-  duplicateActiveObjects(_o: { x: number; y: number }) {}
-  selectAllObjects() {}
-  async outlineActiveTexts() { return { succeeded: 0, failedChars: '', failedFamilies: [] }; }
-  exportActiveAsPngDataUrl(_m: number) { return null; }
-  linearizeHistory() { return []; }
-}
-
-function pointer(x: number, y: number): PointerInput {
-  return { screenX: x, screenY: y, worldX: x, worldY: y, altKey: false, shiftKey: false };
+  constructor(p: PathHandle | null) { super(); this.path = p; }
+  override getActivePath() { return this.path; }
+  override setCursor(c: string) { this.cursor = c; }
 }
 
 describe('PenAddTool: split + drag', () => {
-  test('L セグメント中点クリックでアンカー追加 + finalize', () => {
+  test('L セグメント中点クリックでアンカーを追加して finalize できる', () => {
     const path = new FakePathHandle([
       { type: 'M', to: { x: 0, y: 0 } },
       { type: 'L', to: { x: 100, y: 0 } },
@@ -80,7 +33,7 @@ describe('PenAddTool: split + drag', () => {
     expect(path.finalizeCount).toBe(1);
   });
 
-  test('セグメントから外れた点は pass', () => {
+  test('セグメントから外れた点は pass を返す', () => {
     const path = new FakePathHandle([
       { type: 'M', to: { x: 0, y: 0 } },
       { type: 'L', to: { x: 100, y: 0 } },
@@ -93,7 +46,7 @@ describe('PenAddTool: split + drag', () => {
     expect(path.commands.length).toBe(2);
   });
 
-  test('split 後ドラッグでハンドルが対称に伸びる (新アンカー周り)', () => {
+  test('split 後のドラッグで新アンカー周りのハンドルが対称に伸びる', () => {
     const path = new FakePathHandle([
       { type: 'M', to: { x: 0, y: 0 } },
       { type: 'L', to: { x: 100, y: 0 } },
@@ -114,7 +67,7 @@ describe('PenAddTool: split + drag', () => {
     if (second.type === 'C') expect(second.c1).toEqual({ x: 50, y: 30 });
   });
 
-  test('C 分割では外側ハンドル (前 c1 / 後 c2) は De Casteljau の値、L/Q 用 1/3 デフォルトは使われない', () => {
+  test('C 分割では外側ハンドル (前 c1 / 後 c2) が De Casteljau の値になる (L/Q 用 1/3 デフォルトは使わない)', () => {
     // p0=(0,0), c1=(0,-50), c2=(100,-50), p3=(100,0) の C を t=0.5 で分割すると、
     // De Casteljau により前半 c1=(0,-25)、後半 c2=(100,-25) となる。
     // L/Q を分割した時の 1/3 デフォルト ((16.67, 0) 等) ではないことを確認する。
@@ -143,7 +96,7 @@ describe('PenAddTool: split + drag', () => {
     }
   });
 
-  test('hover: セグメント上で copy カーソル / 外で空', () => {
+  test('hover でセグメント上は copy カーソル、外では空文字になる', () => {
     const path = new FakePathHandle([
       { type: 'M', to: { x: 0, y: 0 } },
       { type: 'L', to: { x: 100, y: 0 } },
@@ -158,4 +111,3 @@ describe('PenAddTool: split + drag', () => {
     expect(host.cursor).toBe('');
   });
 });
-

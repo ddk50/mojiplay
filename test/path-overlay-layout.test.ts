@@ -17,7 +17,7 @@ function snap(commands: PathCommand[]): PathSnapshot {
 }
 
 describe('computeOverlayLayout', () => {
-  test('extracts anchor screen positions for an L-only triangle', () => {
+  test('L のみの三角形からアンカーの screen 座標を抽出できる', () => {
     const cmds: PathCommand[] = [
       { type: 'M', to: { x: 10, y: 10 } },
       { type: 'L', to: { x: 50, y: 10 } },
@@ -33,7 +33,7 @@ describe('computeOverlayLayout', () => {
     expect(layout.handles).toEqual([]);
   });
 
-  test('extracts handle screen positions for a C segment', () => {
+  test('C セグメントからハンドルの screen 座標を抽出できる', () => {
     const cmds: PathCommand[] = [
       { type: 'M', to: { x: 0, y: 0 } },
       { type: 'C', c1: { x: 10, y: 0 }, c2: { x: 100, y: 50 }, to: { x: 100, y: 100 } },
@@ -49,7 +49,7 @@ describe('computeOverlayLayout', () => {
     expect(inc!.sx).toBe(100); expect(inc!.sy).toBe(50);
   });
 
-  test('viewport zoom scales screen positions', () => {
+  test('viewport zoom が screen 座標をスケールする', () => {
     const cmds: PathCommand[] = [
       { type: 'M', to: { x: 10, y: 20 } },
       { type: 'L', to: { x: 30, y: 40 } },
@@ -59,7 +59,7 @@ describe('computeOverlayLayout', () => {
     expect(layout.anchors[1]).toEqual({ anchorIndex: 1, sx: 60, sy: 80 });
   });
 
-  test('pathOffset shifts screen positions', () => {
+  test('pathOffset が screen 座標を平行移動する', () => {
     const cmds: PathCommand[] = [
       { type: 'M', to: { x: 100, y: 100 } },
       { type: 'L', to: { x: 200, y: 200 } },
@@ -80,23 +80,23 @@ describe('hitTestAnchorAt', () => {
   ];
   const layout = computeOverlayLayout(snap(cmds), IDENT);
 
-  test('hits exact anchor', () => {
+  test('アンカー直撃でヒットする', () => {
     expect(hitTestAnchorAt(layout, 100, 100)).toBe(0);
   });
 
-  test('hits within radius', () => {
+  test('半径内でもヒットする', () => {
     expect(hitTestAnchorAt(layout, 103, 102)).toBe(0);  // dist ~ 3.6 < 6
   });
 
-  test('misses outside radius', () => {
+  test('半径外なら -1 を返す', () => {
     expect(hitTestAnchorAt(layout, 150, 150)).toBe(-1);
   });
 
-  test('returns -1 with empty layout', () => {
+  test('空 layout では -1 を返す', () => {
     expect(hitTestAnchorAt({ anchors: [], handles: [] }, 0, 0)).toBe(-1);
   });
 
-  test('picks nearest when multiple in range', () => {
+  test('範囲内に複数あれば最近のアンカーを選ぶ', () => {
     expect(hitTestAnchorAt(layout, 105, 100)).toBe(0);
     expect(hitTestAnchorAt(layout, 195, 100)).toBe(1);
   });
@@ -109,19 +109,19 @@ describe('hitTestHandleAt', () => {
   ];
   const layout = computeOverlayLayout(snap(cmds), IDENT);
 
-  test('hits c1 handle', () => {
+  test('c1 ハンドルにヒットできる', () => {
     const h = hitTestHandleAt(layout, 10, 0);
     expect(h).not.toBeNull();
     expect(h!.handle).toEqual({ kind: 'C-c1', cmdIndex: 1 });
   });
 
-  test('hits c2 handle', () => {
+  test('c2 ハンドルにヒットできる', () => {
     const h = hitTestHandleAt(layout, 100, 50);
     expect(h).not.toBeNull();
     expect(h!.handle).toEqual({ kind: 'C-c2', cmdIndex: 1 });
   });
 
-  test('miss returns null', () => {
+  test('ミスは null を返す', () => {
     expect(hitTestHandleAt(layout, 500, 500)).toBeNull();
   });
 });

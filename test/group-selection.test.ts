@@ -6,7 +6,7 @@ interface Obj { id: string; gid?: string }
 const getGid = (o: Obj) => o.gid;
 
 describe('computeGroupExpansion', () => {
-  test('1 文字選択を同じ groupId の全文字に展開', () => {
+  test('1 文字選択を同じ groupId の全文字に展開できる', () => {
     const a = { id: 'A', gid: 'g1' };
     const b = { id: 'B', gid: 'g1' };
     const c = { id: 'C', gid: 'g1' };
@@ -17,7 +17,7 @@ describe('computeGroupExpansion', () => {
     expect(r.alreadyExpanded).toBe(false);
   });
 
-  test('複数 group にまたがる marquee 選択は両方の group 全体に展開', () => {
+  test('複数 group を跨ぐ marquee 選択を両方の group 全体に展開できる', () => {
     const a1 = { id: 'a1', gid: 'g1' };
     const a2 = { id: 'a2', gid: 'g1' };
     const b1 = { id: 'b1', gid: 'g2' };
@@ -29,7 +29,7 @@ describe('computeGroupExpansion', () => {
     expect(r.alreadyExpanded).toBe(false);
   });
 
-  test('既に完全展開済みなら alreadyExpanded=true (no-op 判定)', () => {
+  test('既に完全展開済みなら alreadyExpanded=true を返す (no-op 判定)', () => {
     const a = { id: 'A', gid: 'g1' };
     const b = { id: 'B', gid: 'g1' };
     const all = [a, b];
@@ -37,7 +37,7 @@ describe('computeGroupExpansion', () => {
     expect(r.alreadyExpanded).toBe(true);
   });
 
-  test('順序が逆でも alreadyExpanded=true (集合比較)', () => {
+  test('順序が逆でも alreadyExpanded=true を返す (集合比較)', () => {
     const a = { id: 'A', gid: 'g1' };
     const b = { id: 'B', gid: 'g1' };
     const all = [a, b];
@@ -45,7 +45,7 @@ describe('computeGroupExpansion', () => {
     expect(r.alreadyExpanded).toBe(true);
   });
 
-  test('groupId を持たないオブジェクトのみ選択 → no-op (展開対象無し)', () => {
+  test('groupId を持たない object のみの選択は展開対象が無く no-op になる', () => {
     const lone = { id: 'L' };
     const a = { id: 'A', gid: 'g1' };
     const r = computeGroupExpansion([lone], [lone, a], getGid);
@@ -53,7 +53,7 @@ describe('computeGroupExpansion', () => {
     expect(r.expanded).toEqual([lone]);  // 入力をそのまま返す
   });
 
-  test('groupId 付きと無しの混合選択は groupId 付きの group のみ展開', () => {
+  test('groupId 付きと無しの混合選択は groupId 付きの group のみ展開する', () => {
     const lone = { id: 'L' };
     const a = { id: 'A', gid: 'g1' };
     const b = { id: 'B', gid: 'g1' };
@@ -63,7 +63,7 @@ describe('computeGroupExpansion', () => {
     expect(r.alreadyExpanded).toBe(false);
   });
 
-  test('空入力は alreadyExpanded=true', () => {
+  test('空入力は alreadyExpanded=true を返す', () => {
     const r = computeGroupExpansion<Obj>([], [], getGid);
     expect(r.alreadyExpanded).toBe(true);
   });

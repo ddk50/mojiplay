@@ -18,51 +18,51 @@ function expectClose(p: Point, ex: number, ey: number): void {
 }
 
 describe('applyMatrix', () => {
-  test('identity is no-op', () => {
+  test('identity では何もしない', () => {
     expectClose(applyMatrix({ x: 3, y: 7 }, IDENT), 3, 7);
   });
 
-  test('translation', () => {
+  test('平行移動を適用できる', () => {
     expectClose(applyMatrix({ x: 3, y: 7 }, [1, 0, 0, 1, 10, 20]), 13, 27);
   });
 
-  test('uniform scale', () => {
+  test('一様スケールを適用できる', () => {
     expectClose(applyMatrix({ x: 3, y: 7 }, [2, 0, 0, 2, 0, 0]), 6, 14);
   });
 
-  test('90deg rotation', () => {
+  test('90 度回転を適用できる', () => {
     // 反時計回り 90°: (x, y) → (-y, x). a=cosθ=0, b=sinθ=1, c=-sinθ=-1, d=cosθ=0
     expectClose(applyMatrix({ x: 3, y: 7 }, [0, 1, -1, 0, 0, 0]), -7, 3);
   });
 
-  test('translate + scale composes (scale then translate)', () => {
+  test('スケール → 平行移動の合成順を保つ', () => {
     expectClose(applyMatrix({ x: 3, y: 7 }, [2, 0, 0, 2, 10, 20]), 16, 34);
   });
 });
 
 describe('applyMatrixToDelta', () => {
-  test('ignores translation', () => {
+  test('平行移動成分を無視する', () => {
     expectClose(applyMatrixToDelta({ x: 3, y: 7 }, [1, 0, 0, 1, 100, 200]), 3, 7);
   });
 
-  test('applies linear part', () => {
+  test('線形部分のみ適用する', () => {
     expectClose(applyMatrixToDelta({ x: 3, y: 7 }, [2, 0, 0, 2, 100, 200]), 6, 14);
   });
 });
 
 describe('invertMatrix', () => {
-  test('identity is self-inverse', () => {
+  test('identity は自身の逆行列になる', () => {
     // -0 と 0 を区別しない比較 (1/-0 などの負ゼロ伝播を許容)
     const inv = invertMatrix(IDENT);
     inv.forEach((v, i) => expect(v).toBeCloseTo([1, 0, 0, 1, 0, 0][i]));
   });
 
-  test('inverse of translation', () => {
+  test('平行移動の逆行列を計算できる', () => {
     const inv = invertMatrix([1, 0, 0, 1, 10, 20]);
     expectClose(applyMatrix({ x: 0, y: 0 }, inv), -10, -20);
   });
 
-  test('A * A^-1 = identity for arbitrary matrix', () => {
+  test('任意行列で A * A^-1 = identity になる', () => {
     const m: Mat2x3 = [1.5, 0.3, -0.2, 2.0, 17, -42];
     const inv = invertMatrix(m);
     const p = { x: 11, y: -5 };
@@ -70,13 +70,13 @@ describe('invertMatrix', () => {
     expectClose(round, p.x, p.y);
   });
 
-  test('singular matrix throws', () => {
+  test('特異行列で例外を投げる', () => {
     expect(() => invertMatrix([0, 0, 0, 0, 0, 0])).toThrow();
   });
 });
 
 describe('pathLocalToScreen / screenToPathLocal', () => {
-  test('round-trips through identity transforms', () => {
+  test('identity 変換で local ↔ screen の往復ができる', () => {
     const t: PathTransform = {
       pathMatrix:     IDENT,
       pathOffset:     { x: 0, y: 0 },
@@ -88,7 +88,7 @@ describe('pathLocalToScreen / screenToPathLocal', () => {
     expectClose(screenToPathLocal({ x: screen.sx, y: screen.sy }, t), 50, 80);
   });
 
-  test('pathOffset shifts screen position', () => {
+  test('pathOffset が screen 座標を平行移動する', () => {
     // local 100 with pathOffset 30 means world = 70 (then viewport identity)
     const t: PathTransform = {
       pathMatrix:     IDENT,
@@ -99,7 +99,7 @@ describe('pathLocalToScreen / screenToPathLocal', () => {
     expect(screen).toEqual({ sx: 70, sy: 60 });
   });
 
-  test('viewportMatrix scales/translates screen output', () => {
+  test('viewportMatrix が screen 座標をスケール / 平行移動する', () => {
     // 2x zoom + (5, 10) pan
     const t: PathTransform = {
       pathMatrix:     IDENT,
@@ -110,7 +110,7 @@ describe('pathLocalToScreen / screenToPathLocal', () => {
     expect(screen).toEqual({ sx: 205, sy: 210 });
   });
 
-  test('pathMatrix translation moves origin', () => {
+  test('pathMatrix の平行移動が原点を動かす', () => {
     // pathMatrix translates (local - pathOffset) by (200, 300)
     const t: PathTransform = {
       pathMatrix:     [1, 0, 0, 1, 200, 300],
@@ -121,7 +121,7 @@ describe('pathLocalToScreen / screenToPathLocal', () => {
     expect(screen).toEqual({ sx: 200, sy: 300 });
   });
 
-  test('round-trip through arbitrary transform stack', () => {
+  test('任意の変換 stack でも往復できる', () => {
     const t: PathTransform = {
       pathMatrix:     [1.4, 0.2, -0.1, 1.3, 50, 60],
       pathOffset:     { x: 12, y: 17 },
@@ -135,20 +135,20 @@ describe('pathLocalToScreen / screenToPathLocal', () => {
 });
 
 describe('worldDeltaToPathLocalDelta', () => {
-  test('with identity pathMatrix, delta is unchanged', () => {
+  test('identity pathMatrix では delta が変わらない', () => {
     expectClose(worldDeltaToPathLocalDelta({ x: 5, y: -3 }, IDENT), 5, -3);
   });
 
-  test('with 2x scale pathMatrix, world delta is halved in local', () => {
+  test('2x スケール pathMatrix では world delta が local で半分になる', () => {
     expectClose(worldDeltaToPathLocalDelta({ x: 10, y: 20 }, [2, 0, 0, 2, 999, -999]), 5, 10);
   });
 
-  test('with 90deg rotation pathMatrix, delta is rotated -90deg', () => {
+  test('90 度回転 pathMatrix では delta が -90 度回る', () => {
     // pathMatrix の 90° 逆 = -90°: (x, y) → (y, -x)
     expectClose(worldDeltaToPathLocalDelta({ x: 3, y: 7 }, [0, 1, -1, 0, 0, 0]), 7, -3);
   });
 
-  test('translation in pathMatrix is irrelevant for delta', () => {
+  test('pathMatrix の平行移動は delta に影響しない', () => {
     expectClose(worldDeltaToPathLocalDelta({ x: 3, y: 7 }, [1, 0, 0, 1, 999, 999]), 3, 7);
   });
 });

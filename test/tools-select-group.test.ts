@@ -2,50 +2,28 @@
 // FakeToolHost に getActiveObjects / getAllObjects / setActiveSelection を実装し、
 // 展開の有無と再帰防止を検証する。
 
-import type { State, ObjectHandle } from '../src/core/state';
+import type { ObjectHandle } from '../src/core/state';
 import { SelectGroupTool } from '../src/usecases/tools/select-group-tool';
+import { FakeState } from './fakes';
 
 function makeHandle(gid?: string): ObjectHandle {
   return { getGroupId: () => gid };
 }
 
-class FakeHost implements State {
+class FakeHost extends FakeState {
   public active: ObjectHandle[] = [];
   public all:    ObjectHandle[] = [];
   public setSelectionCalls: ObjectHandle[][] = [];
-  getActiveObjects() { return this.active; }
-  getAllObjects()    { return this.all; }
-  setActiveSelection(objs: ReadonlyArray<ObjectHandle>): void {
+  override getActiveObjects() { return this.active; }
+  override getAllObjects()    { return this.all; }
+  override setActiveSelection(objs: ReadonlyArray<ObjectHandle>): void {
     this.setSelectionCalls.push(objs.slice());
     this.active = objs.slice();  // 反映だけ簡易シミュレート
   }
-  getActivePath()     { return null; }
-  getViewportMatrix() { return [1, 0, 0, 1, 0, 0] as const; }
-  requestRerender()   { /* no-op */ }
-  setCursor(_c: string) { /* no-op */ }
-  createTextAt() { /* no-op */ }
-  pushCommand() { /* no-op */ }
-  undo() { /* no-op */ }
-  redo() { /* no-op */ }
-  canUndo() { return false; }
-  canRedo() { return false; }
-  toSnapshot(): any { return { format: 'mojiplay', version: 1, canvas: {} }; }
-  async applySnapshot(_s: any): Promise<void> { /* no-op */ }
-  commitActiveText() { /* no-op */ }
-  getHistoryToken() { return 0; }
-  onMutate(_cb: () => void) { return () => {}; }
-  clearHistory() { /* no-op */ }
-  getZoom() { return 1; }
-  removeActiveObjects() { /* no-op */ }
-  duplicateActiveObjects(_o: { x: number; y: number }) { /* no-op */ }
-  selectAllObjects() { /* no-op */ }
-  async outlineActiveTexts() { return { succeeded: 0, failedChars: '', failedFamilies: [] }; }
-  exportActiveAsPngDataUrl(_m: number) { return null; }
-  linearizeHistory() { return []; }
 }
 
 describe('SelectGroupTool', () => {
-  test('1 文字選択を group 全体に展開', () => {
+  test('1 文字選択を group 全体に展開できる', () => {
     const a = makeHandle('g1');
     const b = makeHandle('g1');
     const c = makeHandle('g1');
@@ -61,7 +39,7 @@ describe('SelectGroupTool', () => {
     expect(host.setSelectionCalls[0]).toEqual([a, b, c]);
   });
 
-  test('既に group 全体が選択されていれば setActiveSelection を呼ばない (再帰防止)', () => {
+  test('既に group 全体が選択済みなら setActiveSelection を呼ばない (再帰防止)', () => {
     const a = makeHandle('g1');
     const b = makeHandle('g1');
     const tool = new SelectGroupTool();
@@ -73,7 +51,7 @@ describe('SelectGroupTool', () => {
     expect(host.setSelectionCalls).toHaveLength(0);
   });
 
-  test('複数 group をまたぐ marquee は両方を展開', () => {
+  test('複数 group を跨ぐ marquee は両方の group を展開できる', () => {
     const a1 = makeHandle('g1');
     const a2 = makeHandle('g1');
     const b1 = makeHandle('g2');
@@ -87,7 +65,7 @@ describe('SelectGroupTool', () => {
     expect(host.setSelectionCalls[0]).toEqual([a1, a2, b1, b2]);
   });
 
-  test('groupId を持たないオブジェクトのみ選択 → no-op', () => {
+  test('groupId を持たない object のみの選択は no-op になる', () => {
     const lone = makeHandle(undefined);
     const tool = new SelectGroupTool();
     const host = new FakeHost();
@@ -98,7 +76,7 @@ describe('SelectGroupTool', () => {
     expect(host.setSelectionCalls).toHaveLength(0);
   });
 
-  test('空選択は no-op', () => {
+  test('空選択では何もしない', () => {
     const tool = new SelectGroupTool();
     const host = new FakeHost();
     tool.onSelectionChanged(host);
@@ -122,56 +100,46 @@ describe('SelectGroupTool', () => {
 // 本ブロックは canonical / non-canonical 両方を fake host で再現し、契約を
 // 満たさない場合に再帰が止まらないことを明示的にテストする。
 
-interface RecursingHost extends State {
-  active: ObjectHandle[];
-  recursionDepth: number;
+class CanonicalRecursingHost extends FakeState {
+  public active: ObjectHandle[];
+  public recursionDepth = 0;
+  public limit = 10;
+  constructor(private readonly all: ObjectHandle[], initial: ObjectHandle[], private readonly tool: SelectGroupTool) {
+    super();
+    this.active = initial;
+  }
+  override getActiveObjects() { return this.active; }
+  override getAllObjects()    { return this.all; }
+  override setActiveSelection(objs: ReadonlyArray<ObjectHandle>): void {
+    this.recursionDepth++;
+    if (this.recursionDepth > this.limit) throw new Error('infinite recursion');
+    this.active = objs.slice();
+    // fabric の selection:updated 再発火をシミュレート
+    this.tool.onSelectionChanged(this);
+  }
+}
+
+class NonCanonicalRecursingHost extends FakeState {
+  public recursionDepth = 0;
+  public readonly max = 5;
+  constructor(private readonly tool: SelectGroupTool) { super(); }
+  override getActiveObjects() { return [{ getGroupId: () => 'g1' }]; }                                       // 毎回新 instance
+  override getAllObjects()    { return [{ getGroupId: () => 'g1' }, { getGroupId: () => 'g1' }]; }
+  override setActiveSelection(_objs: ReadonlyArray<ObjectHandle>): void {
+    this.recursionDepth++;
+    if (this.recursionDepth >= this.max) return;  // 上限に達したらテストとして打ち切る
+    this.tool.onSelectionChanged(this);
+  }
 }
 
 describe('SelectGroupTool: canonical handle contract (回帰テスト)', () => {
-  test('canonical な host: setActiveSelection 再帰が 1 ステップで安定する', () => {
+  test('canonical な host なら setActiveSelection の再帰が 1 ステップで止まる', () => {
     const a = makeHandle('g1');
     const b = makeHandle('g1');
     const c = makeHandle('g1');
-    const all = [a, b, c];
 
     const tool = new SelectGroupTool();
-    const host: RecursingHost = {
-      active: [a],
-      recursionDepth: 0,
-      getActiveObjects() { return this.active; },
-      getAllObjects()    { return all; },
-      setActiveSelection(objs) {
-        this.recursionDepth++;
-        if (this.recursionDepth > 10) throw new Error('infinite recursion');
-        this.active = objs.slice();
-        // fabric の selection:updated 再発火をシミュレート
-        tool.onSelectionChanged(this);
-      },
-      // 以下は本テストでは未使用
-      getActivePath()     { return null; },
-      getViewportMatrix() { return [1, 0, 0, 1, 0, 0] as const; },
-      requestRerender()   { /* no-op */ },
-      setCursor(_c)       { /* no-op */ },
-      createTextAt()      { /* no-op */ },
-      pushCommand()       { /* no-op */ },
-      undo()              { /* no-op */ },
-      redo()              { /* no-op */ },
-      canUndo()           { return false; },
-      canRedo()           { return false; },
-      toSnapshot()        { return { format: 'mojiplay' as const, version: 1 as const, canvas: {} }; },
-      async applySnapshot(_s: any) { /* no-op */ },
-      commitActiveText()  { /* no-op */ },
-      getHistoryToken()   { return 0; },
-      onMutate(_cb: () => void) { return () => {}; },
-      clearHistory()      { /* no-op */ },
-      getZoom()           { return 1; },
-      removeActiveObjects() { /* no-op */ },
-      duplicateActiveObjects(_o: { x: number; y: number }) { /* no-op */ },
-      selectAllObjects()  { /* no-op */ },
-      async outlineActiveTexts() { return { succeeded: 0, failedChars: '', failedFamilies: [] }; },
-      exportActiveAsPngDataUrl(_m: number) { return null; },
-      linearizeHistory()  { return []; },
-    };
+    const host = new CanonicalRecursingHost([a, b, c], [a], tool);
 
     tool.onSelectionChanged(host);
     // 1 回目で [a,b,c] に展開 → 再帰呼び出しは canonical なので alreadyExpanded で抜ける
@@ -179,53 +147,18 @@ describe('SelectGroupTool: canonical handle contract (回帰テスト)', () => {
     expect(host.active).toEqual([a, b, c]);
   });
 
-  test('non-canonical な host: 毎回新 handle を返すと再帰が止まらない (契約違反検出)', () => {
+  test('non-canonical な host (毎回新 handle) では再帰が止まらない (契約違反を検出する)', () => {
     // app.ts の makeFabricObjectHandle で WeakMap キャッシュが抜けたケースを模擬。
     // 同じ underlying「対象」でも getActiveObjects / getAllObjects 呼び出しごとに
     // 新しい instance が生成されると、SelectGroupTool は alreadyExpanded を識別できず、
     // setActiveSelection を無限に呼び続けてしまう。
     const tool = new SelectGroupTool();
-    let recursionDepth = 0;
-    const MAX = 5;
+    const host = new NonCanonicalRecursingHost(tool);
 
-    const buggyHost: State = {
-      getActiveObjects() { return [{ getGroupId: () => 'g1' }]; },        // 毎回新 instance
-      getAllObjects()    { return [{ getGroupId: () => 'g1' }, { getGroupId: () => 'g1' }]; },
-      setActiveSelection(_objs) {
-        recursionDepth++;
-        if (recursionDepth >= MAX) return;  // 上限に達したらテストとして打ち切る
-        tool.onSelectionChanged(this);
-      },
-      getActivePath()     { return null; },
-      getViewportMatrix() { return [1, 0, 0, 1, 0, 0] as const; },
-      requestRerender()   { /* no-op */ },
-      setCursor(_c)       { /* no-op */ },
-      createTextAt()      { /* no-op */ },
-      pushCommand()       { /* no-op */ },
-      undo()              { /* no-op */ },
-      redo()              { /* no-op */ },
-      canUndo()           { return false; },
-      canRedo()           { return false; },
-      toSnapshot()        { return { format: 'mojiplay' as const, version: 1 as const, canvas: {} }; },
-      async applySnapshot(_s: any) { /* no-op */ },
-      commitActiveText()  { /* no-op */ },
-      getHistoryToken()   { return 0; },
-      onMutate(_cb: () => void) { return () => {}; },
-      clearHistory()      { /* no-op */ },
-      getZoom()           { return 1; },
-      removeActiveObjects() { /* no-op */ },
-      duplicateActiveObjects(_o: { x: number; y: number }) { /* no-op */ },
-      selectAllObjects()  { /* no-op */ },
-      async outlineActiveTexts() { return { succeeded: 0, failedChars: '', failedFamilies: [] }; },
-      exportActiveAsPngDataUrl(_m: number) { return null; },
-      linearizeHistory()  { return []; },
-    };
-
-    tool.onSelectionChanged(buggyHost);
+    tool.onSelectionChanged(host);
     // canonical な host なら recursionDepth=1 で止まる。non-canonical なので
     // alreadyExpanded を検出できず MAX まで再帰してしまう。これを観測することで
     // 「host 実装は canonical 化が必須」という規約をテストとして固定する。
-    expect(recursionDepth).toBe(MAX);
+    expect(host.recursionDepth).toBe(host.max);
   });
 });
-

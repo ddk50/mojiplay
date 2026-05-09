@@ -39,7 +39,7 @@ const Z  = (): PathCommand => ({ type: 'Z' });
 // ── extractAnchors ──────────────────────────────────────────────────────
 
 describe('extractAnchors', () => {
-  test('直線ポリゴン (M L L Z) → アンカー3個、ハンドル全て null', () => {
+  test('直線ポリゴン (M L L Z) からアンカー 3 個を抽出してハンドルを全て null にする', () => {
     const path: PathCommand[] = [M(0, 0), L(10, 0), L(5, 10), Z()];
     const anchors = extractAnchors(path);
 
@@ -57,7 +57,7 @@ describe('extractAnchors', () => {
     expect(anchors[2].subpathStart).toBe(false);
   });
 
-  test('三次ベジェ (M C C Z) 直線 close → 中間アンカーのハンドル + 開始アンカーは incoming 無し', () => {
+  test('三次ベジェ (M C C Z) の直線 close では中間アンカーにハンドルを付け開始アンカーの incoming は null になる', () => {
     // 最後の C(...,10,10) が M(0,0) と一致しないので、Z は直線で閉じる semantic。
     // 開始アンカーには曲線の incoming は付かない (= null)。
     const path: PathCommand[] = [
@@ -84,7 +84,7 @@ describe('extractAnchors', () => {
     expect(anchors[2].outgoingHandle).toBeNull();
   });
 
-  test('三次ベジェ (M C C Z) 曲線 close → 重複アンカー削除 + 開始アンカーに incoming + coincident', () => {
+  test('三次ベジェ (M C C Z) の曲線 close では重複アンカーを削除し開始アンカーに incoming + coincident を付ける', () => {
     // 最後の C(...,0,0) が M(0,0) と一致するので、曲線で閉じる semantic。
     // 最後の C の to は M と座標重複なので「3 個目のアンカー」は extract されず、
     // 開始アンカーが最後の curve の c2 を incoming として保持する。
@@ -109,7 +109,7 @@ describe('extractAnchors', () => {
     expect(anchors[1].outgoingHandle).toEqual({ kind: 'C-c1', cmdIndex: 2 });
   });
 
-  test('二次ベジェ混在 (M Q L) → Q のハンドル紐付け', () => {
+  test('二次ベジェ混在 (M Q L) では Q のハンドルをアンカーに紐付ける', () => {
     const path: PathCommand[] = [M(0, 0), Q(5, 10, 10, 0), L(15, 5)];
     const anchors = extractAnchors(path);
 
@@ -121,7 +121,7 @@ describe('extractAnchors', () => {
     expect(anchors[2].outgoingHandle).toBeNull();
   });
 
-  test('2 サブパス (M L Z M L Z) → 4 アンカー、subpathStart 2個', () => {
+  test('2 サブパス (M L Z M L Z) から 4 アンカーを抽出し subpathStart を 2 個立てる', () => {
     const path: PathCommand[] = [
       M(0, 0), L(10, 10), Z(),
       M(20, 20), L(30, 30), Z(),
@@ -136,7 +136,7 @@ describe('extractAnchors', () => {
     expect(anchors[2]).toMatchObject({ point: { x: 20, y: 20 } });
   });
 
-  test('M C C Z 直線 close: 開始アンカー incoming は null', () => {
+  test('M C C Z の直線 close では開始アンカーの incoming が null になる', () => {
     // 最後の C(...,6,6) が M(0,0) と一致しない → 直線 close
     const path: PathCommand[] = [
       M(0, 0),
@@ -149,7 +149,7 @@ describe('extractAnchors', () => {
     expect(anchors[0].coincidentClosingCmdIndex).toBeNull();
   });
 
-  test('M C Z 単一曲線で閉じる → 1 アンカーで両ハンドル保持', () => {
+  test('M C Z の単一曲線 close では 1 アンカーが両ハンドルを保持する', () => {
     // M と単一 C で形成される閉ループ。C の to が M と一致するので、anchor は
     // 1 個 (= start anchor) になり、両端ハンドル (incoming/outgoing) ともに
     // 同じ C 命令の c2/c1 を指す。
@@ -171,7 +171,7 @@ describe('extractAnchors', () => {
 // ── moveAnchorRigid ─────────────────────────────────────────────────────
 
 describe('moveAnchorRigid', () => {
-  test('直線端点の移動', () => {
+  test('直線端点を移動できる', () => {
     const path: PathCommand[] = [M(0, 0), L(10, 0), L(5, 10), Z()];
     const result = moveAnchorRigid(path, 1, 3, -2);
 
@@ -181,7 +181,7 @@ describe('moveAnchorRigid', () => {
     expect(result[3]).toEqual(Z());
   });
 
-  test('三次ベジェのアンカー移動 (アンカー + 付属ハンドル追従)', () => {
+  test('三次ベジェのアンカー移動でアンカーと付属ハンドルが追従する', () => {
     const path: PathCommand[] = [
       M(0, 0),
       C(1, 2, 3, 4, 5, 5),
@@ -196,7 +196,7 @@ describe('moveAnchorRigid', () => {
     expect(result[3]).toEqual(Z());
   });
 
-  test('閉曲線 (曲線 close) M 移動 → M.to + 前後ハンドル + 最後 C.to が同期', () => {
+  test('閉曲線 (曲線 close) の M 移動で M.to + 前後ハンドル + 最後 C.to が同期する', () => {
     // 最後の C が M(0,0) で閉じる semantic。M を (2,3) 動かすと:
     //  - M.to が (2,3) に移動
     //  - 開始アンカーの outgoing (= 最初の C の c1) が追従
@@ -216,7 +216,7 @@ describe('moveAnchorRigid', () => {
     expect(result[2]).toEqual(C(6, 7, 10, 12, 2, 3));
   });
 
-  test('immutability — 変化したコマンドだけ新規、他は同一参照', () => {
+  test('immutability: 変化したコマンドだけ新規生成し他は同一参照を保つ', () => {
     const cmd0 = M(0, 0);
     const cmd1 = L(10, 0);
     const cmd2 = L(5, 10);
@@ -233,7 +233,7 @@ describe('moveAnchorRigid', () => {
     expect(result[1]).toEqual(L(11, 1));
   });
 
-  test('範囲外の anchorIndex → 元配列のコピーを返す', () => {
+  test('範囲外の anchorIndex なら元配列のコピーを返す', () => {
     const path: PathCommand[] = [M(0, 0), L(10, 0)];
     const result = moveAnchorRigid(path, 99, 5, 5);
     expect(result).toEqual(path);
@@ -253,7 +253,7 @@ describe('回帰: 擬似「O」グリフ (4点閉曲線)', () => {
     Z(),
   ];
 
-  test('アンカー数 = 4 (closed curve の重複起点を 1 個にマージ)', () => {
+  test('アンカー数 = 4 になる (closed curve の重複起点を 1 個にマージする)', () => {
     // O は top/right/bottom/left の 4 隅。最後の C が top に戻ってくるが、
     // 重複 anchor は extract されない (Z 処理でマージ)。
     const anchors = extractAnchors(path);
@@ -266,7 +266,7 @@ describe('回帰: 擬似「O」グリフ (4点閉曲線)', () => {
     expect(anchors[0].coincidentClosingCmdIndex).toBe(4);
   });
 
-  test('Top (M) を下に 20px 移動', () => {
+  test('Top (M) を下に 20px 移動でき周辺ハンドルと最後 C.to が同期する', () => {
     const result = moveAnchorRigid(path, 0, 0, 20);
 
     expect(result[0]).toEqual(M(50, 20));
@@ -294,7 +294,7 @@ describe('回帰: 擬似「O」グリフ (4点閉曲線)', () => {
 // ── moveHandle ──────────────────────────────────────────────────────────
 
 describe('moveHandle', () => {
-  test('C コマンドの incoming ハンドル移動 → c2 のみ変化', () => {
+  test('C コマンドの incoming ハンドル移動で c2 のみ変わる', () => {
     const path: PathCommand[] = [M(0, 0), C(1, 2, 3, 4, 5, 5), Z()];
     const handle: HandleRef = { kind: 'C-c2', cmdIndex: 1 };
     const result = moveHandle(path, handle, 10, -5);
@@ -302,7 +302,7 @@ describe('moveHandle', () => {
     expect(result[1]).toEqual(C(1, 2, 13, -1, 5, 5));
   });
 
-  test('C コマンドの outgoing ハンドル移動 → c1 のみ変化', () => {
+  test('C コマンドの outgoing ハンドル移動で c1 のみ変わる', () => {
     const path: PathCommand[] = [
       M(0, 0),
       C(1, 2, 3, 4, 5, 5),
@@ -318,7 +318,7 @@ describe('moveHandle', () => {
     expect(result[1]).toEqual(C(1, 2, 3, 4, 5, 5));
   });
 
-  test('Q コマンドの共有制御点移動', () => {
+  test('Q コマンドの共有制御点を移動できる', () => {
     const path: PathCommand[] = [M(0, 0), Q(5, 10, 10, 0), Z()];
     const handle: HandleRef = { kind: 'Q-c', cmdIndex: 1 };
     const result = moveHandle(path, handle, 2, -3);
@@ -326,7 +326,7 @@ describe('moveHandle', () => {
     expect(result[1]).toEqual(Q(7, 7, 10, 0));
   });
 
-  test('immutability — 変更コマンドだけ新規、他は同一参照', () => {
+  test('immutability: 変更コマンドだけ新規生成し他は同一参照を保つ', () => {
     const cmd0 = M(0, 0);
     const cmd1 = C(1, 2, 3, 4, 5, 5);
     const cmd2 = Z();
@@ -342,7 +342,7 @@ describe('moveHandle', () => {
     expect(result[1]).toEqual(C(1, 2, 4, 5, 5, 5));
   });
 
-  test('アンカー座標は不変', () => {
+  test('ハンドル移動後もアンカー座標は不変になる', () => {
     const path: PathCommand[] = [
       M(0, 0),
       C(1, 2, 3, 4, 5, 5),
@@ -362,7 +362,7 @@ describe('moveHandle', () => {
     }
   });
 
-  test('範囲外の cmdIndex → 元配列のコピーを返す', () => {
+  test('範囲外の cmdIndex なら元配列のコピーを返す', () => {
     const path: PathCommand[] = [M(0, 0), L(10, 0)];
     const handle: HandleRef = { kind: 'C-c1', cmdIndex: 99 };
     const result = moveHandle(path, handle, 5, 5);
@@ -370,7 +370,7 @@ describe('moveHandle', () => {
     expect(result).not.toBe(path);
   });
 
-  test('kind とコマンド種別が不一致 → コマンド変化なし', () => {
+  test('kind とコマンド種別が不一致ならコマンドを変えない', () => {
     // C-c1 を L に対して適用 (= 何もしない)
     const path: PathCommand[] = [M(0, 0), L(10, 0)];
     const handle: HandleRef = { kind: 'C-c1', cmdIndex: 1 };
@@ -382,7 +382,7 @@ describe('moveHandle', () => {
 // ── evalCubicAt / evalQuadAt ────────────────────────────────────────────
 
 describe('evalCubicAt', () => {
-  test('t=0 → 始点, t=1 → 終点', () => {
+  test('t=0 で始点、t=1 で終点を返す', () => {
     const p0 = { x: 0, y: 0 };
     const c1 = { x: 10, y: 20 };
     const c2 = { x: 30, y: 40 };
@@ -391,7 +391,7 @@ describe('evalCubicAt', () => {
     expect(evalCubicAt(p0, c1, c2, p3, 1)).toEqual(p3);
   });
 
-  test('t=0.5 の直線 → 中点', () => {
+  test('制御点が直線上の時は t=0.5 で中点を返す', () => {
     // 制御点が始点-終点の直線上にある場合、曲線も直線
     const r = evalCubicAt({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 0 }, { x: 30, y: 0 }, 0.5);
     expect(r.x).toBeCloseTo(15);
@@ -400,7 +400,7 @@ describe('evalCubicAt', () => {
 });
 
 describe('evalQuadAt', () => {
-  test('t=0 → 始点, t=1 → 終点', () => {
+  test('t=0 で始点、t=1 で終点を返す', () => {
     const p0 = { x: 0, y: 0 };
     const c1 = { x: 5, y: 10 };
     const p2 = { x: 10, y: 0 };
@@ -412,19 +412,19 @@ describe('evalQuadAt', () => {
 // ── getSegmentStart ─────────────────────────────────────────────────────
 
 describe('getSegmentStart', () => {
-  test('C コマンドの始点 = 直前の M', () => {
+  test('C コマンドの始点として直前の M を返す', () => {
     const path: PathCommand[] = [M(10, 20), C(1, 2, 3, 4, 5, 6), Z()];
     expect(getSegmentStart(path, 1)).toEqual({ x: 10, y: 20 });
   });
 
-  test('2番目の C の始点 = 直前の C の終点', () => {
+  test('2 番目の C の始点として直前の C の終点を返す', () => {
     const path: PathCommand[] = [
       M(0, 0), C(1, 2, 3, 4, 5, 5), C(6, 7, 8, 9, 10, 10), Z(),
     ];
     expect(getSegmentStart(path, 2)).toEqual({ x: 5, y: 5 });
   });
 
-  test('M の前 → null', () => {
+  test('M の前なら null を返す', () => {
     const path: PathCommand[] = [M(0, 0)];
     expect(getSegmentStart(path, 0)).toBeNull();
   });
@@ -433,7 +433,7 @@ describe('getSegmentStart', () => {
 // ── splitSegment ────────────────────────────────────────────────────────
 
 describe('splitSegment', () => {
-  test('C を t=0.5 で分割 → コマンド数が 1 増加', () => {
+  test('C を t=0.5 で分割するとコマンド数が 1 増える', () => {
     const path: PathCommand[] = [M(0, 0), C(30, 0, 70, 100, 100, 100), Z()];
     const result = splitSegment(path, 1, 0.5);
     expect(result).toHaveLength(4); // M, C, C, Z
@@ -452,7 +452,7 @@ describe('splitSegment', () => {
     expect(r2.to).toEqual({ x: 100, y: 100 });
   });
 
-  test('C を t=0 / t=1 で分割 → 退化 (始点/終点に新アンカー)', () => {
+  test('C を t=0 / t=1 で分割すると退化して始点 / 終点に新アンカーを置く', () => {
     const path: PathCommand[] = [M(0, 0), C(10, 0, 20, 0, 30, 0), Z()];
     const r0 = splitSegment(path, 1, 0);
     expect(r0).toHaveLength(4);
@@ -469,7 +469,7 @@ describe('splitSegment', () => {
     expect(r1_1.to.y).toBeCloseTo(0);
   });
 
-  test('L を t=0.5 で分割 → 2 つの L', () => {
+  test('L を t=0.5 で分割すると 2 つの L になる', () => {
     const path: PathCommand[] = [M(0, 0), L(10, 10), Z()];
     const result = splitSegment(path, 1, 0.5);
     expect(result).toHaveLength(4);
@@ -477,7 +477,7 @@ describe('splitSegment', () => {
     expect(result[2]).toEqual(L(10, 10));
   });
 
-  test('Q を t=0.5 で分割 → 2 つの Q', () => {
+  test('Q を t=0.5 で分割すると 2 つの Q になる', () => {
     const path: PathCommand[] = [M(0, 0), Q(5, 10, 10, 0), Z()];
     const result = splitSegment(path, 1, 0.5);
     expect(result).toHaveLength(4);
@@ -489,7 +489,7 @@ describe('splitSegment', () => {
     expect(r2.to).toEqual({ x: 10, y: 0 });
   });
 
-  test('他のコマンドは不変', () => {
+  test('分割対象以外のコマンドは不変になる', () => {
     const cmd0 = M(0, 0);
     const cmd2 = Z();
     const path = [cmd0, L(10, 10), cmd2];
@@ -502,7 +502,7 @@ describe('splitSegment', () => {
 // ── removeAnchor ────────────────────────────────────────────────────────
 
 describe('removeAnchor', () => {
-  test('中間アンカー削除 → 直線 L に置換', () => {
+  test('中間アンカーを削除すると前後の C が直線 L に置換される', () => {
     const path: PathCommand[] = [
       M(0, 0),
       C(1, 2, 3, 4, 5, 5),
@@ -516,7 +516,7 @@ describe('removeAnchor', () => {
     expect(result[2]).toEqual(Z());
   });
 
-  test('最後のアンカー削除 (Z 直前) → コマンド除去のみ', () => {
+  test('最後のアンカー (Z 直前) を削除するとコマンドを除去するだけになる', () => {
     const path: PathCommand[] = [
       M(0, 0),
       C(1, 2, 3, 4, 5, 5),
@@ -531,7 +531,7 @@ describe('removeAnchor', () => {
     expect(result[3]).toEqual(Z());
   });
 
-  test('M アンカー削除 → 次のアンカーが新 M', () => {
+  test('M アンカーを削除すると次のアンカーが新 M になる', () => {
     const path: PathCommand[] = [
       M(0, 0),
       C(1, 2, 3, 4, 5, 5),
@@ -544,20 +544,20 @@ describe('removeAnchor', () => {
     expect(result[2]).toEqual(Z());
   });
 
-  test('サブパスのアンカーが 2 以下 → 操作拒否', () => {
+  test('サブパスのアンカーが 2 以下なら削除を拒否する', () => {
     const path: PathCommand[] = [M(0, 0), L(10, 10), Z()];
     const result = removeAnchor(path, 0);
     expect(result).toEqual(path);
     expect(result).not.toBe(path);
   });
 
-  test('範囲外 → 元配列コピー', () => {
+  test('範囲外 anchorIndex なら元配列のコピーを返す', () => {
     const path: PathCommand[] = [M(0, 0), L(10, 10), Z()];
     const result = removeAnchor(path, 99);
     expect(result).toEqual(path);
   });
 
-  test('擬似 O グリフから中間アンカー削除', () => {
+  test('擬似 O グリフから中間アンカーを削除できる', () => {
     const path: PathCommand[] = [
       M(50, 0),
       C(77.6, 0, 100, 22.4, 100, 50),
@@ -578,7 +578,7 @@ describe('removeAnchor', () => {
 // ── getHandlePoint ──────────────────────────────────────────────────────
 
 describe('getHandlePoint', () => {
-  test('C-c1 / C-c2 / Q-c が正しい Point を返す', () => {
+  test('C-c1 / C-c2 / Q-c それぞれの Point を返す', () => {
     const c = C(1, 2, 3, 4, 5, 6);
     expect(getHandlePoint(c, { kind: 'C-c1', cmdIndex: 0 })).toEqual({ x: 1, y: 2 });
     expect(getHandlePoint(c, { kind: 'C-c2', cmdIndex: 0 })).toEqual({ x: 3, y: 4 });
@@ -587,7 +587,7 @@ describe('getHandlePoint', () => {
     expect(getHandlePoint(q, { kind: 'Q-c', cmdIndex: 0 })).toEqual({ x: 7, y: 8 });
   });
 
-  test('kind とコマンド種別が不一致 → null', () => {
+  test('kind とコマンド種別が不一致なら null を返す', () => {
     expect(getHandlePoint(L(0, 0), { kind: 'C-c1', cmdIndex: 0 })).toBeNull();
     expect(getHandlePoint(C(1, 2, 3, 4, 5, 6), { kind: 'Q-c', cmdIndex: 0 })).toBeNull();
   });

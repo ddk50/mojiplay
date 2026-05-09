@@ -54,7 +54,7 @@
 import { computeOutlinePathPosition } from '../src/core/outline-position';
 
 describe('computeOutlinePathPosition', () => {
-  test('fabric デフォルト定数 (_fontSizeMult=1.13, _fontSizeFraction=0.222) を使う', () => {
+  test('fabric デフォルト定数 (_fontSizeMult=1.13, _fontSizeFraction=0.222) で計算できる', () => {
     const r = computeOutlinePathPosition(
       { left: 100, top: 200, fontSize: 72 },
       { minX: 5, minY: -50 },
@@ -63,7 +63,7 @@ describe('computeOutlinePathPosition', () => {
     expect(r.top).toBeCloseTo(213.29808, 3);
   });
 
-  test('明示的な fontSizeMult / fontSizeFraction はデフォルトを上書きする', () => {
+  test('明示的な fontSizeMult / fontSizeFraction でデフォルトを上書きできる', () => {
     const r = computeOutlinePathPosition(
       { left: 0, top: 0, fontSize: 100, fontSizeMult: 1, fontSizeFraction: 0 },
       { minX: 10, minY: -40 },
@@ -72,7 +72,7 @@ describe('computeOutlinePathPosition', () => {
     expect(r.top).toBe(60);
   });
 
-  test('リグレッション: ft=(198,143), fontSize=72, "H" グリフ (production log 由来)', () => {
+  test('回帰: ft=(198,143), fontSize=72, "H" グリフ (production log 由来) を再現できる', () => {
     const r = computeOutlinePathPosition(
       { left: 198, top: 143, fontSize: 72 },
       { minX: 5.77, minY: -51.54 },
@@ -81,7 +81,7 @@ describe('computeOutlinePathPosition', () => {
     expect(r.top).toBeCloseTo(154.76, 1);
   });
 
-  test('descender のみのグリフ (bb.minY >= 0) でも baseline 計算は同じ', () => {
+  test('descender のみのグリフ (bb.minY >= 0) でも baseline を同じ式で計算する', () => {
     const r = computeOutlinePathPosition(
       { left: 100, top: 100, fontSize: 72 },
       { minX: 5, minY: 0 },
@@ -89,7 +89,7 @@ describe('computeOutlinePathPosition', () => {
     expect(r.top).toBeCloseTo(163.29808, 3);
   });
 
-  test('負の座標 (post-drag world coord) でも正しく計算される', () => {
+  test('負の座標 (post-drag world coord) でも正しく計算できる', () => {
     const r = computeOutlinePathPosition(
       { left: -262.55, top: -41.18, fontSize: 72 },
       { minX: 5.77, minY: -51.54 },
@@ -98,7 +98,7 @@ describe('computeOutlinePathPosition', () => {
     expect(r.top).toBeCloseTo(-29.42192, 1);
   });
 
-  test('fontSize=0 の degenerate ケースでも NaN/例外を出さない', () => {
+  test('fontSize=0 の degenerate でも NaN や例外を出さない', () => {
     const r = computeOutlinePathPosition(
       { left: 50, top: 50, fontSize: 0 },
       { minX: 0, minY: 0 },

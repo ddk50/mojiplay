@@ -24,7 +24,7 @@ function mkChanged(id: string, fromTag: string, toTag: string): Command {
 }
 
 describe('HistoryStack', () => {
-  test('初期状態: 何も無い', () => {
+  test('初期状態は空 (canUndo / canRedo が false)', () => {
     const s = createHistoryStack({ max: 10 });
     expect(s.canUndo()).toBe(false);
     expect(s.canRedo()).toBe(false);
@@ -33,7 +33,7 @@ describe('HistoryStack', () => {
     expect(s.linearize()).toEqual([]);
   });
 
-  test('push 1 個: undo 可能、redo 不可', () => {
+  test('push 1 個で undo 可 / redo 不可になる', () => {
     const s = createHistoryStack({ max: 10 });
     const c = mkChanged('o1', 'a', 'b');
     s.push(c);
@@ -42,7 +42,7 @@ describe('HistoryStack', () => {
     expect(s.linearize()).toEqual([c]);
   });
 
-  test('push → undo → redo の round-trip', () => {
+  test('push → undo → redo の round-trip ができる', () => {
     const s = createHistoryStack({ max: 10 });
     const c1 = mkChanged('o1', 'a', 'b');
     s.push(c1);
@@ -56,7 +56,7 @@ describe('HistoryStack', () => {
     expect(s.canRedo()).toBe(false);
   });
 
-  test('複数 push: undo/redo cursor が正しく移動', () => {
+  test('複数 push 後に undo/redo cursor を順に移動できる', () => {
     const s = createHistoryStack({ max: 10 });
     const c1 = mkChanged('o1', 'a', 'b');
     const c2 = mkChanged('o1', 'b', 'c');
@@ -70,7 +70,7 @@ describe('HistoryStack', () => {
     expect(s.canRedo()).toBe(false);
   });
 
-  test('undo 中に新規 push: redo 列がクリアされる', () => {
+  test('undo 中に新規 push すると redo 列をクリアする', () => {
     const s = createHistoryStack({ max: 10 });
     const c1 = mkChanged('o1', 'a', 'b');
     const c2 = mkChanged('o1', 'b', 'c');
@@ -82,7 +82,7 @@ describe('HistoryStack', () => {
     expect(s.linearize()).toEqual([c1, c3]);
   });
 
-  test('clear 後は何も無い状態', () => {
+  test('clear 後は空の初期状態に戻る', () => {
     const s = createHistoryStack({ max: 10 });
     s.push(mkChanged('o1', 'a', 'b'));
     s.push(mkChanged('o1', 'b', 'c'));
@@ -93,7 +93,7 @@ describe('HistoryStack', () => {
   });
 
   describe('上限超過 (ring buffer の overwrite)', () => {
-    test('max=3、4 回 push で最古の 1 個が落ちる', () => {
+    test('max=3 で 4 回 push すると最古の 1 個が落ちる', () => {
       const s = createHistoryStack({ max: 3 });
       const c1 = mkChanged('o1', 'a', 'b');
       const c2 = mkChanged('o1', 'b', 'c');
@@ -109,7 +109,7 @@ describe('HistoryStack', () => {
       expect(s.canUndo()).toBe(false);
     });
 
-    test('上限超過後も undo→redo が成立', () => {
+    test('上限超過後も undo → redo の round-trip ができる', () => {
       const s = createHistoryStack({ max: 3 });
       const c1 = mkChanged('o1', 'a', 'b');
       const c2 = mkChanged('o1', 'b', 'c');
@@ -122,7 +122,7 @@ describe('HistoryStack', () => {
       expect(s.redo()).toBe(c4);
     });
 
-    test('wrap-around 跨ぎでの linearize 順序', () => {
+    test('wrap-around を跨いでも linearize は論理順を保つ', () => {
       const s = createHistoryStack({ max: 3 });
       // 5 回 push: 物理的には buf[0..2] が複数回上書きされて、
       // logical 順序は最後の 3 個 (c3, c4, c5)
@@ -138,7 +138,7 @@ describe('HistoryStack', () => {
     });
   });
 
-  test('上限超過 + 途中 undo + 新規 push の合わせ技', () => {
+  test('上限超過 + 途中 undo + 新規 push の合わせ技でも整合する', () => {
     const s = createHistoryStack({ max: 3 });
     const c1 = mkChanged('o1', 'a', 'b');
     const c2 = mkChanged('o1', 'b', 'c');
@@ -157,7 +157,7 @@ describe('HistoryStack', () => {
     expect(s.undo()).toBe(c2);
   });
 
-  test('max=1 でも動く', () => {
+  test('max=1 でも push と undo ができる', () => {
     const s = createHistoryStack({ max: 1 });
     const c1 = mkChanged('o1', 'a', 'b');
     const c2 = mkChanged('o1', 'b', 'c');
@@ -169,7 +169,7 @@ describe('HistoryStack', () => {
     expect(s.canUndo()).toBe(false);
   });
 
-  test('max < 1 はエラー', () => {
+  test('max < 1 で例外を投げる', () => {
     expect(() => createHistoryStack({ max: 0 })).toThrow();
     expect(() => createHistoryStack({ max: -1 })).toThrow();
   });

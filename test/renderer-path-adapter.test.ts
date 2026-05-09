@@ -18,7 +18,7 @@ const Q = (cx: number, cy: number, x: number, y: number): PathCommand =>
 const Z = (): PathCommand => ({ type: 'Z' });
 
 describe('fromFabricPath / toFabricPath', () => {
-  test('全コマンド種別の往復変換が一致', () => {
+  test('全コマンド種別を往復変換しても一致する', () => {
     const raw: FabricPathCommand[] = [
       ['M', 0, 0],
       ['L', 10, 0],
@@ -38,11 +38,11 @@ describe('fromFabricPath / toFabricPath', () => {
     expect(roundtrip).toEqual(raw);
   });
 
-  test('未知コマンドで例外', () => {
+  test('未知コマンドで例外を投げる', () => {
     expect(() => fromFabricPath([['X', 0, 0]])).toThrow();
   });
 
-  test('空パス', () => {
+  test('空 path はそのまま空配列を返す', () => {
     expect(fromFabricPath([])).toEqual([]);
     expect(toFabricPath([])).toEqual([]);
   });
