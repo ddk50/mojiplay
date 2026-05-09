@@ -37,7 +37,6 @@ npx jest copy-export  # 特定ファイルのみ
 - `core/history/history.ts` — History (ring buffer + cursor)
 - `core/outline-position.ts` — アウトライン位置計算
 - `renderer/copy-export.ts` — PNG エクスポート用 typed wrapper (Interface Adapter)
-- `core/group-selection.ts` — group 展開ロジック
 - `core/path/segment-hit.ts` — セグメントヒットテスト
 - `core/path/overlay-layout.ts` — overlay (アンカー / ハンドル) 配置
 - `usecases/tools/select-char-tool.ts` / `usecases/tools/pen-add-tool.ts` / `usecases/tools/pen-remove-tool.ts` / `usecases/tools/select-group-tool.ts` / `usecases/tools/text-tool.ts` — `FakePathHandle` / `FakeState` (= State interface のテストダブル) を渡して挙動を検証
