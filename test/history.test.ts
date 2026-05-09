@@ -1,7 +1,7 @@
-// HistoryStack (ring buffer + cursor) のテスト。
+// History (ring buffer + cursor) のテスト。
 
 import type { Command, ObjectSnapshot } from '../src/core/history/types';
-import { createHistoryStack } from '../src/core/history/stack';
+import { History } from '../src/core/history/history';
 import type { ObjectId } from '../src/core/object-id';
 
 // テスト用の最小 Command を作るヘルパ。
@@ -23,9 +23,9 @@ function mkChanged(id: string, fromTag: string, toTag: string): Command {
   };
 }
 
-describe('HistoryStack', () => {
+describe('History', () => {
   test('初期状態は空 (canUndo / canRedo が false)', () => {
-    const s = createHistoryStack({ max: 10 });
+    const s = new History({ max: 10 });
     expect(s.canUndo()).toBe(false);
     expect(s.canRedo()).toBe(false);
     expect(s.undo()).toBeNull();
@@ -34,7 +34,7 @@ describe('HistoryStack', () => {
   });
 
   test('push 1 個で undo 可 / redo 不可になる', () => {
-    const s = createHistoryStack({ max: 10 });
+    const s = new History({ max: 10 });
     const c = mkChanged('o1', 'a', 'b');
     s.push(c);
     expect(s.canUndo()).toBe(true);
@@ -43,7 +43,7 @@ describe('HistoryStack', () => {
   });
 
   test('push → undo → redo の round-trip ができる', () => {
-    const s = createHistoryStack({ max: 10 });
+    const s = new History({ max: 10 });
     const c1 = mkChanged('o1', 'a', 'b');
     s.push(c1);
     const popped = s.undo();
@@ -57,7 +57,7 @@ describe('HistoryStack', () => {
   });
 
   test('複数 push 後に undo/redo cursor を順に移動できる', () => {
-    const s = createHistoryStack({ max: 10 });
+    const s = new History({ max: 10 });
     const c1 = mkChanged('o1', 'a', 'b');
     const c2 = mkChanged('o1', 'b', 'c');
     const c3 = mkChanged('o1', 'c', 'd');
@@ -71,7 +71,7 @@ describe('HistoryStack', () => {
   });
 
   test('undo 中に新規 push すると redo 列をクリアする', () => {
-    const s = createHistoryStack({ max: 10 });
+    const s = new History({ max: 10 });
     const c1 = mkChanged('o1', 'a', 'b');
     const c2 = mkChanged('o1', 'b', 'c');
     const c3 = mkChanged('o1', 'b', 'X');
@@ -83,7 +83,7 @@ describe('HistoryStack', () => {
   });
 
   test('clear 後は空の初期状態に戻る', () => {
-    const s = createHistoryStack({ max: 10 });
+    const s = new History({ max: 10 });
     s.push(mkChanged('o1', 'a', 'b'));
     s.push(mkChanged('o1', 'b', 'c'));
     s.clear();
@@ -94,7 +94,7 @@ describe('HistoryStack', () => {
 
   describe('上限超過 (ring buffer の overwrite)', () => {
     test('max=3 で 4 回 push すると最古の 1 個が落ちる', () => {
-      const s = createHistoryStack({ max: 3 });
+      const s = new History({ max: 3 });
       const c1 = mkChanged('o1', 'a', 'b');
       const c2 = mkChanged('o1', 'b', 'c');
       const c3 = mkChanged('o1', 'c', 'd');
@@ -110,7 +110,7 @@ describe('HistoryStack', () => {
     });
 
     test('上限超過後も undo → redo の round-trip ができる', () => {
-      const s = createHistoryStack({ max: 3 });
+      const s = new History({ max: 3 });
       const c1 = mkChanged('o1', 'a', 'b');
       const c2 = mkChanged('o1', 'b', 'c');
       const c3 = mkChanged('o1', 'c', 'd');
@@ -123,7 +123,7 @@ describe('HistoryStack', () => {
     });
 
     test('wrap-around を跨いでも linearize は論理順を保つ', () => {
-      const s = createHistoryStack({ max: 3 });
+      const s = new History({ max: 3 });
       // 5 回 push: 物理的には buf[0..2] が複数回上書きされて、
       // logical 順序は最後の 3 個 (c3, c4, c5)
       const cs = [
@@ -139,7 +139,7 @@ describe('HistoryStack', () => {
   });
 
   test('上限超過 + 途中 undo + 新規 push の合わせ技でも整合する', () => {
-    const s = createHistoryStack({ max: 3 });
+    const s = new History({ max: 3 });
     const c1 = mkChanged('o1', 'a', 'b');
     const c2 = mkChanged('o1', 'b', 'c');
     const c3 = mkChanged('o1', 'c', 'd');
@@ -158,7 +158,7 @@ describe('HistoryStack', () => {
   });
 
   test('max=1 でも push と undo ができる', () => {
-    const s = createHistoryStack({ max: 1 });
+    const s = new History({ max: 1 });
     const c1 = mkChanged('o1', 'a', 'b');
     const c2 = mkChanged('o1', 'b', 'c');
     s.push(c1);
@@ -170,7 +170,7 @@ describe('HistoryStack', () => {
   });
 
   test('max < 1 で例外を投げる', () => {
-    expect(() => createHistoryStack({ max: 0 })).toThrow();
-    expect(() => createHistoryStack({ max: -1 })).toThrow();
+    expect(() => new History({ max: 0 })).toThrow();
+    expect(() => new History({ max: -1 })).toThrow();
   });
 });

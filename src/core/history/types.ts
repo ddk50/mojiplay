@@ -1,4 +1,4 @@
-// Undo/Redo の Command ADT と HistoryStack interface。
+// Undo/Redo の Command ADT と History interface。
 //
 // 設計の詳細は CLAUDE.md「Undo/Redo + 永続化に向けた State / Viewport 分離モデル」参照。
 //
@@ -22,7 +22,13 @@ export type Command =
   | { kind: 'objectDeleted'; objectId: ObjectId; before: ObjectSnapshot }
   | { kind: 'compound';      commands: ReadonlyArray<Command> };
 
-export interface HistoryStack {
+/**
+ * コマンド履歴 (= 編集 cursor 付き有界列)。
+ *
+ * Stack ではない: cursor が前後に動き redo を保持する。実装のストレージは
+ * ring buffer (循環バッファ + 論理 cursor) だが、抽象としては「履歴 + cursor」。
+ */
+export interface History {
   push(cmd: Command): void;
   undo(): Command | null;          // cursor を 1 戻して revert 対象を返す
   redo(): Command | null;          // cursor を 1 進めて apply 対象を返す

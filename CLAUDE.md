@@ -34,7 +34,7 @@ npx jest copy-export  # 特定ファイルのみ
 - `core/path/coords.ts` — 座標変換 (path local ↔ world ↔ screen)
 - `renderer/path-adapter.ts` — fabric 生タプル ↔ PathCommand 境界変換 (Interface Adapter)
 - `core/object-id.ts` — ObjectId / ObjectType / ensureObjectId (ulid 経由)
-- `core/history/stack.ts` — HistoryStack (ring buffer + cursor)
+- `core/history/history.ts` — History (ring buffer + cursor)
 - `core/outline-position.ts` — アウトライン位置計算
 - `renderer/copy-export.ts` — PNG エクスポート用 typed wrapper (Interface Adapter)
 - `core/group-selection.ts` — group 展開ロジック
@@ -50,7 +50,7 @@ src/
 ├── main.ts / preload.ts  # Electron main/preload (Frameworks & Drivers)
 ├── core/                 # Entities (pure domain types / value objects)
 │   ├── path/             # path 操作のドメイン (中核概念)
-│   ├── history/          # Command ADT + HistoryStack (state-jump 用)
+│   ├── history/          # Command ADT + History (state-jump 用)
 │   ├── document/         # DocumentSnapshot + LoadError ADT (永続化用 value object)
 │   ├── state.ts          # State interface (= ドメインへの抽象契約)
 │   └── object-id.ts      # ObjectId / ObjectType / ensureObjectId
@@ -298,7 +298,7 @@ Tool は `src/usecases/tools/*` に置かれ **pure コード (fabric / DOM 不�
  │ State (renderer/state.ts) — State interface 実装  │
  │                                                       │
  │  ┌────────────────────────┐  ┌────────────────────┐  │
- │  │ canvas (fabric.Canvas) │  │ HistoryStack       │  │
+ │  │ canvas (fabric.Canvas) │  │ History       │  │
  │  │  - objects             │  │  (Command 列、     │  │
  │  │    (= State の実体)     │  │   ring buffer)     │  │
  │  │  - viewportTransform   │  │                    │  │
@@ -363,7 +363,7 @@ Tool は `src/usecases/tools/*` に置かれ **pure コード (fabric / DOM 不�
   - 選択変更は `host.setActiveSelection(handles)` (State interface)
   - text 生成は `host.createTextAt(x, y, props)` (State interface)
 - **fabric を直接 import しない**ので、将来 fabric 以外の renderer に置き換えても tool は無修正で動く (理論上)
-- **state.ts に encapsulate**: contract (interface) は `core/state.ts` の `interface State`、実装は `renderer/state.ts` の `class State implements StateContract` (alias 経由)。State interface 実装 + PathHandle 実装 + HistoryStack 内包 + fabric event hook 配線をまとめて担う。fabric の生 API は renderer/state.ts 内のみ。app.ts は state instance を経由して fabric を操作する
+- **state.ts に encapsulate**: contract (interface) は `core/state.ts` の `interface State`、実装は `renderer/state.ts` の `class State implements StateContract` (alias 経由)。State interface 実装 + PathHandle 実装 + History 内包 + fabric event hook 配線をまとめて担う。fabric の生 API は renderer/state.ts 内のみ。app.ts は state instance を経由して fabric を操作する
 
 #### Tool の責任分担
 
@@ -437,7 +437,7 @@ export type Command =
   | { kind: 'objectDeleted'; objectId: ObjectId; before: ObjectSnapshot }
   | { kind: 'compound';      commands: ReadonlyArray<Command> };
 
-export interface HistoryStack {
+export interface History {
   push(cmd: Command): void;
   undo(): Command | null;
   redo(): Command | null;
@@ -474,7 +474,7 @@ camera 層 (selection / viewport / tool mode / IText 編集中) は履歴対象�
 
 ### apply / revert 実装
 
-`HistoryStack` は **「履歴を覚える」だけ**で fabric は触らない。Command を実際に canvas へ反映するのは `renderer/state.ts` 内 (private な `applyCommand` / `revertCommand`) の責務。同じく state.ts 内の private snapshot ヘルパ (`writeSnapshotToCanvas` / `createObjectOnCanvas` / `removeObjectFromCanvas`) を呼ぶ。
+`History` は **「履歴を覚える」だけ**で fabric は触らない。Command を実際に canvas へ反映するのは `renderer/state.ts` 内 (private な `applyCommand` / `revertCommand`) の責務。同じく state.ts 内の private snapshot ヘルパ (`writeSnapshotToCanvas` / `createObjectOnCanvas` / `removeObjectFromCanvas`) を呼ぶ。
 
 ```ts
 // renderer/state.ts 内 (class State の private メソッド)
@@ -616,7 +616,7 @@ function applyToSelection(props): void {
 
 font family / size / color / rotation 全部この経路。
 
-### `HistoryStack` のデータ構造: ring buffer + cursor
+### `History` のデータ構造: ring buffer + cursor
 
 固定長の循環バッファ (`Command[max]`) と論理 cursor で実装する:
 
@@ -633,7 +633,7 @@ debug / 永続化のための `linearize()` ヘルパで論理順の Command 列
 
 選定理由: 上限超過時の旧履歴破棄が O(1)、メモリが固定で predictable、mod 計算コストは無視できる範囲。
 
-実装: `src/core/history/stack.ts`、テストは `test/history-stack.test.ts` (12 ケース、wrap-around / 上限超過 / undo→redo / 各 edge case)。
+実装: `src/core/history/history.ts`、テストは `test/history.test.ts` (12 ケース、wrap-around / 上限超過 / undo→redo / 各 edge case)。
 
 ### ID と type の分離 (重要設計判断)
 
@@ -790,7 +790,7 @@ src/core/
 │                            操作 IF + PathHandle / ObjectHandle / PathSnapshot /
 │                            TextCreateProps を集約。fabric / DOM 不知
 └── history/
-    ├── types.ts             Command ADT + ObjectSnapshot + HistoryStack interface
+    ├── types.ts             Command ADT + ObjectSnapshot + History interface
     └── stack.ts             ring buffer + cursor 実装
 
 src/renderer/
@@ -798,7 +798,7 @@ src/renderer/
 │                            の State 契約に対する fabric.Canvas を内包する concrete 実装。
 │                            History 操作 / 永続化 stub / 公開 captureObjectSnapshot
 │                            ヘルパ。private に snapshot 境界変換、applyCommand /
-│                            revertCommand、HistoryStack 参照、fabric event hook
+│                            revertCommand、History 参照、fabric event hook
 │                            (mouse:down / object:modified、arrow メソッドで
 │                            `this` binding を保つ) を全て持つ。fabric の生 API は
 │                            このファイル内に閉じ込め
@@ -834,7 +834,7 @@ src/repository/
 
 test/
 ├── object-id.test.ts             ensureObjectId の挙動 (6 cases)
-├── history-stack.test.ts         HistoryStack (12 cases、wrap-around / overflow / undo→redo 含む)
+├── history.test.ts         History (12 cases、wrap-around / overflow / undo→redo 含む)
 ├── tools-*.test.ts               各 Tool の挙動 (FakeState / FakePathHandle 経由)
 └── file-io-interactor.test.ts    FileIOInteractor (FakeState / FakeRepo / FakeUIPort で DI、19 cases)
 ```
@@ -844,7 +844,7 @@ test/
 1. **state-jump semantic を一貫採用**: undo/redo は snapshot を丸ごと書き戻す。差分計算 / 位置補正ロジックは持たない
 2. **state と camera を物理的に分離**: state は `canvas.objects`、camera は `canvas.viewportTransform` 他。history も persistence も state のみが対象
 3. **`ObjectSnapshot` は `fabric.Object.toObject(['data'])` 出力**: 自動的に永続化フォーマットと一致する (後付けの format 変換が要らない)
-4. **`HistoryStack` は fabric を知らない**: pure data 責務に専念。fabric への反映は adapter のみ
+4. **`History` は fabric を知らない**: pure data 責務に専念。fabric への反映は adapter のみ
 5. **switch は `assertNever` で網羅性保証**: Phase B/C で Command kind が増えたとき対応漏れがコンパイルエラーになる
 6. **camera (viewport / selection / tool mode / IText 編集中) は history に積まない**: 変更しても history に影響しない
 7. **compound command は逆順 revert**: `[a, b, c]` を apply したら revert は `[c, b, a]` の順で各々 revert
@@ -866,7 +866,7 @@ test/
 `core/` 配下は pure data なので unit test で完結:
 
 - **`core/object-id.ts`**: ensureObjectId が同じ obj に 2 回呼ばれても同じ ID を返す、type は ID 確定時に同時に書かれる、type 引数違いでも変わらない、別 obj には別 ID (6 cases)。ULID 生成自体のテストは書かない (= ライブラリ側の責務、自前で再追試しても資産価値ゼロ)
-- **`core/history/`**: HistoryStack の基本性質 (push 後 canUndo true、新 push で redo 列クリア、上限超過時 overwrite で古い側が落ちる、wrap-around 跨ぎでの linearize、空 / 部分 / フル状態の各 edge case)、`createHistoryStack({ max: < 1 })` がエラー (12 cases)
+- **`core/history/`**: History の基本性質 (push 後 canUndo true、新 push で redo 列クリア、上限超過時 overwrite で古い側が落ちる、wrap-around 跨ぎでの linearize、空 / 部分 / フル状態の各 edge case)、`new History({ max: < 1 })` がエラー (12 cases)
 
 `select-char-tool.ts` 等のツール側は `FakeState` / `FakePathHandle` 経由で existing test (155 通過) が引き続き成立。FakeState に `pushCommand` を追加、FakePathHandle に `getId` / `captureForHistory` を追加した。
 
@@ -1099,7 +1099,7 @@ repository     renderer    (driven adapter / presenter / frameworks)
 
 #### core 内に Use Case 性が混在
 
-`core/history/stack.ts` の HistoryStack (ring buffer) は pure data 構造だが、push/undo/redo の semantic はアプリ固有。Entity と Use Case の中間。pure data として core に置くのは test 容易性 + dependency 方向の保全のため。
+`core/history/history.ts` の History (ring buffer) は pure data 構造だが、push/undo/redo の semantic はアプリ固有。Entity と Use Case の中間。pure data として core に置くのは test 容易性 + dependency 方向の保全のため。
 
 ### この整理から導かれる将来的な refactor 候補
 

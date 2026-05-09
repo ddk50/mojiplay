@@ -17,8 +17,8 @@
 
 import { ensureObjectId } from '../core/object-id';
 import type { ObjectId } from '../core/object-id';
-import type { Command, ObjectSnapshot, HistoryStack } from '../core/history/types';
-import { createHistoryStack } from '../core/history/stack';
+import type { Command, ObjectSnapshot } from '../core/history/types';
+import { History } from '../core/history/history';
 import type {
   ObjectHandle, PathHandle, PathSnapshot, TextCreateProps,
   State as StateContract,
@@ -39,7 +39,7 @@ export interface CreateStateOptions {
 
 export class State implements StateContract {
   private readonly canvas: fabric.Canvas;
-  private readonly historyStack: HistoryStack;
+  private readonly history: History;
   private readonly upperCanvas: HTMLCanvasElement;
 
   // ObjectHandle canonical 化キャッシュ。
@@ -60,7 +60,7 @@ export class State implements StateContract {
 
   constructor(canvas: fabric.Canvas, options: CreateStateOptions = {}) {
     this.canvas = canvas;
-    this.historyStack = createHistoryStack({ max: options.historyMax ?? 100 });
+    this.history = new History({ max: options.historyMax ?? 100 });
     this.upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement;
 
     // fabric event hook (mouse:down で before snapshot capture、object:modified で
@@ -132,7 +132,7 @@ export class State implements StateContract {
   }
 
   pushCommand(cmd: Command): void {
-    this.historyStack.push(cmd);
+    this.history.push(cmd);
     logger.debug(`[history] push kind=${cmd.kind}`);
     this.bumpToken();
   }
@@ -140,7 +140,7 @@ export class State implements StateContract {
   // ===== History 操作 =====
 
   undo(): void {
-    const cmd = this.historyStack.undo();
+    const cmd = this.history.undo();
     if (!cmd) {
       logger.debug('[history] undo: nothing to undo');
       return;
@@ -152,7 +152,7 @@ export class State implements StateContract {
   }
 
   redo(): void {
-    const cmd = this.historyStack.redo();
+    const cmd = this.history.redo();
     if (!cmd) {
       logger.debug('[history] redo: nothing to redo');
       return;
@@ -162,8 +162,8 @@ export class State implements StateContract {
     this.bumpToken();
   }
 
-  canUndo(): boolean { return this.historyStack.canUndo(); }
-  canRedo(): boolean { return this.historyStack.canRedo(); }
+  canUndo(): boolean { return this.history.canUndo(); }
+  canRedo(): boolean { return this.history.canRedo(); }
 
   // ===== 永続化 (snapshot 境界変換) =====
 
@@ -207,7 +207,7 @@ export class State implements StateContract {
   }
 
   clearHistory(): void {
-    this.historyStack.clear();
+    this.history.clear();
     this.transformBeforeSnapshots.clear();
     this.bumpToken();
   }
@@ -431,7 +431,7 @@ export class State implements StateContract {
   // ===== debug =====
 
   linearizeHistory(): ReadonlyArray<Command> {
-    return this.historyStack.linearize();
+    return this.history.linearize();
   }
 
   // ============================================================
