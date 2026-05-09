@@ -1,45 +1,79 @@
 // TextTool の単体テスト。
+//
+// 検証方針: real `class State` (renderer/state.ts) に fabric stub を渡し、
+// State の public API (state.getAllObjects() / state.toSnapshot()) で結果を観測する。
+// 「createTextAt が呼ばれたか」を peek するのではなく、「呼ばれた結果として canvas に
+// IText が生成されているか」「位置とフォントが反映されているか」を見る。
 
-import type { TextCreateProps } from '../src/core/state';
+jest.mock('../src/renderer/outline-conversion', () => ({
+  outlineTextToPath: jest.fn(async () => null),
+}));
+
+import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
+
+installFabricStub();
+
+import { State } from '../src/renderer/state';
 import { TextTool } from '../src/usecases/tools/text-tool';
-import { FakeState } from './fakes';
-
-class FakeHost extends FakeState {
-  public createCalls: Array<[number, number, TextCreateProps]> = [];
-  override createTextAt(x: number, y: number, props: TextCreateProps): void {
-    this.createCalls.push([x, y, props]);
-  }
-}
+import type { TextCreateProps } from '../src/core/state';
 
 const PROPS: TextCreateProps = {
   fontFamily: 'Arial', fontSize: 72, fontWeight: 400, fontStyle: 'normal', fill: '#000000',
 };
 
+function setup() {
+  const state = new State(new FakeFabricCanvas() as never);
+  return { state };
+}
+
+function snapshotObjects(state: State): ReadonlyArray<Record<string, unknown>> {
+  const snap = state.toSnapshot() as { canvas: { objects: Record<string, unknown>[] } };
+  return snap.canvas.objects;
+}
+
 describe('TextTool', () => {
-  test('空き領域クリックで host.createTextAt を呼ぶ', () => {
+  test('空き領域クリックで IText が生成される', () => {
+    const { state } = setup();
     const tool = new TextTool(() => PROPS);
-    const host = new FakeHost();
-    tool.onCanvasMouseDown({ worldX: 50, worldY: 100, hasTarget: false }, host);
-    expect(host.createCalls).toEqual([[50, 100, PROPS]]);
+
+    tool.onCanvasMouseDown({ worldX: 50, worldY: 100, hasTarget: false }, state);
+
+    expect(state.getAllObjects()).toHaveLength(1);
+    expect(snapshotObjects(state)[0]).toMatchObject({
+      type: 'i-text',
+      left: 50,
+      top: 100,
+      fontFamily: 'Arial',
+      fontSize: 72,
+      fontWeight: 400,
+      fontStyle: 'normal',
+      fill: '#000000',
+    });
   });
 
-  test('既存オブジェクト上のクリック (hasTarget=true) では createTextAt を呼ばない', () => {
+  test('既存オブジェクト上のクリック (hasTarget=true) では IText を生成しない', () => {
+    const { state } = setup();
     const tool = new TextTool(() => PROPS);
-    const host = new FakeHost();
-    tool.onCanvasMouseDown({ worldX: 50, worldY: 100, hasTarget: true }, host);
-    expect(host.createCalls).toEqual([]);
+
+    tool.onCanvasMouseDown({ worldX: 50, worldY: 100, hasTarget: true }, state);
+
+    expect(state.getAllObjects()).toHaveLength(0);
   });
 
-  test('createTextAt のたびに getFontProps を呼んで最新値を反映する', () => {
+  test('クリックのたびに getFontProps を呼んで最新値を反映する', () => {
+    const { state } = setup();
     let counter = 0;
     const tool = new TextTool((): TextCreateProps => {
       counter++;
       return { ...PROPS, fontSize: counter * 10 };
     });
-    const host = new FakeHost();
-    tool.onCanvasMouseDown({ worldX: 0, worldY: 0, hasTarget: false }, host);
-    tool.onCanvasMouseDown({ worldX: 0, worldY: 0, hasTarget: false }, host);
-    expect(host.createCalls[0][2].fontSize).toBe(10);
-    expect(host.createCalls[1][2].fontSize).toBe(20);
+
+    tool.onCanvasMouseDown({ worldX: 0, worldY: 0, hasTarget: false }, state);
+    tool.onCanvasMouseDown({ worldX: 0, worldY: 0, hasTarget: false }, state);
+
+    const objs = snapshotObjects(state);
+    expect(objs).toHaveLength(2);
+    expect(objs[0]).toMatchObject({ fontSize: 10 });
+    expect(objs[1]).toMatchObject({ fontSize: 20 });
   });
 });

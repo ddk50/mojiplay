@@ -8,9 +8,12 @@
     "skipLibCheck": true,
     "outDir": "dist-test",
     "rootDir": ".",
-    "types": ["node", "jest"]
+    "lib": ["ES2022", "DOM"],
+    "types": ["node", "jest", "fabric"],
+    "allowUmdGlobalAccess": true
   },
   "include": [
-    "test/**/*.ts"
+    "test/**/*.ts",
+    "src/globals/**/*.d.ts"
   ]
 }
