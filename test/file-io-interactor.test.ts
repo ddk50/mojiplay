@@ -26,14 +26,27 @@ class FakeState extends BaseFakeState {
   applySnapshotCalled = 0;
   commitActiveTextCalled = 0;
 
+  // 「キャンバス上のオブジェクト群」相当のテストデータ。
+  // toSnapshot で snapshot.canvas に詰め、applySnapshot で書き戻すことで
+  // save → load の round-trip を検証可能にする。
+  private content: unknown = null;
+
+  /** content を入れ替える (= ユーザの編集相当)。token も bump して dirty 化する。 */
+  setContent(c: unknown): void {
+    this.content = c;
+    this.bump();
+  }
+  getContent(): unknown { return this.content; }
+
   override pushCommand(_c: Command): void { this.bump(); }
 
   override toSnapshot(): DocumentSnapshot {
     this.toSnapshotCalled++;
-    return { format: 'mojiplay', version: 1, canvas: { tokenAt: this.token } };
+    return { format: 'mojiplay', version: 1, canvas: this.content };
   }
-  override async applySnapshot(_s: DocumentSnapshot): Promise<void> {
+  override async applySnapshot(s: DocumentSnapshot): Promise<void> {
     this.applySnapshotCalled++;
+    this.content = s.canvas;
     this.clearHistory();
   }
   override commitActiveText(): void { this.commitActiveTextCalled++; }
@@ -46,7 +59,7 @@ class FakeState extends BaseFakeState {
   override clearHistory(): void { this.bump(); }
 
   // ── test helper ──
-  /** state が外部で mutation を起こしたことを simulate (= ユーザの編集相当)。 */
+  /** content を変えずに token だけ bump (= 細かい編集相当、内容比較が要らない時用)。 */
   simulateMutation(): void { this.bump(); }
   private bump(): void {
     this.token++;
@@ -55,12 +68,22 @@ class FakeState extends BaseFakeState {
 }
 
 class FakeRepo implements DocumentRepository {
+  // save / load の戻り値を test ごとに差し替える hook。
+  // saveResult を ok=false にすると「保存失敗」、loadResult を差し替えると
+  // 「未保存ファイルを開く」「外部 mply を import」を simulate できる。
   saveResult: SaveResult = { ok: true, filePath: '/tmp/foo.mply' };
   loadResult: LoadResult = {
     ok: true,
     snapshot: { format: 'mojiplay', version: 1, canvas: {} },
     filePath: '/tmp/bar.mply',
   };
+
+  // 「ディスク」相当の永続ストレージ。save が成功すると ここに書き、load は
+  // ここに値があればそれを返す (= 同じ FakeRepo 経由なら保存内容を読み戻せる)。
+  // save→load の round-trip テスト用。
+  private storedSnapshot: DocumentSnapshot | null = null;
+  private storedPath: string | null = null;
+
   saveCalled = 0;
   loadCalled = 0;
   lastSavedSnapshot: DocumentSnapshot | null = null;
@@ -73,11 +96,20 @@ class FakeRepo implements DocumentRepository {
     this.saveCalled++;
     this.lastSavedSnapshot = s;
     this.lastSavedPath = p;
-    if (this.onSave) return await this.onSave();
-    return this.saveResult;
+    const result = this.onSave ? await this.onSave() : this.saveResult;
+    if (result.ok) {
+      this.storedSnapshot = s;
+      this.storedPath = result.filePath;
+    }
+    return result;
   }
   async load(): Promise<LoadResult> {
     this.loadCalled++;
+    // 保存済みがあればそれを「ディスクから読む」(優先)。
+    // 無ければ test 側で設定した loadResult (= 「外部ファイルを開く」相当)。
+    if (this.storedSnapshot && this.storedPath) {
+      return { ok: true, snapshot: this.storedSnapshot, filePath: this.storedPath };
+    }
     return this.loadResult;
   }
 }
@@ -342,6 +374,72 @@ describe('FileIOInteractor', () => {
       await ctrl.saveCurrent();
       // 保存後は false が push される
       expect(ui.dirtyValues[ui.dirtyValues.length - 1]).toBe(false);
+    });
+  });
+
+  // 一番ユーザー目線で意味のある契約: 「保存した State を開けば同一の State に戻る」。
+  // FileIOInteractor + State.toSnapshot/applySnapshot + Repository の round-trip
+  // を統合的に検証する。
+  describe('save → load の round-trip', () => {
+    test('別 instance で openFile しても保存時点と同一 snapshot に戻る (アプリ再起動相当)', async () => {
+      const repo = new FakeRepo();
+
+      // インスタンス A: 内容を入れて保存
+      const stateA = new FakeState();
+      const ctrlA  = new FileIOInteractor(stateA, repo, new FakeUI(), basename);
+      stateA.setContent({ objects: ['hello', 'world'], meta: { fontFamily: 'Arial' } });
+      const savedSnapshot = stateA.toSnapshot();
+      const ok = await ctrlA.saveCurrent();
+      expect(ok).toBe(true);
+
+      // インスタンス B (= 別 process / 再起動相当): 同じ repo から開く
+      const stateB = new FakeState();
+      const ctrlB  = new FileIOInteractor(stateB, repo, new FakeUI(), basename);
+      await ctrlB.openFile();
+
+      // ロード後の State の snapshot が保存時点と完全一致
+      expect(stateB.toSnapshot()).toEqual(savedSnapshot);
+      expect(stateB.getContent()).toEqual({ objects: ['hello', 'world'], meta: { fontFamily: 'Arial' } });
+    });
+
+    test('save → 編集 → openFile (discard) で保存時点の content に戻る', async () => {
+      const { ctrl, state, ui } = makeController();
+
+      state.setContent({ objects: ['original'] });
+      await ctrl.saveCurrent();
+      expect(ctrl.getDocStatus().dirty).toBe(false);
+
+      // 保存後にさらに編集 (= dirty)
+      state.setContent({ objects: ['modified'] });
+      expect(ctrl.getDocStatus().dirty).toBe(true);
+      expect(state.getContent()).toEqual({ objects: ['modified'] });
+
+      // 開き直す: 編集を破棄して保存版をロード
+      ui.discardAnswer = 'discard';
+      await ctrl.openFile();
+
+      expect(state.getContent()).toEqual({ objects: ['original'] });
+      expect(ctrl.getDocStatus().dirty).toBe(false);
+    });
+
+    test('複数回 save しても最新版が load される', async () => {
+      const { ctrl, state, ui } = makeController();
+
+      state.setContent({ version: 1 });
+      await ctrl.saveCurrent();
+
+      state.setContent({ version: 2 });
+      await ctrl.saveCurrent();
+
+      state.setContent({ version: 3 });
+      await ctrl.saveCurrent();
+
+      // 適当に編集して discard で開き直す
+      state.setContent({ version: 'unsaved' });
+      ui.discardAnswer = 'discard';
+      await ctrl.openFile();
+
+      expect(state.getContent()).toEqual({ version: 3 });
     });
   });
 });
