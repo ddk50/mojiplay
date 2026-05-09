@@ -14,7 +14,8 @@
   },
   "include": [
     "src/core/**/*.ts",
-    "src/tools/**/*.ts",
+    "src/usecases/**/*.ts",
+    "src/repository/**/*.ts",
     "src/renderer/**/*.ts",
     "src/globals/**/*.d.ts"
   ]

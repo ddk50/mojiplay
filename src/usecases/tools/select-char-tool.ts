@@ -13,16 +13,16 @@
 // 中間ドラッグ更新は path.setCommands() で頻繁に呼び、bbox 再計算は
 // pointerUp で 1 回だけ path.finalizeEdit() を呼ぶ (コスト集約)。
 
-import type { Point, PathCommand, HandleRef } from '../core/path/types';
-import { moveAnchorRigid, moveHandle } from '../core/path/anchors';
-import { worldDeltaToPathLocalDelta } from '../core/path/coords';
-import { computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt } from '../core/path/overlay-layout';
+import type { Point, PathCommand, HandleRef } from '../../core/path/types';
+import { moveAnchorRigid, moveHandle } from '../../core/path/anchors';
+import { worldDeltaToPathLocalDelta } from '../../core/path/coords';
+import { computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt } from '../../core/path/overlay-layout';
 import type {
   Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
-import type { State, PathHandle } from '../core/state';
-import type { ObjectSnapshot } from '../core/history/types';
+import type { State, PathHandle } from '../../core/state';
+import type { ObjectSnapshot } from '../../core/history/types';
 
 export interface SnapConfig {
   readonly enabled: boolean;

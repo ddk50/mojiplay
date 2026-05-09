@@ -21,6 +21,7 @@ import type { Point, PathCommand } from './path/types';
 import type { Mat2x3 } from './path/coords';
 import type { Command, ObjectSnapshot } from './history/types';
 import type { ObjectId } from './object-id';
+import type { DocumentSnapshot } from './document/snapshot';
 
 // ── object / path / text 抽象 ─────────────────────────────────────────────
 
@@ -122,10 +123,87 @@ export interface State {
   canUndo(): boolean;
   canRedo(): boolean;
 
-  // ── 永続化 (将来用、現状 stub) ──
+  // ── 永続化 (snapshot 境界変換) ──
 
-  serialize(): unknown;
-  loadSerialized(data: unknown): void;
+  /**
+   * 現在の canvas 全 object を Snapshot として出す境界変換。
+   * 中身は format / version + canvas.toJSON(['data']) の出力。
+   */
+  toSnapshot(): DocumentSnapshot;
+
+  /**
+   * Snapshot を canvas に取り込む境界変換。内部で:
+   *   - canvas.clear() → loadFromJSON (async)
+   *   - viewportTransform を identity にリセット
+   *   - clearHistory() (= history 空 + tokenCounter 進行 + onMutate listeners 通知)
+   * 完了まで Promise が resolve しないので、呼び出し側は必ず await すること。
+   */
+  applySnapshot(s: DocumentSnapshot): Promise<void>;
+
+  /**
+   * IText 編集中なら commit を完了させる (= save 直前に呼ぶ)。
+   * controller が fabric 不知でいるため state に委譲。
+   * 実装は canvas.discardActiveObject() で 'text:editing:exited' を発火させる。
+   */
+  commitActiveText(): void;
+
+  // ── dirty tracking ──
+
+  /**
+   * 保存判定用の opaque token。等価なら state は「同一」とみなせる。
+   * pushCommand / undo / redo / clearHistory / applySnapshot で進行する。
+   */
+  getHistoryToken(): number;
+
+  /**
+   * state mutation 通知。token が進む全タイミングで cb が呼ばれる。
+   * 返値は unsubscribe 関数。
+   */
+  onMutate(cb: () => void): () => void;
+
+  /** 履歴クリア (load 後等)。tokenCounter も進めて onMutate を発火する。 */
+  clearHistory(): void;
+
+  // ── 高レベル selection 操作 (= 旧 actions/* の fabric 操作を State 内に閉じ込め) ──
+
+  /**
+   * 現在の zoom 倍率 (= canvas.getZoom() 相当)。
+   * Use case が「画面上 N px 相当の canvas 座標オフセット」を計算する時に使う。
+   */
+  getZoom(): number;
+
+  /** 選択中の object をすべて削除。history に compound objectDeleted を push。 */
+  removeActiveObjects(): void;
+
+  /**
+   * 選択中の object を offset 分ずらして複製。新オブジェクトに objectId を発行、
+   * 同一 groupId の元 objects は同一の新 groupId にまとめる (= 単語性を保つ)。
+   * history に compound objectCreated を push、複製群を新 selection に。
+   */
+  duplicateActiveObjects(offset: { x: number; y: number }): void;
+
+  /** 全 object を選択。history は変えない (= camera 層)。 */
+  selectAllObjects(): void;
+
+  /**
+   * 選択中の Text (アウトライン化可能なもの) を Path に変換。
+   * - 既に outlined な object はスキップ
+   * - 各 Text 1 個 = compound (objectDeleted Text + objectCreated Path) として
+   *   history に積み、最終的な compound としてまとめる
+   * @returns 成否のサマリ。失敗詳細は呼び出し側で UI 表示するために返す。
+   */
+  outlineActiveTexts(): Promise<{
+    succeeded:      number;
+    failedChars:    string;
+    failedFamilies: ReadonlyArray<string>;
+  }>;
+
+  /**
+   * 現在の active object を PNG dataURL に export (clipboard コピー用)。
+   * @param multiplier 解像度倍率 (= 通常 10、retina 相当)
+   * @returns active object が無ければ null
+   */
+  exportActiveAsPngDataUrl(multiplier: number): { dataUrl: string; width: number; height: number } | null;
 
   // ── debug ──
 

@@ -58,7 +58,26 @@ function createWindow(): BrowserWindow {
 
   win.once('ready-to-show', () => win.show());
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  wireCloseGuard(win);
   return win;
+}
+
+// ── Close guard: dirty 状態で window 閉じが要求された時に renderer に決断を仰ぐ ──
+//
+// renderer は dirty 値を IPC 'set-dirty' で push してくる (= main pull せず、
+// renderer push 型)。close 時に isDirty が true なら preventDefault して、
+// renderer に 'app-close-request' を投げ、'app-close-response' で 'destroy' /
+// 'cancel' を受ける。preventDefault は同期で呼ぶ必要があるため、async fetch を
+// close handler 内に置けないので、IPC roundtrip 型にしている。
+let isDirty = false;
+let allowClose = false;
+
+function wireCloseGuard(win: BrowserWindow): void {
+  win.on('close', (e) => {
+    if (allowClose || !isDirty) return;
+    e.preventDefault();
+    win.webContents.send('app-close-request');
+  });
 }
 
 // IPC handler: renderer sends base64 PNG data URL → main writes file
@@ -122,6 +141,86 @@ ipcMain.handle('toggle-fullscreen', () => {
 ipcMain.handle('undo',  (event) => { event.sender.undo();  });
 ipcMain.handle('redo',  (event) => { event.sender.redo();  });
 ipcMain.handle('paste', (event) => { event.sender.paste(); });
+
+// ── ドキュメント保存 / 読み込み ──
+
+// save-mply: 上書き保存は **必ず tmp + rename** で atomic に行う。
+// 直接 writeFile は書き込み中のクラッシュ / 電源断 / disk full で旧ファイルが
+// 半端な状態で破壊されるリスクがあるため禁止。POSIX rename(2) / Windows
+// MoveFileEx は同一ファイルシステム内で atomic = 旧ファイルか新ファイルの
+// いずれかしか観測されない。
+ipcMain.handle('save-mply', async (_event, json: string, currentPath: string | null): Promise<SaveResult> => {
+  let filePath = currentPath;
+  if (!filePath) {
+    const r = await dialog.showSaveDialog({
+      title:       '名前を付けて保存',
+      defaultPath: '名称未設定.mply',
+      filters:     [{ name: 'mojiplay', extensions: ['mply'] }],
+    });
+    if (r.canceled || !r.filePath) return { success: false, reason: 'canceled' };
+    filePath = r.filePath;
+  }
+  // tmp 名は process.pid + Date.now() で同時保存衝突を回避。
+  const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
+  try {
+    fs.writeFileSync(tmpPath, json, 'utf-8');
+    fs.renameSync(tmpPath, filePath);
+    log.info(`[save-mply] saved: ${filePath} (${json.length} bytes)`);
+    return { success: true, filePath };
+  } catch (err) {
+    // 失敗時は tmp を片付ける (rename 前なら tmp が残る、rename 後なら tmp は無い)。
+    try { fs.unlinkSync(tmpPath); } catch { /* tmp が無ければ無視 */ }
+    log.error(`[save-mply] failed: ${(err as Error).message}`);
+    return { success: false, reason: (err as Error).message };
+  }
+});
+
+ipcMain.handle('open-mply', async (): Promise<OpenResult> => {
+  const r = await dialog.showOpenDialog({
+    title:      '開く',
+    properties: ['openFile'],
+    filters:    [{ name: 'mojiplay', extensions: ['mply'] }],
+  });
+  if (r.canceled || !r.filePaths[0]) return { ok: false, reason: 'canceled' };
+  const filePath = r.filePaths[0];
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    log.info(`[open-mply] loaded: ${filePath} (${content.length} bytes)`);
+    return { ok: true, filePath, content };
+  } catch (err) {
+    log.error(`[open-mply] failed: ${(err as Error).message}`);
+    return { ok: false, reason: (err as Error).message };
+  }
+});
+
+ipcMain.handle('confirm-discard', async (_event, message: string): Promise<DiscardChoice> => {
+  const win = BrowserWindow.getFocusedWindow();
+  const opts = {
+    type:       'warning' as const,
+    buttons:    ['保存', '保存しない', 'キャンセル'],
+    defaultId:  0,
+    cancelId:   2,
+    title:      '確認',
+    message,
+  };
+  const r = win
+    ? await dialog.showMessageBox(win, opts)
+    : await dialog.showMessageBox(opts);
+  return (['save', 'discard', 'cancel'] as const)[r.response] ?? 'cancel';
+});
+
+// dirty 状態を renderer から push 型で受け取る (= 1 mutation ごとに IPC が走るが、
+// IPC コストは無視できる程度。close 時の判定で main 側から直接読みたいので push 型を採用)。
+ipcMain.handle('set-dirty', (_event, d: boolean) => {
+  isDirty = d;
+});
+
+ipcMain.handle('app-close-response', (event, decision: 'destroy' | 'cancel') => {
+  if (decision !== 'destroy') return;
+  allowClose = true;
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) win.close();
+});
 
 
 

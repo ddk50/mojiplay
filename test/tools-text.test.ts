@@ -1,8 +1,8 @@
 // TextTool の単体テスト。
 
-import type { CanvasMouseDownInput } from '../src/tools/tool-interface';
+import type { CanvasMouseDownInput } from '../src/usecases/tools/tool-interface';
 import type { State, TextCreateProps } from '../src/core/state';
-import { TextTool } from '../src/tools/text-tool';
+import { TextTool } from '../src/usecases/tools/text-tool';
 
 class FakeHost implements State {
   public createCalls: Array<[number, number, TextCreateProps]> = [];
@@ -21,8 +21,18 @@ class FakeHost implements State {
   redo()              {}
   canUndo()           { return false; }
   canRedo()           { return false; }
-  serialize()         { return null; }
-  loadSerialized()    {}
+  toSnapshot(): any   { return { format: 'mojiplay', version: 1, canvas: {} }; }
+  async applySnapshot(_s: any): Promise<void> {}
+  commitActiveText()  {}
+  getHistoryToken()   { return 0; }
+  onMutate(_cb: () => void) { return () => {}; }
+  clearHistory()      {}
+  getZoom()           { return 1; }
+  removeActiveObjects() {}
+  duplicateActiveObjects(_o: { x: number; y: number }) {}
+  selectAllObjects()  {}
+  async outlineActiveTexts() { return { succeeded: 0, failedChars: '', failedFamilies: [] }; }
+  exportActiveAsPngDataUrl(_m: number) { return null; }
   linearizeHistory()  { return []; }
 }
 

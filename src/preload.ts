@@ -16,6 +16,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   undo:  (): Promise<void> => ipcRenderer.invoke('undo'),
   redo:  (): Promise<void> => ipcRenderer.invoke('redo'),
   paste: (): Promise<void> => ipcRenderer.invoke('paste'),
+
+  // ── ドキュメント保存 / 読み込み ──
+  saveMply: (json: string, currentPath: string | null): Promise<SaveResult> =>
+    ipcRenderer.invoke('save-mply', json, currentPath),
+  openMply: (): Promise<OpenResult> => ipcRenderer.invoke('open-mply'),
+  confirmDiscard: (message: string): Promise<DiscardChoice> =>
+    ipcRenderer.invoke('confirm-discard', message),
+  setDirty: (dirty: boolean): Promise<void> =>
+    ipcRenderer.invoke('set-dirty', dirty),
+  onAppCloseRequest: (callback: () => void): void => {
+    ipcRenderer.on('app-close-request', () => callback());
+  },
+  respondAppClose: (decision: 'destroy' | 'cancel'): Promise<void> =>
+    ipcRenderer.invoke('app-close-response', decision),
+
   log: {
     debug: (msg: string) => ipcRenderer.invoke('log', 'debug', msg),
     info:  (msg: string) => ipcRenderer.invoke('log', 'info',  msg),

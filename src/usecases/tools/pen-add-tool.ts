@@ -43,17 +43,17 @@
 //   逆操作 (アンカー削除 / -ペンツール) は curve fitting の問題で
 //   De Casteljau では戻せない。pen-remove-tool.ts 参照。
 
-import type { Point, PathCommand } from '../core/path/types';
-import { splitSegment, getSegmentStart } from '../core/path/anchors';
-import type { PathTransform } from '../core/path/coords';
-import { screenToPathLocal } from '../core/path/coords';
-import { findClosestSegment } from '../core/path/segment-hit';
-import type { ObjectSnapshot } from '../core/history/types';
+import type { Point, PathCommand } from '../../core/path/types';
+import { splitSegment, getSegmentStart } from '../../core/path/anchors';
+import type { PathTransform } from '../../core/path/coords';
+import { screenToPathLocal } from '../../core/path/coords';
+import { findClosestSegment } from '../../core/path/segment-hit';
+import type { ObjectSnapshot } from '../../core/history/types';
 import type {
   Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
-import type { State, PathHandle } from '../core/state';
+import type { State, PathHandle } from '../../core/state';
 
 interface PenAddDragState {
   readonly cmdIndex: number;        // 分割した命令の前半 (新アンカー終端) の index

@@ -2,9 +2,9 @@
 
 import type { PathCommand } from '../src/core/path/types';
 import type { Mat2x3 } from '../src/core/path/coords';
-import type { PointerInput } from '../src/tools/tool-interface';
+import type { PointerInput } from '../src/usecases/tools/tool-interface';
 import type { State, PathHandle, PathSnapshot } from '../src/core/state';
-import { PenRemoveTool } from '../src/tools/pen-remove-tool';
+import { PenRemoveTool } from '../src/usecases/tools/pen-remove-tool';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 
@@ -41,8 +41,18 @@ class FakeHost implements State {
   redo() { /* no-op */ }
   canUndo() { return false; }
   canRedo() { return false; }
-  serialize() { return null; }
-  loadSerialized() { /* no-op */ }
+  toSnapshot(): any { return { format: 'mojiplay', version: 1, canvas: {} }; }
+  async applySnapshot(_s: any): Promise<void> { /* no-op */ }
+  commitActiveText() { /* no-op */ }
+  getHistoryToken() { return 0; }
+  onMutate(_cb: () => void) { return () => {}; }
+  clearHistory() { /* no-op */ }
+  getZoom() { return 1; }
+  removeActiveObjects() { /* no-op */ }
+  duplicateActiveObjects(_o: { x: number; y: number }) { /* no-op */ }
+  selectAllObjects() { /* no-op */ }
+  async outlineActiveTexts() { return { succeeded: 0, failedChars: '', failedFamilies: [] }; }
+  exportActiveAsPngDataUrl(_m: number) { return null; }
   linearizeHistory() { return []; }
 }
 

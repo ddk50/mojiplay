@@ -5,13 +5,13 @@
 //
 // hover 時はアンカー上で 'pointer' カーソルにする。
 
-import { removeAnchor } from '../core/path/anchors';
-import { computeOverlayLayout, hitTestAnchorAt } from '../core/path/overlay-layout';
+import { removeAnchor } from '../../core/path/anchors';
+import { computeOverlayLayout, hitTestAnchorAt } from '../../core/path/overlay-layout';
 import type {
   Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
-import type { State } from '../core/state';
+import type { State } from '../../core/state';
 
 export class PenRemoveTool implements Tool {
   readonly descriptor: ToolDescriptor = {

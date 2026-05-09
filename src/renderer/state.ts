@@ -15,6 +15,7 @@
 //     UseCase 流)。
 //   - canvas event handler は arrow メソッドで定義し `this` binding を保つ。
 
+import { ensureObjectId } from '../core/object-id';
 import type { ObjectId } from '../core/object-id';
 import type { Command, ObjectSnapshot, HistoryStack } from '../core/history/types';
 import { createHistoryStack } from '../core/history/stack';
@@ -22,10 +23,14 @@ import type {
   ObjectHandle, PathHandle, PathSnapshot, TextCreateProps,
   State as StateContract,
 } from '../core/state';
+import type { DocumentSnapshot } from '../core/document/snapshot';
 import type { Mat2x3 } from '../core/path/coords';
 import type { PathCommand } from '../core/path/types';
 import { fromFabricPath, toFabricPath } from './path-adapter';
 import { logger, fmtObj } from './logger';
+import { generateGroupId } from './group-id';
+import { outlineTextToPath } from './outline-conversion';
+import { exportObjectToPngDataUrl } from './copy-export';
 
 export interface CreateStateOptions {
   /** History 上限。default 100 */
@@ -47,6 +52,11 @@ export class State implements StateContract {
   // fabric-driven な transform (drag / scale / rotate) の直前 snapshot を保持。
   // mouse:down で capture、object:modified で消費。ObjectId をキー (multi-select 用)。
   private readonly transformBeforeSnapshots = new Map<ObjectId, ObjectSnapshot>();
+
+  // dirty tracking 用の opaque token。state を変えうる全操作 (pushCommand / undo / redo /
+  // clearHistory / applySnapshot) で increment し、mutationListeners を発火する。
+  private tokenCounter = 0;
+  private mutationListeners: Array<() => void> = [];
 
   constructor(canvas: fabric.Canvas, options: CreateStateOptions = {}) {
     this.canvas = canvas;
@@ -124,6 +134,7 @@ export class State implements StateContract {
   pushCommand(cmd: Command): void {
     this.historyStack.push(cmd);
     logger.debug(`[history] push kind=${cmd.kind}`);
+    this.bumpToken();
   }
 
   // ===== History 操作 =====
@@ -136,6 +147,7 @@ export class State implements StateContract {
     }
     logger.debug(`[history] undo kind=${cmd.kind}`);
     this.revertCommand(cmd);
+    this.bumpToken();
     // Phase A 規約: undo は selection を能動的に変更しない (camera 層は履歴対象外)
   }
 
@@ -147,21 +159,260 @@ export class State implements StateContract {
     }
     logger.debug(`[history] redo kind=${cmd.kind}`);
     this.applyCommand(cmd);
+    this.bumpToken();
   }
 
   canUndo(): boolean { return this.historyStack.canUndo(); }
   canRedo(): boolean { return this.historyStack.canRedo(); }
 
-  // ===== 永続化 (stub。実装は後日) =====
+  // ===== 永続化 (snapshot 境界変換) =====
 
-  serialize(): unknown {
-    // TODO: バージョニング / format 確定。今は generic JSON 化のみ。
-    return { version: 1, objects: this.canvas.toJSON(['data']) };
+  toSnapshot(): DocumentSnapshot {
+    return {
+      format:  'mojiplay',
+      version: 1,
+      canvas:  this.canvas.toJSON(['data']),
+    };
   }
 
-  loadSerialized(_data: unknown): void {
-    // TODO: 実装。schema 検証 / canvas.loadFromJSON / viewport reset / history.clear。
-    throw new Error('loadSerialized: not yet implemented');
+  async applySnapshot(s: DocumentSnapshot): Promise<void> {
+    this.canvas.clear();
+    // canvas.loadFromJSON は内部で enlivenObjects を呼ぶため非同期。callback で resolve。
+    await new Promise<void>(resolve =>
+      this.canvas.loadFromJSON(s.canvas, () => resolve())
+    );
+    this.canvas.viewportTransform = [1, 0, 0, 1, 0, 0];
+    this.canvas.requestRenderAll();
+    // 注: data.objectId は信頼してそのまま採用 (再発行しない)。
+    // 単一 window 前提。複数 window 同時 load を許す機能を入れる時は要検討。
+    this.clearHistory();
+  }
+
+  commitActiveText(): void {
+    // discardActiveObject は IText 編集中なら 'text:editing:exited' を発火させ、
+    // app.ts の commitIText ハンドラが分割を完了する。それ以外なら無害な選択解除。
+    this.canvas.discardActiveObject();
+    this.canvas.requestRenderAll();
+  }
+
+  // ===== dirty tracking =====
+
+  getHistoryToken(): number { return this.tokenCounter; }
+
+  onMutate(cb: () => void): () => void {
+    this.mutationListeners.push(cb);
+    return () => {
+      this.mutationListeners = this.mutationListeners.filter(c => c !== cb);
+    };
+  }
+
+  clearHistory(): void {
+    this.historyStack.clear();
+    this.transformBeforeSnapshots.clear();
+    this.bumpToken();
+  }
+
+  // ===== 高レベル selection 操作 (= 旧 actions/* の fabric 操作をここに閉じ込め) =====
+
+  getZoom(): number {
+    return this.canvas.getZoom() || 1;
+  }
+
+  removeActiveObjects(): void {
+    const selected = this.canvas.getActiveObjects();
+    if (!selected.length) return;
+
+    // History: 削除前に各 object の snapshot を捕捉、compound として push。
+    const cmds: Command[] = [];
+    for (const obj of selected) {
+      const id = (obj as any).data?.objectId as ObjectId | undefined;
+      if (id) {
+        cmds.push({
+          kind: 'objectDeleted',
+          objectId: id,
+          before: this.captureObjectSnapshot(obj),
+        });
+      }
+    }
+
+    selected.forEach(obj => this.canvas.remove(obj));
+    this.canvas.discardActiveObject();
+    this.canvas.renderAll();
+
+    if (cmds.length === 1) {
+      this.pushCommand(cmds[0]);
+    } else if (cmds.length > 1) {
+      this.pushCommand({ kind: 'compound', commands: cmds });
+    }
+    if (cmds.length > 0) {
+      logger.debug(`[history] push delete: ${cmds.length} object(s)`);
+    }
+  }
+
+  duplicateActiveObjects(offset: { x: number; y: number }): void {
+    const selected = this.canvas.getActiveObjects();
+    if (selected.length === 0) return;
+
+    // ActiveSelection の子は left/top が group 中心相対なので、世界座標で扱うため
+    // 一旦 discardActiveObject する (outlineActiveTexts と同じ理由)。
+    this.canvas.discardActiveObject();
+
+    const groupIdRemap = new Map<string, string>();
+    const cmds: Command[] = [];
+    const newObjects: fabric.Object[] = [];
+
+    for (const orig of selected) {
+      const snapshot = (orig as any).toObject(['data']) as any;
+      const origData = snapshot.data ?? {};
+      const type = snapshot.type as string;
+      const objType: 'text' | 'path' = origData.type ?? (type === 'path' ? 'path' : 'text');
+
+      // groupId 再マップ (同じ元 groupId なら同じ新 groupId を共有)
+      const oldGid = origData.groupId as string | undefined;
+      let newGid: string | undefined;
+      if (oldGid) {
+        let mapped = groupIdRemap.get(oldGid);
+        if (!mapped) { mapped = generateGroupId(); groupIdRemap.set(oldGid, mapped); }
+        newGid = mapped;
+      }
+
+      let cloned: fabric.Object;
+      if (type === 'path') {
+        const { path: pathData, type: _t, data: _d, ...opts } = snapshot;
+        cloned = new fabric.Path(pathData, opts);
+      } else if (type === 'text' || type === 'i-text') {
+        const { text: textValue, type: _t, data: _d, ...opts } = snapshot;
+        cloned = new fabric.Text(textValue, opts);
+      } else {
+        logger.warn(`[duplicate] skipping unknown type: ${type}`);
+        continue;
+      }
+
+      cloned.set({
+        left: (cloned.left ?? 0) + offset.x,
+        top:  (cloned.top  ?? 0) + offset.y,
+      });
+
+      // data: 新 objectId は ensureObjectId で発行、groupId は再マップ後の値、
+      // sourceText / charIndex / outlined 等の custom field は origData から保持。
+      (cloned as any).data = {
+        ...origData,
+        objectId: undefined,
+        groupId:  newGid,
+      };
+      const newId = ensureObjectId(cloned as any, objType);
+
+      cloned.setCoords();
+      this.canvas.add(cloned);
+      newObjects.push(cloned);
+      cmds.push({
+        kind: 'objectCreated',
+        objectId: newId,
+        after: this.captureObjectSnapshot(cloned),
+      });
+    }
+
+    // 複製群を新しい active selection にする (= 連続 Ctrl+D で step-and-repeat)
+    if (newObjects.length === 1) {
+      this.canvas.setActiveObject(newObjects[0]);
+    } else if (newObjects.length > 1) {
+      const sel = new fabric.ActiveSelection(newObjects, { canvas: this.canvas });
+      this.canvas.setActiveObject(sel);
+    }
+    this.canvas.requestRenderAll();
+
+    if (cmds.length === 1) {
+      this.pushCommand(cmds[0]);
+    } else if (cmds.length > 1) {
+      this.pushCommand({ kind: 'compound', commands: cmds });
+    }
+    if (cmds.length > 0) {
+      logger.debug(`[history] push duplicate: ${cmds.length} object(s)`);
+    }
+  }
+
+  selectAllObjects(): void {
+    this.canvas.discardActiveObject();
+    const all = this.canvas.getObjects();
+    if (!all.length) return;
+    const sel = new fabric.ActiveSelection(all, { canvas: this.canvas });
+    this.canvas.setActiveObject(sel);
+    this.canvas.requestRenderAll();
+  }
+
+  async outlineActiveTexts(): Promise<{
+    succeeded:      number;
+    failedChars:    string;
+    failedFamilies: ReadonlyArray<string>;
+  }> {
+    const isOutlineable = (obj: fabric.Object): boolean => {
+      const anyObj = obj as any;
+      if (anyObj.data?.outlined) return false;
+      return typeof anyObj.text === 'string' && typeof anyObj.fontFamily === 'string';
+    };
+    const targets = this.canvas.getActiveObjects().filter(isOutlineable) as fabric.Text[];
+    if (targets.length === 0) {
+      return { succeeded: 0, failedChars: '', failedFamilies: [] };
+    }
+
+    // ActiveSelection 解除で子の座標を世界座標に戻す (outlineTextToPath は世界座標前提)
+    this.canvas.discardActiveObject();
+
+    const conversions = await Promise.all(
+      targets.map(async (ft) => ({ ft, path: await outlineTextToPath(ft) }))
+    );
+
+    const succeeded = conversions.filter(x => x.path) as Array<{ ft: fabric.Text; path: fabric.Path }>;
+    const failed    = conversions.filter(x => !x.path);
+    const failedChars    = failed.map(x => x.ft.text || '').join('');
+    const failedFamilies = Array.from(new Set(failed.map(x => x.ft.fontFamily || '?')));
+
+    if (succeeded.length === 0) {
+      return { succeeded: 0, failedChars, failedFamilies };
+    }
+
+    const vt = this.canvas.viewportTransform;
+    logger.debug(
+      `[outline] outlineActiveTexts: succeeded=${succeeded.length}` +
+      ` viewportTransform=[${vt?.map(n => n.toFixed(3)).join(',')}]` +
+      ` zoom=${this.canvas.getZoom()}`
+    );
+
+    const outlineCommands: Command[] = [];
+    for (const { ft, path } of succeeded) {
+      const ftId   = (ft   as any).data?.objectId as ObjectId | undefined;
+      const pathId = (path as any).data?.objectId as ObjectId | undefined;
+      if (ftId) outlineCommands.push({
+        kind: 'objectDeleted',
+        objectId: ftId,
+        before: this.captureObjectSnapshot(ft),
+      });
+      this.canvas.remove(ft);
+      this.canvas.add(path);
+      if (pathId) outlineCommands.push({
+        kind: 'objectCreated',
+        objectId: pathId,
+        after: this.captureObjectSnapshot(path),
+      });
+    }
+    if (outlineCommands.length === 1) {
+      this.pushCommand(outlineCommands[0]);
+    } else if (outlineCommands.length > 1) {
+      this.pushCommand({ kind: 'compound', commands: outlineCommands });
+    }
+    if (outlineCommands.length > 0) {
+      logger.debug(`[history] push outline: ${succeeded.length} text(s) outlined`);
+    }
+    this.canvas.requestRenderAll();
+
+    return { succeeded: succeeded.length, failedChars, failedFamilies };
+  }
+
+  exportActiveAsPngDataUrl(multiplier: number): { dataUrl: string; width: number; height: number } | null {
+    const active = this.canvas.getActiveObject();
+    if (!active) return null;
+    logger.debug(`[copy] export active=${fmtObj(active)} multiplier=${multiplier}`);
+    return exportObjectToPngDataUrl(active as any, multiplier);
   }
 
   // ===== 高レベル handler 用ヘルパ =====
@@ -186,6 +437,13 @@ export class State implements StateContract {
   // ============================================================
   // 以下 private
   // ============================================================
+
+  // ----- dirty tracking -----
+
+  private bumpToken(): void {
+    this.tokenCounter++;
+    this.mutationListeners.forEach(cb => cb());
+  }
 
   // ----- ObjectSnapshot 境界変換 -----
 
@@ -428,11 +686,11 @@ export class State implements StateContract {
     }
 
     if (cmds.length === 1) {
-      this.historyStack.push(cmds[0]);
       logger.debug(`[history] push objectChanged ${fmtObj(objs[0])} action=${action}`);
+      this.pushCommand(cmds[0]);
     } else if (cmds.length > 1) {
-      this.historyStack.push({ kind: 'compound', commands: cmds });
       logger.debug(`[history] push compound ${cmds.length} changes action=${action}`);
+      this.pushCommand({ kind: 'compound', commands: cmds });
     }
   };
 }

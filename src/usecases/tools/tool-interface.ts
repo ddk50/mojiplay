@@ -17,7 +17,7 @@
 // 各ツール実装は本ファイルの Tool 型と State 型に依存し、本ファイルは fabric を
 // 一切知らない。
 
-import type { State } from '../core/state';
+import type { State } from '../../core/state';
 
 // ── 入力 ─────────────────────────────────────────────────────────────────
 

@@ -7,13 +7,13 @@ import { fromFabricPath } from './path-adapter';
 import { computeOverlayLayout } from '../core/path/overlay-layout';
 import type {
   Tool, PointerInput,
-} from '../tools/tool-interface';
+} from '../usecases/tools/tool-interface';
 import type { TextCreateProps } from '../core/state';
-import { SelectCharTool } from '../tools/select-char-tool';
-import { SelectGroupTool } from '../tools/select-group-tool';
-import { TextTool } from '../tools/text-tool';
-import { PenAddTool } from '../tools/pen-add-tool';
-import { PenRemoveTool } from '../tools/pen-remove-tool';
+import { SelectCharTool } from '../usecases/tools/select-char-tool';
+import { SelectGroupTool } from '../usecases/tools/select-group-tool';
+import { TextTool } from '../usecases/tools/text-tool';
+import { PenAddTool } from '../usecases/tools/pen-add-tool';
+import { PenRemoveTool } from '../usecases/tools/pen-remove-tool';
 import { ensureObjectId } from '../core/object-id';
 import type { ObjectId } from '../core/object-id';
 import type { Command } from '../core/history/types';
@@ -27,11 +27,14 @@ import {
 import { buildToolbar } from './toolbar';
 import { State } from './state';
 import { generateGroupId } from './group-id';
-import { selectAll } from './actions/select-all';
-import { deleteSelection } from './actions/delete';
-import { duplicateSelection } from './actions/duplicate';
-import { outlineSelection } from './actions/outline';
-import { doCopy } from './actions/copy-png';
+import { selectAll } from '../usecases/menu/select-all';
+import { deleteSelection } from '../usecases/menu/delete-selection';
+import { duplicateSelection } from '../usecases/menu/duplicate-selection';
+import { outlineSelection } from '../usecases/menu/outline-selection';
+import { doCopy } from '../usecases/menu/copy-selection-as-png';
+import { FileIOInteractor } from '../usecases/menu/file-io-interactor';
+import { FileSystemDocumentRepository } from '../repository/file-system-document-repository';
+import { ElectronUIPort } from './ui-port-impl';
 
 // メニューアクション → 後で canvas 初期化後に使う関数を参照するため
 // handleMenuAction は関数宣言 (hoisted) で定義し、canvas 依存部分は
@@ -39,7 +42,7 @@ import { doCopy } from './actions/copy-png';
 function handleMenuAction(action: string): void {
   switch (action) {
     case 'copy':
-      doCopy(canvas);
+      doCopy(state, ui);
       break;
     case 'undo':
       handleUndo();
@@ -51,13 +54,13 @@ function handleMenuAction(action: string): void {
       void window.electronAPI?.paste();
       break;
     case 'delete':
-      deleteSelection(canvas, state);
+      deleteSelection(state);
       break;
     case 'duplicate':
-      duplicateSelection(canvas, state);
+      duplicateSelection(state);
       break;
     case 'select-all':
-      selectAll(canvas);
+      selectAll(state);
       break;
     case 'devtools':
       void window.electronAPI?.toggleDevTools();
@@ -73,6 +76,15 @@ function handleMenuAction(action: string): void {
       break;
     case 'fullscreen':
       void window.electronAPI?.toggleFullscreen();
+      break;
+    case 'file-open':
+      void fileIO.openFile();
+      break;
+    case 'file-save':
+      void fileIO.saveCurrent();
+      break;
+    case 'file-save-as':
+      void fileIO.saveAs();
       break;
   }
 }
@@ -108,6 +120,28 @@ resizeCanvas();
 // fabric event hook (mouse:down / object:modified による history 配線) も state 内部。
 // 詳細は CLAUDE.md「Tool との関係」「Tool-driven vs fabric-driven の区別」参照。
 const state = new State(canvas, { historyMax: 100 });
+
+// File I/O: save / open / dirty 管理は controller に集約。app.ts は wiring のみ。
+// renderer (browser context) では Node.js の path module を使えないので basename は inline。
+function basename(p: string): string {
+  const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+  return i >= 0 ? p.slice(i + 1) : p;
+}
+const ui = new ElectronUIPort();
+const fileIO = new FileIOInteractor(
+  state,
+  new FileSystemDocumentRepository(),
+  ui,
+  basename,
+);
+
+// main process からの window 閉じ要求を 3 択 dialog に橋渡し。
+window.electronAPI?.onAppCloseRequest(() => {
+  void (async () => {
+    const ok = await fileIO.confirmDiscardIfDirty();
+    void window.electronAPI?.respondAppClose(ok ? 'destroy' : 'cancel');
+  })();
+});
 
 // ── Toolbar references ────────────────────────────────────────────────────
 // fontFamilySel / fontStyleSel は renderer/font-enumeration.ts で定義済み (cross-file global)。
@@ -405,9 +439,14 @@ const MAX_ZOOM = 20;
 const TITLE_BASE = 'Font Layout Editor';
 function updateWindowTitle(): void {
   const pct = Math.round(canvas.getZoom() * 100);
-  document.title = `${TITLE_BASE} — ${pct}%`;
+  const { fileName, dirty } = fileIO.getDocStatus();
+  const name = fileName ?? '名称未設定';
+  const dot = dirty ? ' ●' : '';
+  document.title = `${TITLE_BASE} — ${name}${dot} — ${pct}%`;
 }
 updateWindowTitle();
+// dirty / fileName 変化時にも title を更新 (zoom 変化は mouse:wheel 内で別途呼ぶ)
+fileIO.subscribeDocStatus(() => updateWindowTitle());
 
 canvas.on('mouse:wheel', (e: fabric.IEvent) => {
   const evt = e.e as WheelEvent;
@@ -471,7 +510,7 @@ function syncToolbarToSelection(): void {
 }
 
 (document.getElementById('btn-select-all') as HTMLButtonElement)
-  .addEventListener('click', () => selectAll(canvas));
+  .addEventListener('click', () => selectAll(state));
 
 // ── Clear canvas ──────────────────────────────────────────────────────────
 
@@ -511,10 +550,11 @@ function syncToolbarToSelection(): void {
 });
 
 // ── アウトライン化: ボタンバインド ────────────────────────────────────────
-// 実装本体は actions/outline.ts (action) / outline-conversion.ts (純粋寄り変換)。
+// 実装本体は usecases/outline-selection.ts (orchestration) / state.outlineActiveTexts
+// (fabric 内部) / outline-conversion.ts (純粋寄り変換)。
 
 (document.getElementById('btn-outline') as HTMLButtonElement).addEventListener('click', () => {
-  void outlineSelection(canvas, state);
+  void outlineSelection(state, ui);
 });
 
 // ── アンカー編集オーバーレイ (Phase 2a) ──────────────────────────────────
@@ -663,6 +703,31 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
   }
 }, true);
 
+// Cmd/Ctrl+S = 保存、Cmd/Ctrl+Shift+S = 別名で保存、Cmd/Ctrl+O = 開く。
+// IText 編集中は bypass (= IME 入力 / 文字編集を妨げない)。e.isComposing で
+// IME 確定中の Enter / Space を巻き込む事故も防ぐ。
+document.addEventListener('keydown', (e: KeyboardEvent) => {
+  const active = canvas.getActiveObject() as fabric.IText | null;
+  if ((active as any)?.isEditing) return;
+  if (e.isComposing) return;
+  const meta = e.ctrlKey || e.metaKey;
+  if (!meta) return;
+
+  if ((e.key === 'o' || e.key === 'O') && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    e.stopPropagation();
+    void fileIO.openFile();
+  } else if ((e.key === 's' || e.key === 'S') && e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    e.stopPropagation();
+    void fileIO.saveAs();
+  } else if (e.key === 's' && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    e.stopPropagation();
+    void fileIO.saveCurrent();
+  }
+}, true);
+
 // ツールインスタンス。SelectCharTool だけは snap 設定の動的注入があるので
 // 個別変数で保持し、map にも入れる。
 const selectGroupTool = new SelectGroupTool();
@@ -785,7 +850,7 @@ if (window.electronAPI) {
     logger.debug('[copy] menu-copy IPC received');
     const active = canvas.getActiveObject() as any;
     if (active && !active.isEditing) {
-      doCopy(canvas);
+      doCopy(state, ui);
     }
   });
 }
@@ -809,14 +874,14 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
       (e.key === 'c' || e.key === 'C')) {
     if (!isToolbarInput() && canvas.getActiveObject()) {
       e.preventDefault();
-      doCopy(canvas);
+      doCopy(state, ui);
     }
     return;
   }
 
   if ((e.key === 'Delete' || e.key === 'Backspace') &&
       !isToolbarInput()) {
-    deleteSelection(canvas, state);
+    deleteSelection(state);
   }
 
   // Cmd/Ctrl+D: 選択オブジェクトを複製 (Affinity / Sketch 慣例。Illustrator 自体は
@@ -825,7 +890,7 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
       (e.key === 'd' || e.key === 'D')) {
     if (!isToolbarInput() && canvas.getActiveObject()) {
       e.preventDefault();
-      duplicateSelection(canvas, state);
+      duplicateSelection(state);
     }
     return;
   }
@@ -833,7 +898,7 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
   // Cmd/Ctrl+Shift+O: 選択中テキストをアウトライン化 (Illustrator 慣例)
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'O' || e.key === 'o')) {
     e.preventDefault();
-    void outlineSelection(canvas, state);
+    void outlineSelection(state, ui);
   }
 
   // 矢印キー: select-char モードで選択中アンカーを world delta で平行移動。

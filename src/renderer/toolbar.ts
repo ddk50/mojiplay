@@ -9,7 +9,7 @@
 // 構造不変条件 (非空フィールド / id 衝突無し) は起動時に fail-fast で弾く。
 // 開発時にツールを足し間違えれば即座に例外で気付ける形にしている。
 
-import type { Tool } from '../tools/tool-interface';
+import type { Tool } from '../usecases/tools/tool-interface';
 
 function assertValidDescriptors(tools: ReadonlyArray<Tool>): void {
   const seen = new Set<string>();

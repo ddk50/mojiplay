@@ -10,12 +10,12 @@
 // 中核ロジックは core/group-selection.ts の computeGroupExpansion (純粋関数)。
 // 本クラスは host 越しに ObjectHandle の取得 / 設定を行うだけ。
 
-import { computeGroupExpansion } from '../core/group-selection';
+import { computeGroupExpansion } from '../../core/group-selection';
 import type {
   Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
-import type { State, ObjectHandle } from '../core/state';
+import type { State, ObjectHandle } from '../../core/state';
 
 export class SelectGroupTool implements Tool {
   readonly descriptor: ToolDescriptor = {

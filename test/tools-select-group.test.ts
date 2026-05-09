@@ -3,7 +3,7 @@
 // 展開の有無と再帰防止を検証する。
 
 import type { State, ObjectHandle } from '../src/core/state';
-import { SelectGroupTool } from '../src/tools/select-group-tool';
+import { SelectGroupTool } from '../src/usecases/tools/select-group-tool';
 
 function makeHandle(gid?: string): ObjectHandle {
   return { getGroupId: () => gid };
@@ -29,8 +29,18 @@ class FakeHost implements State {
   redo() { /* no-op */ }
   canUndo() { return false; }
   canRedo() { return false; }
-  serialize() { return null; }
-  loadSerialized() { /* no-op */ }
+  toSnapshot(): any { return { format: 'mojiplay', version: 1, canvas: {} }; }
+  async applySnapshot(_s: any): Promise<void> { /* no-op */ }
+  commitActiveText() { /* no-op */ }
+  getHistoryToken() { return 0; }
+  onMutate(_cb: () => void) { return () => {}; }
+  clearHistory() { /* no-op */ }
+  getZoom() { return 1; }
+  removeActiveObjects() { /* no-op */ }
+  duplicateActiveObjects(_o: { x: number; y: number }) { /* no-op */ }
+  selectAllObjects() { /* no-op */ }
+  async outlineActiveTexts() { return { succeeded: 0, failedChars: '', failedFamilies: [] }; }
+  exportActiveAsPngDataUrl(_m: number) { return null; }
   linearizeHistory() { return []; }
 }
 
@@ -148,8 +158,18 @@ describe('SelectGroupTool: canonical handle contract (回帰テスト)', () => {
       redo()              { /* no-op */ },
       canUndo()           { return false; },
       canRedo()           { return false; },
-      serialize()         { return null; },
-      loadSerialized()    { /* no-op */ },
+      toSnapshot()        { return { format: 'mojiplay' as const, version: 1 as const, canvas: {} }; },
+      async applySnapshot(_s: any) { /* no-op */ },
+      commitActiveText()  { /* no-op */ },
+      getHistoryToken()   { return 0; },
+      onMutate(_cb: () => void) { return () => {}; },
+      clearHistory()      { /* no-op */ },
+      getZoom()           { return 1; },
+      removeActiveObjects() { /* no-op */ },
+      duplicateActiveObjects(_o: { x: number; y: number }) { /* no-op */ },
+      selectAllObjects()  { /* no-op */ },
+      async outlineActiveTexts() { return { succeeded: 0, failedChars: '', failedFamilies: [] }; },
+      exportActiveAsPngDataUrl(_m: number) { return null; },
       linearizeHistory()  { return []; },
     };
 
@@ -186,8 +206,18 @@ describe('SelectGroupTool: canonical handle contract (回帰テスト)', () => {
       redo()              { /* no-op */ },
       canUndo()           { return false; },
       canRedo()           { return false; },
-      serialize()         { return null; },
-      loadSerialized()    { /* no-op */ },
+      toSnapshot()        { return { format: 'mojiplay' as const, version: 1 as const, canvas: {} }; },
+      async applySnapshot(_s: any) { /* no-op */ },
+      commitActiveText()  { /* no-op */ },
+      getHistoryToken()   { return 0; },
+      onMutate(_cb: () => void) { return () => {}; },
+      clearHistory()      { /* no-op */ },
+      getZoom()           { return 1; },
+      removeActiveObjects() { /* no-op */ },
+      duplicateActiveObjects(_o: { x: number; y: number }) { /* no-op */ },
+      selectAllObjects()  { /* no-op */ },
+      async outlineActiveTexts() { return { succeeded: 0, failedChars: '', failedFamilies: [] }; },
+      exportActiveAsPngDataUrl(_m: number) { return null; },
       linearizeHistory()  { return []; },
     };
 
