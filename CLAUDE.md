@@ -1005,3 +1005,20 @@ Use Case を別 class (`MoveAnchorUseCase` 等) に切り出す ROI は現状低
 ## UI言語
 
 ツールバーのラベル、ツールチップ、トーストメッセージには**日本語**を使用しています。新しいユーザー向け文字列を追加する場合も、これに合わせて日本語を維持してください。
+
+## 外部リソース
+
+### Trello Wiki カード (= mojiplay の正式な設計 / 進捗 Wiki)
+
+mojiplay の Trello Wiki カードは **https://trello.com/c/lQu6eVB3** (これ 1 つだけ)。
+
+「Trello 更新して」「Wiki 書き直して」「現状を Trello に反映して」等の依頼を受けたら、**必ずこのカードを編集** すること。
+
+#### やってはいけないこと
+
+- `mcp__claude_ai_Trello_Discussion_Log__list_recent_discussions` で `mojiplay:` で始まるカードが他にも見つかっても、**Wiki と勘違いしないこと**。それらは過去の議論ログ (= snapshot) であって、現状を反映する Wiki ではない
+- 議論ログカードの body を Wiki 化するために `update_card_body` で書き換えるのは禁止 (= 過去議論の記録性が壊れる)。Wiki 用の更新は上記 1 つの正カードに集約
+
+#### 実装メモ
+
+- Trello MCP には card の archive / delete を直接実行する API は無い (`save_discussion` / `update_card_body` / `append_to_discussion` / `add_attachment_url` のみ)。誤って書き換え / 新規作成した場合は **ユーザに Trello UI 上で archive を依頼する** しかない
