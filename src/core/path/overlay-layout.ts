@@ -12,7 +12,6 @@
 // viewport 行列から派生情報を計算するだけなので core/path/ に住む。
 
 import type { HandleRef } from './types';
-import { extractAnchors, getHandlePoint } from './anchors';
 import type { Mat2x3, PathTransform } from './coords';
 import { pathLocalToScreen } from './coords';
 import type { PathSnapshot } from '../state';
@@ -50,24 +49,24 @@ export function computeOverlayLayout(
     pathOffset:     snapshot.pathOffset,
     viewportMatrix: viewportMatrix,
   };
-  const anchors = extractAnchors(snapshot.commands);
+  const path = snapshot.path;
+  const anchors = path.anchors();
   const aOut: AnchorScreenPos[] = [];
   const hOut: HandleScreenPos[] = [];
 
-  for (let i = 0; i < anchors.length; i++) {
-    const a = anchors[i];
+  for (const [i, a] of anchors.entries()) {
     const s = pathLocalToScreen(a.point, t);
     aOut.push({ anchorIndex: i, sx: s.sx, sy: s.sy });
 
     if (a.incomingHandle) {
-      const hp = getHandlePoint(snapshot.commands[a.incomingHandle.cmdIndex], a.incomingHandle);
+      const hp = path.handlePoint(a.incomingHandle);
       if (hp) {
         const sh = pathLocalToScreen(hp, t);
         hOut.push({ anchorIndex: i, which: 'in', handle: a.incomingHandle, sx: sh.sx, sy: sh.sy });
       }
     }
     if (a.outgoingHandle) {
-      const hp = getHandlePoint(snapshot.commands[a.outgoingHandle.cmdIndex], a.outgoingHandle);
+      const hp = path.handlePoint(a.outgoingHandle);
       if (hp) {
         const sh = pathLocalToScreen(hp, t);
         hOut.push({ anchorIndex: i, which: 'out', handle: a.outgoingHandle, sx: sh.sx, sy: sh.sy });

@@ -10,7 +10,7 @@
 // から派生情報を計算するだけなので core/path/ に住む。
 
 import type { Point, PathCommand } from './types';
-import { evalCubicAt, evalQuadAt } from './anchors';
+import { evalCubicAt, evalQuadAt } from './bezier';
 import type { PathTransform } from './coords';
 import { pathLocalToScreen } from './coords';
 

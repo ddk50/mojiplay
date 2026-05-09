@@ -1,11 +1,10 @@
 // -ペンツール: アンカークリックでアンカーを削除する。
 //
 // 1 クリックで完結 (ドラッグ無し)。アンカー数が下限 (M のみ等) になる場合は
-// removeAnchor が拒否するので何もしない。
+// path.removeAnchor が null を返すので何もしない。
 //
 // hover 時はアンカー上で 'pointer' カーソルにする。
 
-import { removeAnchor } from '../../core/path/anchors';
 import { computeOverlayLayout, hitTestAnchorAt } from '../../core/path/overlay-layout';
 import type {
   Tool, ToolDescriptor, PointerInput, PointerHandled,
@@ -37,13 +36,13 @@ export class PenRemoveTool implements Tool {
     const aIdx = hitTestAnchorAt(layout, e.screenX, e.screenY);
     if (aIdx < 0) return 'pass';
 
-    const newCmds = removeAnchor(snapshot.commands, aIdx);
-    // removeAnchor が拒否した場合 (アンカー数不足) は配列長が同じなので変更しない
-    if (newCmds.length === snapshot.commands.length) return 'consumed';
+    const next = snapshot.path.removeAnchor(aIdx);
+    // removeAnchor が拒否した場合 (アンカー数不足) は null
+    if (!next) return 'consumed';
 
     // History: 削除前に before を捕捉
     const before = path.captureForHistory();
-    path.setCommands(newCmds);
+    path.setPath(next);
     path.finalizeEdit();
     state.requestRerender();
 

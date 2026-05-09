@@ -30,7 +30,9 @@ npx jest copy-export  # 特定ファイルのみ
 テスト対象モジュール (pure function / fabric 不知。DOM/fabric/Electron 不要で動く):
 
 - `core/path/types.ts` — 共通型定義 (Point / PathCommand / HandleRef / PathAnchor) と `assertNever`
-- `core/path/anchors.ts` — パスアンカー抽出・移動
+- `core/path/path.ts` — Path 値オブジェクト (immutable wrapper、anchors / moveAnchor / moveHandle / removeAnchor / splitSegment / segmentStart / handlePoint)
+- `core/path/anchors.ts` — Anchors 値オブジェクト (PathAnchor[] の集合、Anchors.fromCommands / subpathRange / iteration)
+- `core/path/bezier.ts` — Bezier 数値評価 (evalCubicAt / evalQuadAt)、segment-hit が利用
 - `core/path/coords.ts` — 座標変換 (path local ↔ world ↔ screen)
 - `renderer/path-adapter.ts` — fabric 生タプル ↔ PathCommand 境界変換 (Interface Adapter)
 - `core/object-id.ts` — ObjectId / ObjectType / ensureObjectId (ulid 経由)
@@ -198,7 +200,7 @@ esbuild が import グラフを follow して自動でバンドルに含める�
 実装済み:
 
 - **Phase 2a**: アウトライン化とアンカーポイント移動
-- **Phase 2c**: ベジェハンドル (制御点) の表示・編集 (`core/path/types.ts` の `HandleRef` / `incomingHandle` / `outgoingHandle`、`core/path/anchors.ts` の `getHandlePoint` / `moveHandle`、`core/path/overlay-layout.ts` の `HandleScreenPos` / `hitTestHandleAt`、`usecases/tools/select-char-tool.ts` の handle drag)
+- **Phase 2c**: ベジェハンドル (制御点) の表示・編集 (`core/path/types.ts` の `HandleRef` / `incomingHandle` / `outgoingHandle`、`core/path/path.ts` の `Path.handlePoint` / `Path.moveHandle`、`core/path/overlay-layout.ts` の `HandleScreenPos` / `hitTestHandleAt`、`usecases/tools/select-char-tool.ts` の handle drag)
 - **Phase 2d (一部)**: アンカーの追加/削除 (`usecases/tools/pen-add-tool.ts` / `pen-remove-tool.ts`)
 - **保存 / 開く (.mply)**: 拡張子 `.mply` で `canvas.toJSON(['data'])` を JSON 化保存。Cmd+S / Cmd+Shift+S / Cmd+O。詳細は本ファイル後段「保存 / 開く (.mply) と dirty tracking」セクション参照
 - **State / Viewport 分離モデル + Undo/Redo**: 全 state 変更操作 (アンカー編集 / アンカー追加削除 / object 移動拡縮回転 / プロパティ変更 / 文字確定 / アウトライン化 / 削除) を履歴対象とする state-jump semantic で実装。Cmd/Ctrl+Z / Cmd/Ctrl+Shift+Z で操作。詳細は本ファイル後段「Undo/Redo + 永続化に向けた State / Viewport 分離モデル」セクション参照
@@ -356,7 +358,7 @@ Tool は `src/usecases/tools/*` に置かれ **pure コード (fabric / DOM 不�
 
 - **Tool は core/ レイヤ** に住む。fabric も DOM も知らないので `FakeState` / `FakePathHandle` を渡すだけで unit test 可能 (138 既存 cases)
 - **State 変更の副作用は host 経由** に限定:
-  - 中間更新 (drag 中) は `path.setCommands(cmds)` (PathHandle interface)
+  - 中間更新 (drag 中) は `path.setPath(p: Path)` (PathHandle interface)
   - drag finalize は `path.finalizeEdit()` で bbox 補正 (PathHandle interface)
   - Command の push は `host.pushCommand(cmd)` (State interface)
   - 選択変更は `host.setActiveSelection(handles)` (State interface)

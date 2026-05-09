@@ -17,8 +17,9 @@
 // から流れる型なので、State と一緒に居るのが自然。tool-interface.ts に置くと
 // 循環参照になる (tool-interface 側が State を import するため)。
 
-import type { Point, PathCommand } from './path/types';
+import type { Point } from './path/types';
 import type { Mat2x3 } from './path/coords';
+import type { Path } from './path/path';
 import type { Command, ObjectSnapshot } from './history/types';
 import type { ObjectId } from './object-id';
 import type { DocumentSnapshot } from './document/snapshot';
@@ -39,18 +40,18 @@ export interface ObjectHandle {
 
 /** path snapshot — Tool が drag 中の math 計算に使う read-only な path 状態。 */
 export interface PathSnapshot {
-  readonly commands: ReadonlyArray<PathCommand>;
+  readonly path: Path;
   readonly pathMatrix: Mat2x3;     // calcTransformMatrix の結果 (local-pathOffset → world)
   readonly pathOffset: Point;
 }
 
 /** Tool が path を編集するための副作用 IF。 */
 export interface PathHandle {
-  // 現時点のコマンド配列 + 変換行列 + pathOffset を読み出す (副作用無し)。
+  // 現時点の Path + 変換行列 + pathOffset を読み出す (副作用無し)。
   snapshot(): PathSnapshot;
 
   // ドラッグ中の中間更新。bbox 再計算は走らない (重いので drag end にまとめる)。
-  setCommands(cmds: ReadonlyArray<PathCommand>): void;
+  setPath(path: Path): void;
 
   // ドラッグ終了時に呼ぶ。bbox / pathOffset 再計算と object:modified 通知をまとめる。
   finalizeEdit(): void;

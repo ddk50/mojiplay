@@ -10,11 +10,11 @@
 // core/state.ts で抽象化されており、本クラスは fabric / DOM を一切知らない。
 // テストは FakePathHandle と FakeState を渡すだけで全挙動を検証可能。
 //
-// 中間ドラッグ更新は path.setCommands() で頻繁に呼び、bbox 再計算は
+// 中間ドラッグ更新は path.setPath() で頻繁に呼び、bbox 再計算は
 // pointerUp で 1 回だけ path.finalizeEdit() を呼ぶ (コスト集約)。
 
-import type { Point, PathCommand, HandleRef } from '../../core/path/types';
-import { moveAnchorRigid, moveHandle } from '../../core/path/anchors';
+import type { Point, HandleRef } from '../../core/path/types';
+import { Path } from '../../core/path/path';
 import { worldDeltaToPathLocalDelta } from '../../core/path/coords';
 import { computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt } from '../../core/path/overlay-layout';
 import type {
@@ -36,16 +36,16 @@ type SelectCharDragState =
       readonly kind: 'anchors';
       readonly anchorIndices: ReadonlyArray<number>;
       readonly startWorld: Point;
-      // pointerDown 時点のコマンド配列 snapshot。pointerMove の度に「累積 delta
-      // を original から再適用」するモデル。これにより Shift 軸ロックの mid-drag
+      // pointerDown 時点の Path snapshot。pointerMove の度に「累積 delta を
+      // original から再適用」するモデル。これにより Shift 軸ロックの mid-drag
       // 切替が破綻せず、浮動小数点の累積誤差も防げる。
-      readonly originalCommands: ReadonlyArray<PathCommand>;
+      readonly originalPath: Path;
     }
   | {
       readonly kind: 'handle';
       readonly handle: HandleRef;
       readonly startWorld: Point;
-      readonly originalCommands: ReadonlyArray<PathCommand>;
+      readonly originalPath: Path;
     };
 
 export class SelectCharTool implements Tool {
@@ -103,11 +103,11 @@ export class SelectCharTool implements Tool {
       snapshot.pathMatrix,
     );
 
-    let updated: ReadonlyArray<PathCommand> = snapshot.commands;
+    let updated = snapshot.path;
     for (const idx of this.selectedAnchors) {
-      updated = moveAnchorRigid(updated, idx, localDelta.x, localDelta.y);
+      updated = updated.moveAnchor(idx, localDelta.x, localDelta.y);
     }
-    path.setCommands(updated);
+    path.setPath(updated);
     path.finalizeEdit();
     state.requestRerender();
 
@@ -147,7 +147,7 @@ export class SelectCharTool implements Tool {
         kind: 'handle',
         handle: hitHandle.handle,
         startWorld: { x: e.worldX, y: e.worldY },
-        originalCommands: snapshot.commands,
+        originalPath: snapshot.path,
       };
       this.dragPath = path;
       this.beforeSnapshot = path.captureForHistory();
@@ -182,7 +182,7 @@ export class SelectCharTool implements Tool {
         kind: 'anchors',
         anchorIndices: [...this.selectedAnchors],
         startWorld: { x: e.worldX, y: e.worldY },
-        originalCommands: snapshot.commands,
+        originalPath: snapshot.path,
       };
       this.dragPath = path;
       this.beforeSnapshot = path.captureForHistory();
@@ -226,15 +226,15 @@ export class SelectCharTool implements Tool {
 
       // 累積 delta を original から再適用 (= 毎フレーム original snapshot 起点)。
       // この設計により Shift 軸ロックの mid-drag 切替で破綻しない。
-      let updated: ReadonlyArray<PathCommand> = this.drag.originalCommands;
+      let updated: Path = this.drag.originalPath;
       if (this.drag.kind === 'anchors') {
         for (const idx of this.drag.anchorIndices) {
-          updated = moveAnchorRigid(updated, idx, dxLocal, dyLocal);
+          updated = updated.moveAnchor(idx, dxLocal, dyLocal);
         }
       } else {
-        updated = moveHandle(updated, this.drag.handle, dxLocal, dyLocal);
+        updated = updated.moveHandle(this.drag.handle, dxLocal, dyLocal);
       }
-      path.setCommands(updated);
+      path.setPath(updated);
       state.requestRerender();
       return;
     }

@@ -13,7 +13,7 @@
 //
 // ── 分割アルゴリズム (De Casteljau) ────────────────────────────────────
 //
-// onPointerDown が呼ぶ splitSegment(path, cmdIndex, t) は De Casteljau の
+// onPointerDown が呼ぶ Path.splitSegment(cmdIndex, t) は De Casteljau の
 // アルゴリズムでベジェ曲線を 2 本に分割する。Illustrator の「アンカーポイント追加」
 // (+ペン) と同じ操作で、要点は「ヒットした位置 t に新アンカーを打っても
 // 曲線形状を厳密に維持する」こと。
@@ -31,7 +31,7 @@
 //     level 3: r を内分             → s (= 分割点 = 新アンカー位置)
 //   分割後の前半は (p0, q0, r0, s)、後半は (s, r1, q2, p3) として連結。
 //   2 次ベジェは 2 段、直線 (L) は単純な内分一発で同じ性質を持つ。
-//   実装は core/path/anchors.ts の splitSegment 内。
+//   実装は core/path/path.ts の Path.splitSegment 内。
 //
 // この時点ではまだ曲線形状は元と同一。ユーザーがドラッグを始めると
 // onPointerMove 内で前後セグメントの一方のハンドル (新アンカー側の
@@ -44,7 +44,7 @@
 //   De Casteljau では戻せない。pen-remove-tool.ts 参照。
 
 import type { Point, PathCommand } from '../../core/path/types';
-import { splitSegment, getSegmentStart } from '../../core/path/anchors';
+import { Path } from '../../core/path/path';
 import type { PathTransform } from '../../core/path/coords';
 import { screenToPathLocal } from '../../core/path/coords';
 import { findClosestSegment } from '../../core/path/segment-hit';
@@ -104,31 +104,32 @@ export class PenAddTool implements Tool {
       viewportMatrix: state.getViewportMatrix(),
     };
     const hit = findClosestSegment(
-      snapshot.commands, e.screenX, e.screenY, transform, PEN_HIT_THRESHOLD, PEN_SAMPLES,
+      snapshot.path.commands, e.screenX, e.screenY, transform, PEN_HIT_THRESHOLD, PEN_SAMPLES,
     );
     if (!hit) return 'pass';
 
-    const origCmd = snapshot.commands[hit.cmdIndex];
+    const origCmd = snapshot.path.commands[hit.cmdIndex];
     if (origCmd.type !== 'C' && origCmd.type !== 'Q' && origCmd.type !== 'L') {
-      // splitSegment は M/Z に対しては no-op。理論上ここには来ないが防御。
+      // splitSegment は M/Z に対しては null を返す。理論上ここには来ないが防御。
       return 'pass';
     }
     const origCmdType = origCmd.type;
 
-    const newPath = splitSegment(snapshot.commands, hit.cmdIndex, hit.t);
-    const firstCmd = newPath[hit.cmdIndex];
+    const split = snapshot.path.splitSegment(hit.cmdIndex, hit.t);
+    if (!split) return 'pass';
+    const firstCmd = split.commands[hit.cmdIndex];
     if (firstCmd.type !== 'C' && firstCmd.type !== 'Q' && firstCmd.type !== 'L') return 'pass';
     const anchor = firstCmd.to;
     const secondIdx = hit.cmdIndex + 1;
-    const nextCmd = newPath[secondIdx];
+    const nextCmd = split.commands[secondIdx];
     if (nextCmd.type !== 'C' && nextCmd.type !== 'Q' && nextCmd.type !== 'L') return 'pass';
 
-    const prevPt = getSegmentStart(newPath, hit.cmdIndex);
+    const prevPt = split.segmentStart(hit.cmdIndex);
     const prev = prevPt ?? anchor;
     const next = nextCmd.to;
 
     this.beforeSnapshot = path.captureForHistory();
-    path.setCommands(newPath);
+    path.setPath(split);
     this.drag = { cmdIndex: hit.cmdIndex, origCmdType, anchor, prev, next };
     this.dragPath = path;
     state.requestRerender();
@@ -148,7 +149,7 @@ export class PenAddTool implements Tool {
       const dx = local.x - this.drag.anchor.x;
       const dy = local.y - this.drag.anchor.y;
 
-      const cur = snapshot.commands;
+      const cur = snapshot.path.commands;
       const updated: PathCommand[] = cur.slice();
       const cmdIndex = this.drag.cmdIndex;
       const secondIdx = cmdIndex + 1;
@@ -182,7 +183,7 @@ export class PenAddTool implements Tool {
         to: { x: next.x, y: next.y },
       };
 
-      path.setCommands(updated);
+      path.setPath(new Path(updated));
       state.requestRerender();
       return;
     }
@@ -200,7 +201,7 @@ export class PenAddTool implements Tool {
       viewportMatrix: state.getViewportMatrix(),
     };
     const hit = findClosestSegment(
-      snapshot.commands, e.screenX, e.screenY, transform, PEN_HIT_THRESHOLD, PEN_SAMPLES,
+      snapshot.path.commands, e.screenX, e.screenY, transform, PEN_HIT_THRESHOLD, PEN_SAMPLES,
     );
     state.setCursor(hit ? 'copy' : '');
   }

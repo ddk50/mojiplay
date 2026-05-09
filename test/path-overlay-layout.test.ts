@@ -5,6 +5,7 @@
 
 import type { PathCommand } from '../src/core/path/types';
 import type { Mat2x3 } from '../src/core/path/coords';
+import { Path } from '../src/core/path/path';
 import type { PathSnapshot } from '../src/core/state';
 import {
   computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt,
@@ -13,7 +14,7 @@ import {
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 
 function snap(commands: PathCommand[]): PathSnapshot {
-  return { commands, pathMatrix: IDENT, pathOffset: { x: 0, y: 0 } };
+  return { path: new Path(commands), pathMatrix: IDENT, pathOffset: { x: 0, y: 0 } };
 }
 
 describe('computeOverlayLayout', () => {
@@ -65,7 +66,7 @@ describe('computeOverlayLayout', () => {
       { type: 'L', to: { x: 200, y: 200 } },
     ];
     const snapshot: PathSnapshot = {
-      commands: cmds, pathMatrix: IDENT, pathOffset: { x: 50, y: 50 },
+      path: new Path(cmds), pathMatrix: IDENT, pathOffset: { x: 50, y: 50 },
     };
     const layout = computeOverlayLayout(snapshot, IDENT);
     expect(layout.anchors[0]).toEqual({ anchorIndex: 0, sx: 50, sy: 50 });

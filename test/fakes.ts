@@ -12,6 +12,7 @@
 
 import type { PathCommand } from '../src/core/path/types';
 import type { Mat2x3 } from '../src/core/path/coords';
+import { Path } from '../src/core/path/path';
 import type { PointerInput } from '../src/usecases/tools/tool-interface';
 import type {
   State, PathHandle, PathSnapshot, ObjectHandle, TextCreateProps,
@@ -37,13 +38,13 @@ export class FakePathHandle implements PathHandle {
 
   snapshot(): PathSnapshot {
     return {
-      commands: this.commands,
+      path: new Path(this.commands),
       pathMatrix: IDENT_MATRIX,
       pathOffset: { x: 0, y: 0 },
     };
   }
-  setCommands(cmds: ReadonlyArray<PathCommand>): void {
-    this.commands = cmds.slice();
+  setPath(path: Path): void {
+    this.commands = path.commands.slice();
     this.setCount++;
   }
   finalizeEdit(): void {

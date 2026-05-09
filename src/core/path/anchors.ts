@@ -1,62 +1,16 @@
-// パスアンカーポイント抽出・移動ヘルパー (純粋関数)
+// Anchors 値オブジェクト: Path から抽出されたアンカー列。
 //
-// fabric.Path.path (コマンド配列) からアンカーポイントを抽出し、
-// 個別アンカーの剛体移動 (アンカー + 付属ベジェハンドル) を行う。
-// fabric / DOM 非依存で単体テスト可能。
+// 設計:
+//   - immutable wrapper (PathAnchor[] を encapsulate)
+//   - Anchors / PathAnchor の関係 = Path / PathCommand と同じ階層
+//     (= 集合 + その操作)
+//   - 「Anchors 集合に対する操作」(= 抽出、subpath 境界探索、iteration) は
+//     ここに集約。types.ts は data shape のみ。
 //
-// fabric.js 生タプル ↔ PathCommand の境界変換は src/renderer/path-adapter.ts。
+// CA 上は Entity / pure 値オブジェクト。fabric / DOM 不知。
 
-import type { Point, PathCommand, HandleRef, PathAnchor } from './types';
+import type { Point, PathAnchor, PathCommand } from './types';
 
-// ── HandleRef → Point アクセサ ──────────────────────────────────────────
-
-export function getHandlePoint(cmd: PathCommand, ref: HandleRef): Point | null {
-  switch (ref.kind) {
-    case 'C-c1':
-      return cmd.type === 'C' ? cmd.c1 : null;
-    case 'C-c2':
-      return cmd.type === 'C' ? cmd.c2 : null;
-    case 'Q-c':
-      return cmd.type === 'Q' ? cmd.c : null;
-  }
-}
-
-function withHandleMoved(cmd: PathCommand, ref: HandleRef, dx: number, dy: number): PathCommand {
-  switch (ref.kind) {
-    case 'C-c1':
-      if (cmd.type !== 'C') return cmd;
-      return { ...cmd, c1: { x: cmd.c1.x + dx, y: cmd.c1.y + dy } };
-    case 'C-c2':
-      if (cmd.type !== 'C') return cmd;
-      return { ...cmd, c2: { x: cmd.c2.x + dx, y: cmd.c2.y + dy } };
-    case 'Q-c':
-      if (cmd.type !== 'Q') return cmd;
-      return { ...cmd, c: { x: cmd.c.x + dx, y: cmd.c.y + dy } };
-  }
-}
-
-function withAnchorBodyMoved(cmd: PathCommand, dx: number, dy: number): PathCommand {
-  switch (cmd.type) {
-    case 'M':
-      return { type: 'M', to: { x: cmd.to.x + dx, y: cmd.to.y + dy } };
-    case 'L':
-      return { type: 'L', to: { x: cmd.to.x + dx, y: cmd.to.y + dy } };
-    case 'C':
-      return { ...cmd, to: { x: cmd.to.x + dx, y: cmd.to.y + dy } };
-    case 'Q':
-      return { ...cmd, to: { x: cmd.to.x + dx, y: cmd.to.y + dy } };
-    case 'Z':
-      // anchor.cmdIndex は extractAnchors の仕様により M/L/C/Q のいずれか
-      return cmd;
-    default:
-      return cmd satisfies never;
-  }
-}
-
-// ── extractAnchors ──────────────────────────────────────────────────────
-
-// 同一点判定の許容誤差。fontkit の toSVG() は座標を 0.01 精度に丸めるので、
-// 同じ glyph 点は浮動小数点的に厳密一致するはず。1e-6 で十分。
 const COINCIDENT_EPSILON = 1e-6;
 
 function pointsEqual(a: Point, b: Point): boolean {
@@ -64,360 +18,142 @@ function pointsEqual(a: Point, b: Point): boolean {
          Math.abs(a.y - b.y) < COINCIDENT_EPSILON;
 }
 
-export function extractAnchors(path: ReadonlyArray<PathCommand>): PathAnchor[] {
-  const anchors: PathAnchor[] = [];
-  let subpathStartIdx = -1;
+export class Anchors {
+  constructor(readonly items: ReadonlyArray<PathAnchor>) {}
 
-  for (let i = 0; i < path.length; i++) {
-    const cmd = path[i];
-    switch (cmd.type) {
-      case 'M':
-        subpathStartIdx = anchors.length;
-        anchors.push({
-          cmdIndex: i,
-          point: cmd.to,
-          incomingHandle: null,
-          outgoingHandle: null,
-          subpathStart: true,
-          coincidentClosingCmdIndex: null,
-        });
-        break;
+  get length(): number { return this.items.length; }
 
-      case 'L':
-        anchors.push({
-          cmdIndex: i,
-          point: cmd.to,
-          incomingHandle: null,
-          outgoingHandle: null,
-          subpathStart: false,
-          coincidentClosingCmdIndex: null,
-        });
-        break;
+  at(idx: number): PathAnchor | undefined { return this.items[idx]; }
 
-      case 'C': {
-        const prev = anchors.length > 0 ? anchors[anchors.length - 1] : null;
-        if (prev) prev.outgoingHandle = { kind: 'C-c1', cmdIndex: i };
-        anchors.push({
-          cmdIndex: i,
-          point: cmd.to,
-          incomingHandle: { kind: 'C-c2', cmdIndex: i },
-          outgoingHandle: null,
-          subpathStart: false,
-          coincidentClosingCmdIndex: null,
-        });
-        break;
-      }
+  [Symbol.iterator](): IterableIterator<PathAnchor> {
+    return this.items[Symbol.iterator]();
+  }
+  entries(): IterableIterator<[number, PathAnchor]> {
+    return this.items.entries();
+  }
 
-      case 'Q': {
-        const prev = anchors.length > 0 ? anchors[anchors.length - 1] : null;
-        if (prev) prev.outgoingHandle = { kind: 'Q-c', cmdIndex: i };
-        anchors.push({
-          cmdIndex: i,
-          point: cmd.to,
-          incomingHandle: { kind: 'Q-c', cmdIndex: i },
-          outgoingHandle: null,
-          subpathStart: false,
-          coincidentClosingCmdIndex: null,
-        });
-        break;
-      }
+  /**
+   * 指定アンカーが属する subpath の [start, end) 範囲 (anchor index) を返す。
+   * Path.removeAnchor が「サブパス内のアンカー数下限 (= 2)」判定に使う。
+   * idx が範囲外なら null。
+   */
+  subpathRange(idx: number): { start: number; end: number } | null {
+    if (idx < 0 || idx >= this.items.length) return null;
+    let start = idx;
+    while (start > 0 && !this.items[start].subpathStart) start--;
+    let end = idx + 1;
+    while (end < this.items.length && !this.items[end].subpathStart) end++;
+    return { start, end };
+  }
 
-      case 'Z': {
-        // 閉パスの semantic 的 2 ケース:
-        //  (A) 最後の curve (C/Q) が M 点に戻ってくる (= fontkit が出す典型形):
-        //      curve で閉じている。start anchor.incoming を curve 制御点に設定し、
-        //      最後の curve の to は M 点と座標重複なので「重複した最終アンカー」
-        //      を pop する (= visual 重複の防止)。M と最後の curve の to は同位置
-        //      なので、M を動かすときは curve の to も同期する必要があるため
-        //      coincidentClosingCmdIndex に最後の curve の cmd index を記録。
-        //  (B) 最後の curve / 直線 が M 点に戻らない (= Z で straight に閉じる):
-        //      開始アンカーには curve incoming は無い。何もしない。
-        if (subpathStartIdx >= 0 && subpathStartIdx < anchors.length) {
-          const startAnchor = anchors[subpathStartIdx];
-          const lastCmd = i > 0 ? path[i - 1] : null;
-          if (lastCmd && (lastCmd.type === 'C' || lastCmd.type === 'Q') &&
-              pointsEqual(lastCmd.to, startAnchor.point)) {
-            // ケース (A)
-            if (lastCmd.type === 'C') {
-              startAnchor.incomingHandle = { kind: 'C-c2', cmdIndex: i - 1 };
-            } else {
-              startAnchor.incomingHandle = { kind: 'Q-c', cmdIndex: i - 1 };
-            }
-            // 直前に push された anchor は最後の curve に対応するもので、点は M と
-            // 同位置 (重複)。これを pop して「閉じる curve の cmdIndex」を start
-            // anchor に記録。
-            const lastAnchorIdx = anchors.length - 1;
-            if (lastAnchorIdx > subpathStartIdx &&
-                anchors[lastAnchorIdx].cmdIndex === i - 1) {
-              anchors.pop();
-              startAnchor.coincidentClosingCmdIndex = i - 1;
-            }
-          }
-          // ケース (B) では何もしない (Z は直線 close なので start anchor の
-          // incoming は null のまま)
+  /**
+   * PathCommand 配列から Anchors を抽出する factory。
+   *
+   * 主な semantic:
+   *   - M / L / C / Q ごとにアンカーを生成
+   *   - C / Q では「直前アンカーの outgoingHandle」「自身の incomingHandle」を
+   *     互いに紐付ける
+   *   - Z で曲線 close する場合 (= 最後の curve.to が M.to と一致する) は、
+   *     重複アンカーをマージし、開始アンカーに incomingHandle と
+   *     coincidentClosingCmdIndex を記録 (M を動かしたとき curve.to も同期するため)
+   */
+  static fromCommands(commands: ReadonlyArray<PathCommand>): Anchors {
+    const anchors: PathAnchor[] = [];
+    let subpathStartIdx = -1;
+
+    for (let i = 0; i < commands.length; i++) {
+      const cmd = commands[i];
+      switch (cmd.type) {
+        case 'M':
+          subpathStartIdx = anchors.length;
+          anchors.push({
+            cmdIndex: i,
+            point: cmd.to,
+            incomingHandle: null,
+            outgoingHandle: null,
+            subpathStart: true,
+            coincidentClosingCmdIndex: null,
+          });
+          break;
+
+        case 'L':
+          anchors.push({
+            cmdIndex: i,
+            point: cmd.to,
+            incomingHandle: null,
+            outgoingHandle: null,
+            subpathStart: false,
+            coincidentClosingCmdIndex: null,
+          });
+          break;
+
+        case 'C': {
+          const prev = anchors.length > 0 ? anchors[anchors.length - 1] : null;
+          if (prev) prev.outgoingHandle = { kind: 'C-c1', cmdIndex: i };
+          anchors.push({
+            cmdIndex: i,
+            point: cmd.to,
+            incomingHandle: { kind: 'C-c2', cmdIndex: i },
+            outgoingHandle: null,
+            subpathStart: false,
+            coincidentClosingCmdIndex: null,
+          });
+          break;
         }
-        break;
-      }
 
-      default:
-        cmd satisfies never;
-    }
-  }
+        case 'Q': {
+          const prev = anchors.length > 0 ? anchors[anchors.length - 1] : null;
+          if (prev) prev.outgoingHandle = { kind: 'Q-c', cmdIndex: i };
+          anchors.push({
+            cmdIndex: i,
+            point: cmd.to,
+            incomingHandle: { kind: 'Q-c', cmdIndex: i },
+            outgoingHandle: null,
+            subpathStart: false,
+            coincidentClosingCmdIndex: null,
+          });
+          break;
+        }
 
-  return anchors;
-}
+        case 'Z': {
+          // 閉パスの semantic 的 2 ケース:
+          //  (A) 最後の curve (C/Q) が M 点に戻ってくる (= fontkit が出す典型形):
+          //      curve で閉じている。start anchor.incoming を curve 制御点に設定し、
+          //      最後の curve の to は M 点と座標重複なので「重複した最終アンカー」
+          //      を pop する (= visual 重複の防止)。M と最後の curve の to は同位置
+          //      なので、M を動かすときは curve の to も同期する必要があるため
+          //      coincidentClosingCmdIndex に最後の curve の cmd index を記録。
+          //  (B) 最後の curve / 直線 が M 点に戻らない (= Z で straight に閉じる):
+          //      開始アンカーには curve incoming は無い。何もしない。
+          if (subpathStartIdx >= 0 && subpathStartIdx < anchors.length) {
+            const startAnchor = anchors[subpathStartIdx];
+            const lastCmd = i > 0 ? commands[i - 1] : null;
+            if (lastCmd && (lastCmd.type === 'C' || lastCmd.type === 'Q') &&
+                pointsEqual(lastCmd.to, startAnchor.point)) {
+              // ケース (A)
+              if (lastCmd.type === 'C') {
+                startAnchor.incomingHandle = { kind: 'C-c2', cmdIndex: i - 1 };
+              } else {
+                startAnchor.incomingHandle = { kind: 'Q-c', cmdIndex: i - 1 };
+              }
+              const lastAnchorIdx = anchors.length - 1;
+              if (lastAnchorIdx > subpathStartIdx &&
+                  anchors[lastAnchorIdx].cmdIndex === i - 1) {
+                anchors.pop();
+                startAnchor.coincidentClosingCmdIndex = i - 1;
+              }
+            }
+            // ケース (B) では何もしない (Z は直線 close なので start anchor の
+            // incoming は null のまま)
+          }
+          break;
+        }
 
-// ── moveAnchorRigid ─────────────────────────────────────────────────────
-//
-// 指定アンカー本体と付属ハンドル (incoming/outgoing) を (dx, dy) 平行移動。
-// 変更されないコマンドは元の参照をそのまま返す (immutability 契約)。
-
-export function moveAnchorRigid(
-  path: ReadonlyArray<PathCommand>,
-  anchorIndex: number,
-  dx: number, dy: number,
-): PathCommand[] {
-  const anchors = extractAnchors(path);
-  if (anchorIndex < 0 || anchorIndex >= anchors.length) {
-    return path.slice();
-  }
-
-  const anchor = anchors[anchorIndex];
-  const updates = new Map<number, PathCommand>();
-
-  // アンカー本体を移動
-  updates.set(anchor.cmdIndex, withAnchorBodyMoved(path[anchor.cmdIndex], dx, dy));
-
-  // 曲線で閉じる subpath の開始アンカーを動かす場合、最後の curve の to も同期
-  // して動かす (両者は座標重複しており、M を動かしたら curve の to もついていく
-  // 必要があるため。詳細は extractAnchors の Z 処理コメント参照)。
-  if (anchor.coincidentClosingCmdIndex !== null) {
-    const ci = anchor.coincidentClosingCmdIndex;
-    updates.set(ci, withAnchorBodyMoved(path[ci], dx, dy));
-  }
-
-  // 付属ハンドルを平行移動 (アンカー本体と同じコマンドを共有する場合があるため
-  // 既存の更新結果を起点にして再更新する)
-  if (anchor.incomingHandle) {
-    const h = anchor.incomingHandle;
-    const cur = updates.get(h.cmdIndex) ?? path[h.cmdIndex];
-    updates.set(h.cmdIndex, withHandleMoved(cur, h, dx, dy));
-  }
-  if (anchor.outgoingHandle) {
-    const h = anchor.outgoingHandle;
-    const cur = updates.get(h.cmdIndex) ?? path[h.cmdIndex];
-    updates.set(h.cmdIndex, withHandleMoved(cur, h, dx, dy));
-  }
-
-  const result: PathCommand[] = new Array(path.length);
-  for (let i = 0; i < path.length; i++) {
-    const u = updates.get(i);
-    result[i] = u !== undefined ? u : path[i];
-  }
-  return result;
-}
-
-// ── moveHandle ──────────────────────────────────────────────────────────
-//
-// HandleRef が指す制御点のみを (dx, dy) 移動する。
-// アンカー本体や反対側ハンドルには一切触れない。
-
-export function moveHandle(
-  path: ReadonlyArray<PathCommand>,
-  handle: HandleRef,
-  dx: number, dy: number,
-): PathCommand[] {
-  const ci = handle.cmdIndex;
-  if (ci < 0 || ci >= path.length) return path.slice();
-
-  const cmd = path[ci];
-  const updated = withHandleMoved(cmd, handle, dx, dy);
-
-  const result: PathCommand[] = new Array(path.length);
-  for (let i = 0; i < path.length; i++) {
-    result[i] = i === ci ? updated : path[i];
-  }
-  return result;
-}
-
-// ── ベジェ曲線評価 ──────────────────────────────────────────────────────
-
-export function evalCubicAt(p0: Point, c1: Point, c2: Point, p3: Point, t: number): Point {
-  const u = 1 - t;
-  const uu = u * u;
-  const uuu = uu * u;
-  const tt = t * t;
-  const ttt = tt * t;
-  return {
-    x: uuu * p0.x + 3 * uu * t * c1.x + 3 * u * tt * c2.x + ttt * p3.x,
-    y: uuu * p0.y + 3 * uu * t * c1.y + 3 * u * tt * c2.y + ttt * p3.y,
-  };
-}
-
-export function evalQuadAt(p0: Point, c1: Point, p2: Point, t: number): Point {
-  const u = 1 - t;
-  return {
-    x: u * u * p0.x + 2 * u * t * c1.x + t * t * p2.x,
-    y: u * u * p0.y + 2 * u * t * c1.y + t * t * p2.y,
-  };
-}
-
-// ── セグメント始点取得 ──────────────────────────────────────────────────
-
-export function getSegmentStart(
-  path: ReadonlyArray<PathCommand>, cmdIndex: number,
-): Point | null {
-  for (let i = cmdIndex - 1; i >= 0; i--) {
-    const c = path[i];
-    switch (c.type) {
-      case 'M': return c.to;
-      case 'L': return c.to;
-      case 'C': return c.to;
-      case 'Q': return c.to;
-      case 'Z': break; // Z は始点情報を持たない、さらに前を探す
-      default: c satisfies never;
-    }
-  }
-  return null;
-}
-
-// ── セグメント分割 (De Casteljau) ───────────────────────────────────────
-
-export function splitSegment(
-  path: ReadonlyArray<PathCommand>,
-  cmdIndex: number,
-  t: number,
-): PathCommand[] {
-  if (cmdIndex < 0 || cmdIndex >= path.length) return path.slice();
-
-  const cmd = path[cmdIndex];
-  const start = getSegmentStart(path, cmdIndex);
-  if (!start) return path.slice();
-
-  const p0 = start;
-  let first: PathCommand;
-  let second: PathCommand;
-
-  switch (cmd.type) {
-    case 'C': {
-      const u = 1 - t;
-      // De Casteljau level 1
-      const q0x = u * p0.x   + t * cmd.c1.x;
-      const q0y = u * p0.y   + t * cmd.c1.y;
-      const q1x = u * cmd.c1.x + t * cmd.c2.x;
-      const q1y = u * cmd.c1.y + t * cmd.c2.y;
-      const q2x = u * cmd.c2.x + t * cmd.to.x;
-      const q2y = u * cmd.c2.y + t * cmd.to.y;
-      // level 2
-      const r0x = u * q0x + t * q1x;
-      const r0y = u * q0y + t * q1y;
-      const r1x = u * q1x + t * q2x;
-      const r1y = u * q1y + t * q2y;
-      // level 3 — 分割点
-      const sx = u * r0x + t * r1x;
-      const sy = u * r0y + t * r1y;
-
-      first  = { type: 'C', c1: { x: q0x, y: q0y }, c2: { x: r0x, y: r0y }, to: { x: sx, y: sy } };
-      second = { type: 'C', c1: { x: r1x, y: r1y }, c2: { x: q2x, y: q2y }, to: cmd.to };
-      break;
-    }
-    case 'Q': {
-      const u = 1 - t;
-      const q0x = u * p0.x   + t * cmd.c.x;
-      const q0y = u * p0.y   + t * cmd.c.y;
-      const q1x = u * cmd.c.x + t * cmd.to.x;
-      const q1y = u * cmd.c.y + t * cmd.to.y;
-      const sx = u * q0x + t * q1x;
-      const sy = u * q0y + t * q1y;
-
-      first  = { type: 'Q', c: { x: q0x, y: q0y }, to: { x: sx, y: sy } };
-      second = { type: 'Q', c: { x: q1x, y: q1y }, to: cmd.to };
-      break;
-    }
-    case 'L': {
-      const sx = p0.x + t * (cmd.to.x - p0.x);
-      const sy = p0.y + t * (cmd.to.y - p0.y);
-
-      first  = { type: 'L', to: { x: sx, y: sy } };
-      second = { type: 'L', to: cmd.to };
-      break;
-    }
-    case 'M':
-    case 'Z':
-      return path.slice();
-    default:
-      return cmd satisfies never;
-  }
-
-  const result: PathCommand[] = [];
-  for (let i = 0; i < path.length; i++) {
-    if (i === cmdIndex) {
-      result.push(first);
-      result.push(second);
-    } else {
-      result.push(path[i]);
-    }
-  }
-  return result;
-}
-
-// ── アンカーポイント削除 ────────────────────────────────────────────────
-//
-// 指定アンカーを削除し、後続セグメントを直線 (L) に置換する。
-// サブパス内のアンカー数が 2 以下になる場合は操作を拒否する。
-
-export function removeAnchor(
-  path: ReadonlyArray<PathCommand>,
-  anchorIndex: number,
-): PathCommand[] {
-  const anchors = extractAnchors(path);
-  if (anchorIndex < 0 || anchorIndex >= anchors.length) {
-    return path.slice();
-  }
-
-  // サブパス境界の特定
-  let subStart = anchorIndex;
-  while (subStart > 0 && !anchors[subStart].subpathStart) subStart--;
-  let subEnd = anchorIndex + 1;
-  while (subEnd < anchors.length && !anchors[subEnd].subpathStart) subEnd++;
-  const subCount = subEnd - subStart;
-
-  // アンカーが 2 以下になる削除は拒否
-  if (subCount <= 2) return path.slice();
-
-  const anchor = anchors[anchorIndex];
-  const result: PathCommand[] = [];
-
-  if (anchor.subpathStart) {
-    // M アンカーの削除: 次のアンカーを新しい M にする
-    const next = anchors[anchorIndex + 1];
-    for (let i = 0; i < path.length; i++) {
-      if (i === anchor.cmdIndex) {
-        result.push({ type: 'M', to: next.point });
-      } else if (i === next.cmdIndex) {
-        // 次のアンカーへのコマンドをスキップ (M に置換済み)
-        continue;
-      } else {
-        result.push(path[i]);
+        default:
+          cmd satisfies never;
       }
     }
-  } else {
-    // 非 M アンカーの削除
-    const hasNext = (anchorIndex + 1) < subEnd;
-    const nextCmdIndex = hasNext ? anchors[anchorIndex + 1].cmdIndex : -1;
-    const nextAnchor = hasNext ? anchors[anchorIndex + 1] : null;
 
-    for (let i = 0; i < path.length; i++) {
-      if (i === anchor.cmdIndex) {
-        continue; // 削除
-      } else if (hasNext && i === nextCmdIndex && nextAnchor) {
-        result.push({ type: 'L', to: nextAnchor.point });
-      } else {
-        result.push(path[i]);
-      }
-    }
+    return new Anchors(anchors);
   }
-
-  return result;
 }
-

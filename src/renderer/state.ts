@@ -25,7 +25,7 @@ import type {
 } from '../core/state';
 import type { DocumentSnapshot } from '../core/document/snapshot';
 import type { Mat2x3 } from '../core/path/coords';
-import type { PathCommand } from '../core/path/types';
+import { Path } from '../core/path/path';
 import { fromFabricPath, toFabricPath } from './path-adapter';
 import { logger, fmtObj } from './logger';
 import { generateGroupId } from './group-id';
@@ -549,12 +549,12 @@ export class State implements StateContract {
   private makePathHandle(p: fabric.Path): PathHandle {
     return {
       snapshot: (): PathSnapshot => ({
-        commands:   fromFabricPath((p as any).path as ReadonlyArray<ReadonlyArray<unknown>>),
+        path:       new Path(fromFabricPath((p as any).path as ReadonlyArray<ReadonlyArray<unknown>>)),
         pathMatrix: p.calcTransformMatrix() as unknown as Mat2x3,
         pathOffset: { x: (p as any).pathOffset.x, y: (p as any).pathOffset.y },
       }),
-      setCommands: (cmds: ReadonlyArray<PathCommand>) => {
-        (p as any).path = toFabricPath(cmds);
+      setPath: (path: Path) => {
+        (p as any).path = toFabricPath(path.commands);
         (p as any).dirty = true;
       },
       finalizeEdit: () => this.finalizeDrag(p),
