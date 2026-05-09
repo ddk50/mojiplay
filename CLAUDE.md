@@ -4,887 +4,194 @@
 
 ## このプロジェクトの最終目標
 
-このプロジェクトの最終目標は以下の通り。設計するときに留意せよ
+設計するときに留意せよ:
 
-- 「パスを生成（ベジェ曲線）してフォントの形を少しいじったりしてロゴにすることもしたい」
-- フォトショやイラストレータの場合は大体「アウトライン生成」をやって、テキストをアウトライン化してからパスにして形をいじれると思うが、そういう風にはしたい
+- パスを生成 (ベジェ曲線) してフォントの形を少しいじったりしてロゴにしたい
+- フォトショやイラストレータの「アウトライン作成」相当: テキストをアウトライン化してパスにしてから形をいじる
 
 ## コマンド
 
-- `npm start` — ビルド（両方のtsconfig）を実行し、Electronを起動
-- `npm run build` — mainとrendererのみをコンパイル（起動はしない）
-- `npm test` — Jest でユニットテストを実行（ts-jest 経由）
-- `npm run dist:win` — Windows向け Portable .exe をビルド
-- `npm run pack` — wine不要の unpacked ビルド（動作確認用）
-
-## テスト
-
-Jest + ts-jest を使用。テストファイルは `test/` 配下。
-
-```bash
-npm test              # 全テスト実行
-npx jest --watch      # ウォッチモード
-npx jest copy-export  # 特定ファイルのみ
-```
-
-テスト対象モジュール (pure function / fabric 不知。DOM/fabric/Electron 不要で動く):
-
-- `core/path/types.ts` — 共通型定義 (Point / PathCommand / HandleRef / PathAnchor) と `assertNever`
-- `core/path/path.ts` — Path 値オブジェクト (immutable wrapper、anchors / moveAnchor / moveHandle / removeAnchor / splitSegment / segmentStart / handlePoint)
-- `core/path/anchors.ts` — Anchors 値オブジェクト (PathAnchor[] の集合、Anchors.fromCommands / subpathRange / iteration)
-- `core/path/bezier.ts` — Bezier 数値評価 (evalCubicAt / evalQuadAt)、segment-hit が利用
-- `core/path/coords.ts` — 座標変換 (path local ↔ world ↔ screen)
-- `renderer/path-adapter.ts` — fabric 生タプル ↔ PathCommand 境界変換 (Interface Adapter)
-- `core/object-id.ts` — ObjectId / ObjectType / ensureObjectId (ulid 経由)
-- `core/history/history.ts` — History (ring buffer + cursor)
-- `core/outline-position.ts` — アウトライン位置計算
-- `renderer/copy-export.ts` — PNG エクスポート用 typed wrapper (Interface Adapter)
-- `core/path/segment-hit.ts` — セグメントヒットテスト
-- `core/path/overlay-layout.ts` — overlay (アンカー / ハンドル) 配置
-- `usecases/tools/select-char-tool.ts` / `usecases/tools/pen-add-tool.ts` / `usecases/tools/pen-remove-tool.ts` / `usecases/tools/select-group-tool.ts` / `usecases/tools/text-tool.ts` — `FakePathHandle` / `FakeState` (= State interface のテストダブル) を渡して挙動を検証
-- `usecases/menu/file-io-interactor.ts` — `FakeState` / `FakeRepo` / `FakeUIPort` を constructor 経由で DI して saveCurrent / saveAs / openFile / dirty 管理 / 連打抑止 / token capture order を検証 (fabric / DOM / Electron 不要)
+- `npm start` — ビルド + Electron 起動
+- `npm run build` — main + renderer ビルド (起動なし)
+- `npm test` — Jest (ts-jest 経由)
+- `npm run dist:win` / `pack` — Windows portable / unpacked
 
 ## ディレクトリ構成 (CA / Hexagonal sibling 階層)
 
 ```
 src/
 ├── main.ts / preload.ts  # Electron main/preload (Frameworks & Drivers)
-├── core/                 # Entities (pure domain types / value objects)
-│   ├── path/             # path 操作のドメイン (中核概念)
-│   ├── history/          # Command ADT + History (state-jump 用)
-│   ├── document/         # DocumentSnapshot + LoadError ADT (永続化用 value object)
-│   ├── state.ts          # State interface (= ドメインへの抽象契約)
-│   └── object-id.ts      # ObjectId / ObjectType / ensureObjectId
-├── usecases/             # Use Case 層 (Interactor + Output Port)
-│   ├── tools/            # Tool-driven Interactor (PointerInput 駆動: 黒/白矢印, ペン, 文字)
-│   ├── menu/             # Menu/keyboard-triggered Interactor (incl. file-io-interactor)
-│   └── ui-port.ts        # Output Port (toast / 確認 dialog / IPC を抽象化、両 trigger 共通)
-├── repository/           # Driven adapter for storage (port + concrete を sibling 配置)
-│   ├── document-repository.ts             # interface (Use Case 層 port)
-│   └── file-system-document-repository.ts # concrete (Electron + fs)
+├── core/                 # Entities (pure types / value objects)
+│   ├── path/             # Path / Anchors / bezier / coords / overlay-layout / segment-hit
+│   ├── history/          # Command ADT + History (ring buffer)
+│   ├── document/         # DocumentSnapshot + LoadError ADT
+│   ├── state.ts          # State interface (= 抽象契約)
+│   └── object-id.ts      # ObjectId (ULID branded) / ensureObjectId
+├── usecases/             # Use Case (Interactor + Output Port)
+│   ├── tools/            # PointerInput-driven (黒/白矢印, ペン±, 文字)
+│   ├── menu/             # Menu/keyboard-triggered (incl. file-io-interactor)
+│   └── ui-port.ts        # Output Port (toast / dialog / IPC 抽象)
+├── repository/           # Driven adapter (port + concrete を sibling 配置)
 ├── renderer/             # Presenter + Frameworks 接触面
-│   ├── state.ts          # State concrete impl (fabric.Canvas を内包、高レベル selection 操作も)
-│   ├── ui-port-impl.ts   # ElectronUIPort (UIPort concrete: toast + IPC bridge)
-│   ├── app.ts            # entry + DOM event dispatcher (= CA の Controller 役)
+│   ├── state.ts          # State concrete impl (fabric.Canvas を encapsulate)
+│   ├── ui-port-impl.ts   # ElectronUIPort
+│   ├── app.ts            # entry + DOM event dispatcher (= CA Controller)
 │   └── ...               # logger, toast, copy-export, outline-conversion 等
-└── globals/              # ambient .d.ts (Window 拡張など外部世界の型)
+└── globals/              # ambient .d.ts (Window 拡張)
 ```
 
-### CA / Hexagonal レイヤ対応 (sibling 階層で表現)
-
-| dir | CA 用語 | 役割 |
+| dir | CA 用語 | fabric/DOM/Electron |
 |---|---|---|
-| `core/` | Entities (innermost) | pure domain types / value objects。fabric / DOM / Electron 不知 |
-| `usecases/` | Use Case (Interactor + Port) | アプリ固有 orchestration。State / DocumentRepository / UIPort を依存に取る、fabric 不知 |
-| `repository/` | Driven adapter for storage | Use Case が要求する永続化 port + concrete adapter。port と impl を同 dir に併置 |
-| `renderer/` | Presenter + Frameworks | UI 描画、State concrete impl (fabric encapsulation)、DOM event dispatcher (= app.ts が CA の Controller 役) |
-| `main.ts` / `preload.ts` | Frameworks & Drivers | Electron main process / IPC bridge |
-| `globals/` | (型のみ) | ambient `.d.ts` |
+| `core/` | Entities | 不知 (何も import しない) |
+| `usecases/` | Use Case (Interactor + Port) | 不知 (core / repository(port) のみ) |
+| `repository/` | Driven adapter for storage | core のみ依存 |
+| `renderer/` | Presenter + Frameworks | 全レイヤ可 |
+| `main.ts` / `preload.ts` | Frameworks & Drivers | Electron main / IPC |
 
-**依存方向 (CA dependency rule):** 内側 → 外側を禁止。`core/` は何も import しない。`usecases/` は core / repository (port のみ) に依存。`repository/` は core のみ。`renderer/` は全レイヤ import 可能。
+**依存方向 (CA dependency rule)**: 内側 → 外側を禁止。
 
-**重要な設計判断 (今回の refactor で確定):**
-
-1. **Use Case を 1 dir に集約**: tools (PointerInput-driven) と menu/keyboard-triggered の両方とも Use Case なので `usecases/` 配下に subdir で統合。「同じ層が物理的に複数 dir に分かれる」を排除
-2. **Repository は top-level**: usecases/ にも renderer/ にも入れない。「Repository は use case にも presenter にも従属しない sibling concept」(Hexagonal の Driven adapter)
-3. **CA 用語 "Controller" は input adapter のみを指す**: Use Case 実装は **Interactor**。`*Controller` という名前を Use Case に使わない (実例: `FileIOInteractor`)
-4. **Suffix 規約**:
-   - tool 系 = `*Tool` (例: `SelectCharTool`)
-   - 単発の menu use case で stateless = free function (例: `selectAll(state)`、`deleteSelection(state)`)
-   - stateful な menu use case = `*Interactor` (例: `FileIOInteractor`)
-
-### 新しいファイルを追加する時はこの分類に従ってください
-
-- **`core/`**: pure function + value object + 抽象契約 (interface)。DOM/fabric/Electron 不知
-- **`usecases/`**: アプリ固有 orchestration。tool-driven は `tools/` subdir、menu-triggered は `menu/` subdir
-  - **state または external dependency を持つなら class + DI** (例: `FileIOInteractor`、`SelectCharTool`)。constructor で State / Repository / UIPort などを受け取り、test 時は Fake を inject
-  - **stateless な単発 orchestration なら free function** (例: `selectAll(state)`、`deleteSelection(state)`)。state を arg で受ける
-  - **pure な変換 (validator / formatter) は free function 据え置き** (= AnemicHelper class を作らない)
-- **`repository/`**: 永続化 port + concrete を 1 dir に併置。port は `<entity>-repository.ts`、concrete は `<adapter>-<entity>-repository.ts` (例: `document-repository.ts` + `file-system-document-repository.ts`)
-- **`renderer/`**: 副作用あり (DOM/fabric/Electron)。State concrete impl、UI 配線、event dispatcher、Presenter
-  - 旧 `renderer/actions/` は廃止 (= 全部 `usecases/menu/` に移動 + fabric 不知化済)
-- **`globals/`**: 外部世界の ambient 型シムのみ
-
-path 関連のロジック (アンカー、ハンドル、ベジェ評価、コマンド変換など) は `core/path/` 内に。tool の各実装は `usecases/tools/` 内に。menu / keyboard 起点の use case は `usecases/menu/` 内に。
+**Naming**:
+- Tool-driven Use Case = `*Tool` (例: `SelectCharTool`)
+- Stateful menu Use Case = `*Interactor` (例: `FileIOInteractor`)
+- Stateless menu Use Case = free function (例: `selectAll(state)`、`deleteSelection(state)`)
+- `*Controller` は CA で input adapter のみ (= `app.ts` の DOM event dispatcher)。Use Case には付けない
 
 ## ビルド構成 (tsc + esbuild)
 
-3 段階のビルドパイプライン (`npm run build`):
+`npm run build` の 3 段階:
 
-1. **`build:main`** = `tsc -p tsconfig.json` → `src/main.ts`, `src/preload.ts` を `dist/{main,preload}.js` にコンパイル (CommonJS, Node API)
-2. **`build:typecheck`** = `tsc -p tsconfig.renderer.json` (noEmit) → `src/core/**` + `src/usecases/**` + `src/repository/**` + `src/renderer/**` の型検査のみ
-3. **`build:renderer`** = `node esbuild.renderer.mjs` → `src/renderer/app.ts` をエントリに `dist/renderer/bundle.js` に IIFE バンドル
+1. `tsc -p tsconfig.json` → main + preload を `dist/{main,preload}.js` (CommonJS, Node API)
+2. `tsc -p tsconfig.renderer.json` (noEmit) → core/usecases/repository/renderer の typecheck
+3. `node esbuild.renderer.mjs` → renderer 全体を `dist/renderer/bundle.js` (IIFE)
 
-`tsconfig.test.json` は ts-jest 用 (CommonJS, `include` は `test/**` のみ。test ファイルが import で source を参照する経路で型解決される)。
+`renderer/index.html` は 3 つの `<script>` のみ: `vendor/fabric.min.js` / `vendor/fontkit.js` / `dist/renderer/bundle.js`。fabric / fontkit は UMD グローバルとして runtime 解決、`tsconfig.renderer.json` の `allowUmdGlobalAccess: true` で `import` 文無しで参照可能。fontkit の global 型は `src/globals/fontkit.d.ts`。
 
-### renderer の ES モジュール構成
-
-`renderer/index.html` は 3 つの `<script>` だけ読み込む:
-```
-<script src="vendor/fabric.min.js"></script>
-<script src="vendor/fontkit.js"></script>
-<script src="../dist/renderer/bundle.js"></script>
-```
-
-fabric / fontkit は `renderer/vendor/` から `<script>` でグローバル読み込みされ、esbuild バンドルには含まれない。本体コード (core + renderer) は esbuild が単一 IIFE バンドルにまとめる。
-
-ソースコードは普通の ES モジュールとして書く (`export function foo()` / `import { foo } from '...'`)。dual-mode export パターンや globalThis 注入は不要。
-
-`tsconfig.renderer.json` の `"allowUmdGlobalAccess": true` により、@types/fabric が UMD として宣言する `fabric` 名前空間を import 文無しで直接参照できる (vendor script 経由のグローバルとして runtime 解決される)。fontkit の global 型宣言は `src/globals/fontkit.d.ts`。
-
-### 新しい core / usecases / repository / renderer ファイルを追加するとき
-
-esbuild が import グラフを follow して自動でバンドルに含めるので、`renderer/index.html` を触る必要は無い。型エラーが出ないように `tsconfig.renderer.json` の include グロブ (`src/core/**/*.ts` / `src/usecases/**/*.ts` / `src/repository/**/*.ts` / `src/renderer/**/*.ts`) に該当することを確認するだけで OK。
-
-`src/globals/electron-api.d.ts` は両方の tsconfig で共有され、`window.electronAPI` ブリッジを定義します。
+新規 ts ファイル追加時は `tsconfig.renderer.json` の include グロブ (`src/{core,usecases,repository,renderer}/**/*.ts`) に該当することを確認するだけで esbuild が自動でバンドルする (= `renderer/index.html` 編集不要)。`src/globals/electron-api.d.ts` は両 tsconfig 共有で `window.electronAPI` を定義。
 
 ## アーキテクチャ
 
-**Electron（3つのプロセス）:**
+**Electron 3 プロセス:**
 
-- `src/main.ts` — BrowserWindowを作成し（contextIsolation: on, nodeIntegration: off）、IPC ハンドラを登録：
-  - `save-png` — ネイティブ保存ダイアログ経由で PNG をディスクに書き込み
-  - `copy-image` — `nativeImage` + `clipboard.writeImage` でクリップボードに画像書き込み（サンドボックス有効の preload では clipboard/nativeImage が使えないため main 側で処理）
-  - `log` — renderer → electron-log 中継
-  - `toggle-devtools`, `zoom-in/out/reset`, `toggle-fullscreen` — HTML メニュー用
-  - ネイティブメニューは `Menu.setApplicationMenu(null)` で非表示化
-- `src/preload.ts` — `contextBridge` を介して `window.electronAPI` を公開。`savePng`, `copyImageToClipboard`, `onMenuCopy`, View 系 IPC を中継
-- `src/renderer/app.ts` — renderer エントリーポイント。esbuild が IIFE バンドルでラップするので本体は普通の ES モジュール。UI 状態 (mode、selection)、DOM 入力ディスパッチ、Use Case の wiring (`new FileIOInteractor(state, repo, ui)` / 各 tool / handleMenuAction)。fabric の操作は `state` instance を経由する。ツール本体は `usecases/tools/*` に分離済、menu/keyboard 起点の use case は `usecases/menu/*`
-- `src/renderer/state.ts` — fabric.Canvas を **encapsulate** した State モジュール。State interface 実装 + History 操作 (undo/redo) + 永続化 stub を提供。fabric の癖 (path 配列の直接代入 / `_setPositionDimensions` / pathOffset 補正 / ActiveSelection の座標系) はすべてこの中に閉じ込められている。詳細は本ファイル後段の「Tool との関係」「ファイル構成」セクション参照
-- `src/renderer/logger.ts` — IPC + DevTools console を束ねる `logger` オブジェクト
-- `src/renderer/toast.ts` — `showToast(message, isError?)` (3秒で消える簡易通知)
-- `src/renderer/menu-bar.ts` — `initMenuBar(handleAction)` (HTML メニューバーの開閉 UI、アクションは callback 経由)
-- `src/renderer/font-enumeration.ts` — Local Font Access API でシステムフォントを列挙し、family/style セレクトを populate
-- `src/renderer/outline-conversion.ts` — `outlineTextToPath()` の純粋寄り変換 (fabric.Text → fabric.Path、fontkit 経由)。canvas 操作を含む `outlineSelection` は app.ts に残る
+- `src/main.ts` — BrowserWindow (`contextIsolation: on`, `nodeIntegration: off`)。IPC: `save-png` / `copy-image` / `log` / `toggle-devtools` / view 系 / `save-mply` (atomic write) / `open-mply` / `confirm-discard` / `app-close-request`。ネイティブメニューは `Menu.setApplicationMenu(null)` で無効化 (HTML メニューバーを使用)
+- `src/preload.ts` — `contextBridge` で `window.electronAPI` 公開
+- `src/renderer/app.ts` — entry。UI state (mode/selection)、DOM 入力 dispatcher、Use Case 配線 (`new FileIOInteractor(state, repo, ui)` / 各 tool / `handleMenuAction`)。fabric の操作は `state` instance 経由
 
-**カスタム HTML メニューバー:**
+**文字モデル (重要 — コードからは分かりにくい):**
 
-ネイティブ Electron メニューの代わりに HTML ベースのメニューバーを使用（`renderer/index.html` の `#menu-bar`）。Claude Desktop 風のスタイルで、CSS でフォントサイズや間隔を制御可能。メニューの開閉ロジックは `app.ts` 冒頭の `initMenuBar()` で実装。
+ユーザーが `fabric.IText` の入力を完了すると、`commitIText()` が**1 文字ごとの `fabric.Text` オブジェクト**に分割。各文字は `data: { groupId, charIndex, sourceText }` を保持し、同じ IText から生成された文字は同じ `groupId` を共有。文字間隔は fabric ではなくオフスクリーンキャンバスの `measureText` で計算する。
 
-**文字モデル（重要 — コードからは分かりにくい点）:**
+これがコアデータモデル: 「単語」は `data.groupId` でリンクされた N 個の独立した fabric.Object。単語単位で扱う機能は `canvas.getObjects()` を `groupId` でフィルタする。
 
-ユーザーが `fabric.IText` の入力を完了すると、`commitIText()` がそれを**1文字ごとの `fabric.Text` オブジェクト**に分割します。各文字オブジェクトは `data: { groupId, charIndex, sourceText }` を保持します。同じITextから生成された文字は同じ `groupId` を共有します。文字の間隔はFabricの機能ではなく、オフスクリーンキャンバスの `measureText` 呼び出しによって計算されます。
+**3 モード** (`currentMode`):
 
-これがコアデータモデルです。「単語」は、`data.groupId` によってのみリンクされた N 個の独立した Fabric オブジェクトです。ある文字が属する単語を取得する必要がある機能は、`canvas.getObjects()` を `groupId` でフィルタリングする必要があります。
+- `select-group` (黒矢印) — 1 文字クリックで同 `groupId` 全体に展開 (`SelectGroupTool`)
+- `select-char` (白矢印) — 文字単位選択。グリッドスナップ (Alt で一時無効、Illustrator 風)。アウトライン化済パスのアンカー / ハンドル編集
+- `text` — 空き領域クリックで `IText` 生成。このモード中は既存 obj の `selectable` / `evented` を false に
 
-**3つのモード** (`currentMode`):
+`setMode()` は全 obj の `selectable`/`evented` を切り替える。新 object type を足す時はこのループとの整合性に注意。
 
-- `select-group` (黒矢印) — 1つの文字をクリックすると、`expandSelectionToGroup()` を通じて同じ `groupId` を持つすべての文字を自動的に選択します。
-- `select-char` (白矢印) — 文字単位の選択。移動時のグリッドスナップはこのモードでのみ適用されます（Altキーで一時的にスナップを無効化できます。Illustrator風の挙動）。アウトライン化済みパスのアンカーポイント編集もこのモードで行います。
-- `text` — キャンバスの空き領域をクリックして `IText` を生成します。このモードが有効な間、既存のオブジェクトは選択不可（selectable: false）およびイベント無効（evented: false）になります。
+**Enter 確定フロー**: capture phase の `document.addEventListener('keydown', ..., true)` が IText 編集中の Enter を遮断して `exitEditing()`。実際の commit は `text:editing:exited` (Esc / 枠外クリックでも発火) に集約。**コミットロジックを keydown ハンドラに移さないこと** (Enter / Esc / クリックアウェイの 3 経路を 1 か所で扱うため)。
 
-`setMode()` はキャンバス上のすべてのオブジェクトの `selectable`/`evented` を切り替えるため、将来新しいオブジェクトタイプを追加する場合は、このループと整合性を保つ必要があります。
+**アウトライン化 (Cmd/Ctrl+Shift+O)**: `outlineTextToPath()` が fontkit でグリフパスを取得 → SVG `d` → `fabric.Path` を生成。`data: { ...origData, outlined: true }` を付け、`groupId` を引き継ぐ。
 
-**Enter確定フロー:** キャプチャフェーズの `document.addEventListener('keydown', ..., true)` が、IText編集中のEnterキーを遮断して `exitEditing()` を呼び出します。実際のコミット処理は `text:editing:exited` ハンドラ（Escキーや枠外クリックでも発火）で行われ、3つすべての終了パスを1つのロジックに集約しています。コミットロジックをkeydownハンドラに移動させないでください。
+**アンカー編集 (白矢印モード)**: `data.outlined === true` なパスが選択されると `contextTop` にアンカーマーカー描画。DOM capture phase の `mousedown` で fabric より先にアンカーヒットテスト → ヒット時 `stopImmediatePropagation` でパス全体ドラッグを抑止。drag 完了で `_setPositionDimensions` で bbox 再計算、`pathOffset` 変化分を `left`/`top` に補正して視覚位置を維持。
 
-**アウトライン化 (Cmd/Ctrl+Shift+O):**
+**DPI スケーリング**: `contextTop` 描画時は `canvas.getRetinaScaling()` を掛ける (`setTransform(retina,0,0,retina,0,0)`、`setTransform(1,0,0,1,0,0)` ではない)。
 
-`outlineTextToPath()` が `fabric.Text` を `fabric.Path` に変換します。fontkit でグリフパスを取得し、SVG `d` 文字列を経由して `fabric.Path` を生成。変換後のパスは `data: { ...origData, outlined: true }` を保持し、元の `groupId` を引き継ぎます。
+**クリップボードコピー (Ctrl+C)**: 選択 obj を `exportObjectToPngDataUrl()` (`renderer/copy-export.ts`) で 10 倍解像度 PNG → IPC `copy-image` → main の `clipboard.writeImage`。
 
-**アンカーポイント編集 (白矢印モード):**
+**重要な落とし穴**: `fabric.Object.prototype.toCanvasElement(options)` は **options オブジェクト** (`{ multiplier: 10 }`) で呼ぶ。`toCanvasElement(10)` だと `options.multiplier` が undefined になり 1 倍でレンダリングされる (Canvas-level の同名メソッドは positional arg だが Object-level は違う)。`copy-export.ts` の typed wrapper で型安全に防止済。
 
-`select-char` モードでアウトライン化済みパス (`data.outlined === true`) が選択されると、`contextTop` にアンカーマーカーを描画。DOM capture phase の `mousedown` で fabric より先にアンカーヒットテストを行い、ヒット時は `stopImmediatePropagation` でパス全体のドラッグを抑止してアンカーのみを移動。ドラッグ完了時に `_setPositionDimensions` で bbox を再計算し、`pathOffset` の変化分を `left`/`top` に補正して視覚位置を維持。
+**ズーム**: Alt + ホイールで `canvas.zoomToPoint`、範囲 `[0.1, 20]` (Photoshop 風)。
 
-**DPI スケーリング注意:** `contextTop` への描画時は `canvas.getRetinaScaling()` で retina 倍率を掛ける必要がある。`setTransform(1,0,0,1,0,0)` ではなく `setTransform(retina,0,0,retina,0,0)` を使用すること。
+## State / Viewport 分離モデル (= Undo/Redo + 永続化の基盤)
 
-**クリップボードコピー (Ctrl+C / メニュー Edit > Copy):**
+mojiplay の状態は 2 層:
 
-選択オブジェクトを `exportObjectToPngDataUrl()` (typed wrapper, `src/renderer/copy-export.ts`) 経由で 10 倍解像度の透過 PNG にレンダリングし、IPC `copy-image` でメインプロセスの `clipboard.writeImage` に渡す。
+- **State (ドキュメント層)** = 全 object の `commands` / `left,top,scaleX,scaleY,angle` / `fill` / `fontFamily` 等。fabric では `canvas.getObjects()` の各 `fabric.Object`。**履歴 / 永続化対象**
+- **Camera 層** = viewport (`canvas.viewportTransform`) / selection (どれが active か) / tool mode / IText 編集中 state。**履歴 / 永続化対象外** (ephemeral)
 
-重要: `fabric.Object.prototype.toCanvasElement(options)` は **options オブジェクト** (`{ multiplier: 10 }`) で呼ぶ必要がある。`toCanvasElement(10)` と positional arg で渡すと `options.multiplier` が `undefined` になり 1 倍でレンダリングされる（Canvas-level の同名メソッドとは API が異なる）。この落とし穴は `copy-export.ts` の typed wrapper で型安全に防止されている。
+レンダリング時に viewport を適用して画面を作る。fabric は最初からこの 2 層を分離している (`canvas.objects` vs `canvas.viewportTransform`)。3D ソフト (Blender 等) / CAD / Figma などと同じ model。
 
-**ズーム:** Alt + ホイールで、カーソル位置を中心にズームします (`canvas.zoomToPoint`)。Photoshop風の挙動で、範囲は `[0.1, 20]` に制限されています。
+### state-jump semantic
 
-## 長期的方向性 (新しいコードを書く際の指針)
+undo/redo は `ObjectSnapshot` (= `fabric.Object.toObject(['data'])` 出力) を canvas に丸ごと書き戻すだけ。差分計算 / 位置補正のような fabric 座標モデル依存の数学を持たない。
 
-実装済み:
-
-- **Phase 2a**: アウトライン化とアンカーポイント移動
-- **Phase 2c**: ベジェハンドル (制御点) の表示・編集 (`core/path/types.ts` の `HandleRef` / `incomingHandle` / `outgoingHandle`、`core/path/path.ts` の `Path.handlePoint` / `Path.moveHandle`、`core/path/overlay-layout.ts` の `HandleScreenPos` / `hitTestHandleAt`、`usecases/tools/select-char-tool.ts` の handle drag)
-- **Phase 2d (一部)**: アンカーの追加/削除 (`usecases/tools/pen-add-tool.ts` / `pen-remove-tool.ts`)
-- **保存 / 開く (.mply)**: 拡張子 `.mply` で `canvas.toJSON(['data'])` を JSON 化保存。Cmd+S / Cmd+Shift+S / Cmd+O。詳細は本ファイル後段「保存 / 開く (.mply) と dirty tracking」セクション参照
-- **State / Viewport 分離モデル + Undo/Redo**: 全 state 変更操作 (アンカー編集 / アンカー追加削除 / object 移動拡縮回転 / プロパティ変更 / 文字確定 / アウトライン化 / 削除) を履歴対象とする state-jump semantic で実装。Cmd/Ctrl+Z / Cmd/Ctrl+Shift+Z で操作。詳細は本ファイル後段「Undo/Redo + 永続化に向けた State / Viewport 分離モデル」セクション参照
-
-今後実装予定:
-
-- **永続化 (save / load)**: 上記 state model の延長で実装可能。フォーマットは `canvas.toJSON(['data'])` の出力 (= ObjectSnapshot[]) をそのまま使う。詳細は同セクション末尾「永続化」参照
-- **bbox 再計算の改善**: `pathOffset` 補正の精緻化
-- **複数アンカー同時選択**
-- **スムーズ / コーナーアンカーの変換**
-- **アンカードラッグ時のグリッドスナップ**
-
-新機能への指針:
-
-- 移動、選択、スナップのロジックは、`fabric.Text` 特有のフィールドではなく、**汎用的なプロパティ** (`target.left`, `target.top`, `target.angle` など) に対して記述してください。スナップハンドラが良いテンプレートになります。
-- `data` にテキスト専用のフィールドを追加しないでください（以前は `data.baselineY` がありましたが、この方針のために削除されました）。
-- Illustrator、Photoshop、FigmaなどのUX慣習を優先してください（例：Altキーによる一時的な制約解除、Cmd+Shift+Oによるアウトライン化など）。これらは明確な意図を持った操作体系です。
-
-## Undo/Redo + 永続化に向けた State / Viewport 分離モデル
-
-mojiplay の状態を 2 層に分けて扱う。**State = ドキュメント = 履歴 / 永続化対象**、**Camera = ephemeral = 履歴 / 永続化対象外** という分離を徹底することで、undo/redo は state の snapshot を丸ごと書き戻す `state-jump` semantic で実現でき、永続化はこの state を JSON 化するだけで得られる。差分計算 / 位置補正は不要。
-
-3D ソフト (Blender 等) / CAD / Figma などと同じ model。
-
-### 層構造
-
-```
-┌─────────────────────────────────────────────────┐
-│ State (ドキュメント層、永続化対象、undo 対象)   │
-│                                                 │
-│  - 全 object (path / text)                      │
-│  - 各 object の commands / left / top /          │
-│    scaleX / scaleY / angle / fill / fontFamily  │
-│  - 「絶対座標」(viewport の影響を受けない)      │
-│  - fabric では canvas.getObjects() の各          │
-│    fabric.Object に対応                          │
-└─────────────────────────────────────────────────┘
-                     │
-                     ▼ レンダリング時に viewport で変換
-                     │
-┌─────────────────────────────────────────────────┐
-│ Camera 層 (永続化対象外、undo 対象外)           │
-│                                                 │
-│  - Viewport: zoom / pan                          │
-│    (canvas.viewportTransform、Alt + ホイール)    │
-│  - Selection: どの object/anchor/handle が active│
-│  - Tool mode: 黒矢印 / 白矢印 / 文字 / pen 等    │
-│  - IText 編集中の入力 state                      │
-└─────────────────────────────────────────────────┘
-                     │
-                     ▼
-                  画面 (pixels)
-```
-
-fabric は最初からこの 2 層を分離して持っている (`canvas.objects` vs `canvas.viewportTransform`、レンダリング時に viewport を適用する)。我々は新たな state holder を別途持たず、**「state は履歴 / 永続化対象、camera はそうじゃない」というルールを徹底する**だけ。
-
-### Tool との関係 (入力 → State 変更の流れ)
-
-Tool は `src/usecases/tools/*` に置かれ **pure コード (fabric / DOM 不知)**。State の読み書きは `State` / `PathHandle` という interface 越しにのみ行う (interface は `core/state.ts`、実装は `renderer/state.ts` が encapsulate している)。CA 用語的には Tool は **Use Case の Interactor (PointerInput-driven)** であって Controller ではない (= raw DOM event を Tool method 呼出に翻訳しているのは `app.ts` の event dispatcher)。
-
-#### (a) ユーザー操作で State を変える流れ
-
-```
-                    User Input
-              (DOM mouse / keyboard /
-               toolbar / menu)
-                       │
-                       ▼
-        ┌──────────────────────────────────┐
-        │ Dispatcher (renderer/app.ts)     │
-        │  - mousedown を current tool に   │
-        │  - toolbar change → applyTo...   │
-        │  - menu → handleMenuAction       │
-        └────────────────┬─────────────────┘
-                         │
-                         ▼
-        ┌──────────────────────────────────┐
-        │ Tool (usecases/tools/*)     │
-        │   pure、fabric/DOM 不知           │
-        │                                   │
-        │   - SelectGroupTool               │
-        │   - SelectCharTool                │
-        │   - TextTool                      │
-        │   - PenAddTool                    │
-        │   - PenRemoveTool                 │
-        │                                   │
-        │ 入力 (PointerInput) を受け、操作を│
-        │ 計算し、副作用は host 経由で発火  │
-        └─┬─────────────────────────────┬──┘
-          │                             │
-   State / PathHandle                State.
-   (read state, set commands)         pushCommand
-          │                             │
-          ▼                             ▼
- ┌──────────────────────────────────────────────────────┐
- │ State (renderer/state.ts) — State interface 実装  │
- │                                                       │
- │  ┌────────────────────────┐  ┌────────────────────┐  │
- │  │ canvas (fabric.Canvas) │  │ History       │  │
- │  │  - objects             │  │  (Command 列、     │  │
- │  │    (= State の実体)     │  │   ring buffer)     │  │
- │  │  - viewportTransform   │  │                    │  │
- │  │    (= Camera 層)        │  │                    │  │
- │  └────────────────────────┘  └────────────────────┘  │
- │                                                       │
- │  private 関数群:                                      │
- │   - makePathHandle / makeObjectHandle (canonical 化)  │
- │   - captureObjectSnapshot                             │
- │   - writeSnapshotToCanvas / createObjectOnCanvas /    │
- │     removeObjectFromCanvas                            │
- │   - applyCommand / revertCommand                      │
- │   - fabric event hook (mouse:down / object:modified): │
- │     fabric-driven な transform を Command 化して       │
- │     historyStack.push する                            │
- └────────────────────┬─────────────────────────────────┘
-                      │
-                      ▼ canvas.objects がレンダリングされ、
-                        canvas.viewportTransform を適用
-                  画面 (pixels)
-```
-
-#### (b) Undo / Redo で State を戻す流れ
-
-```
-       Cmd+Z / Cmd+Shift+Z (DOM keyboard)
-                       │
-                       ▼
-        ┌──────────────────────────────────┐
-        │ handleUndo / handleRedo          │
-        │ (renderer/app.ts、1 行 wrapper)  │
-        └────────────────┬─────────────────┘
-                         │ state.undo() / state.redo()
-                         ▼
- ┌──────────────────────────────────────────────────────┐
- │ State (renderer/state.ts)                            │
- │                                                       │
- │   内部処理:                                           │
- │     1. historyStack.undo() / .redo() で Command 取得 │
- │     2. private な applyCommand(cmd) /                 │
- │        revertCommand(cmd) を呼ぶ                      │
- │     3. compound なら逆順 (revert) / 順次 (apply) で   │
- │        要素 Command 毎に処理                           │
- │     4. snapshot ヘルパで canvas.objects を更新         │
- │     5. canvas.requestRenderAll()                      │
- │                                                       │
- │   Phase A 規約: undo/redo は selection を能動的に     │
- │   触らない (camera 層は履歴対象外)                    │
- └────────────────────┬─────────────────────────────────┘
-                      │ canvas.objects 更新 → 再レンダリング
-                      ▼
-                  画面 (pixels)
-```
-
-#### 設計のキー: Tool は core / 副作用は host 経由のみ
-
-- **Tool は core/ レイヤ** に住む。fabric も DOM も知らないので `FakeState` / `FakePathHandle` を渡すだけで unit test 可能 (138 既存 cases)
-- **State 変更の副作用は host 経由** に限定:
-  - 中間更新 (drag 中) は `path.setPath(p: Path)` (PathHandle interface)
-  - drag finalize は `path.finalizeEdit()` で bbox 補正 (PathHandle interface)
-  - Command の push は `host.pushCommand(cmd)` (State interface)
-  - 選択変更は `host.setActiveSelection(handles)` (State interface)
-  - text 生成は `host.createTextAt(x, y, props)` (State interface)
-- **fabric を直接 import しない**ので、将来 fabric 以外の renderer に置き換えても tool は無修正で動く (理論上)
-- **state.ts に encapsulate**: contract (interface) は `core/state.ts` の `interface State`、実装は `renderer/state.ts` の `class State implements StateContract` (alias 経由)。State interface 実装 + PathHandle 実装 + History 内包 + fabric event hook 配線をまとめて担う。fabric の生 API は renderer/state.ts 内のみ。app.ts は state instance を経由して fabric を操作する
-
-#### Tool の責任分担
-
-| 操作 | 起点 use case | history への push |
-|---|---|---|
-| アンカー / ハンドル drag | `usecases/tools/select-char-tool.ts` | `pointerUp` で `host.pushCommand({ kind: 'objectChanged', ... })` |
-| アンカー追加 | `usecases/tools/pen-add-tool.ts` | 同上 |
-| アンカー削除 | `usecases/tools/pen-remove-tool.ts` | `pointerDown` (1 click 完結) で push |
-| 文字確定 | `usecases/tools/text-tool.ts` (host.createTextAt 経由)、commitIText が compound push | `commitIText` (`app.ts`) で N×`objectCreated` を `compound` で push |
-| object 移動 / scale / rotate | `usecases/tools/select-group-tool.ts` (実は no-op、fabric の自然挙動) | `app.ts` の `mouse:down` / `object:modified` hook で `e.action` 判別して push |
-| toolbar property 変更 | tool 経由ではなく直接 `applyToSelection` (`app.ts`) | 同上で before/after capture して push |
-| アウトライン化 | `usecases/menu/outline-selection.ts` → `state.outlineActiveTexts()` | State 内部で compound push (objectDeleted Text + objectCreated Path) |
-| Delete | `usecases/menu/delete-selection.ts` → `state.removeActiveObjects()` | State 内部で compound push (objectDeleted) |
-| 複製 | `usecases/menu/duplicate-selection.ts` → `state.duplicateActiveObjects()` | State 内部で compound push (objectCreated) |
-| 全選択 / Copy | `usecases/menu/select-all.ts` (history 対象外) / `usecases/menu/copy-selection-as-png.ts` (history 対象外) | push 無し |
-| 保存 / 開く | `usecases/menu/file-io-interactor.ts` (= class) | open 時に `state.applySnapshot` 内で `clearHistory` |
-
-つまり **drag 系操作 (anchor edit / pen) は tool 内で push、object transform は app.ts の event hook で push、selection-set 変更系 (delete / duplicate / outline) は State 高レベル method で push**。すべて `host.pushCommand` (= `historyStack.push`) を経由する単一経路。
-
-### 用語の対応: State / Camera と具体的な型・変数
-
-| AA の層 | 具体的な型 / 場所 |
-|---|---|
-| **State** (ドキュメント層) | `ObjectSnapshot[]` (= 全 object を snapshot 化したリスト) |
-| └ State の 1 要素 | **`ObjectSnapshot`** (`fabric.Object.toObject(['data'])` 出力の薄いラッパー) |
-| **Camera 層** (viewport) | `canvas.viewportTransform` |
-| **Camera 層** (selection) | 現状散らばっている (将来 `Selection` 抽象に集約、本ファイル末尾参照) |
-| **Camera 層** (tool mode) | `currentMode` 変数 (`app.ts`) |
-| **Camera 層** (IText 編集中 state) | fabric.IText の編集モード内部状態 |
-
-`ObjectSnapshot` は State 層の "原子" (= 1 object 分)、State 全体は `ObjectSnapshot` の集合。Command の `before` / `after` フィールドはこの `ObjectSnapshot`、永続化は `ObjectSnapshot[]` を JSON 化したもの。
-
-### 履歴対象 / 対象外の operation 一覧
-
-履歴対象 (state を変更する全操作):
-
-| 操作 | Command 種別 | 起点 |
-|---|---|---|
-| アンカー / ハンドル編集 (drag) | `objectChanged` | `select-char-tool.ts` |
-| アンカー追加 (pen) | `objectChanged` | `pen-add-tool.ts` |
-| アンカー削除 (pen) | `objectChanged` | `pen-remove-tool.ts` |
-| object 移動 / 拡大縮小 / 回転 | `objectChanged` (multi-select は `compound`) | `app.ts` の `mouse:down` / `object:modified` hook |
-| object プロパティ変更 (font / size / color / angle via toolbar) | `objectChanged` (multi-select は `compound`) | `applyToSelection` (`app.ts`) |
-| テキスト入力確定 (commitIText) | `compound` of N×`objectCreated` | `commitIText` (`app.ts`) |
-| アウトライン化 (Cmd+Shift+O) | `compound` of N×(`objectDeleted` Text + `objectCreated` Path) | `outlineSelection` (`app.ts`) |
-| object 削除 (Delete キー / メニュー) | `objectDeleted` (multi-select は `compound`) | `menuDeleteSelection` (`app.ts`) |
-
-履歴対象外 (camera 層 / ephemeral):
-
-- viewport zoom / pan (Alt + ホイール)
-- selection (どの object が active か) — Illustrator 形式
-- tool 選択 (どのモードが active か)
-- IText 編集中の文字入力 — commit で 1 step として履歴に積む。commit 前の入力単体は global Cmd+Z で `bypass` される
-
-### Command ADT
-
-```ts
-// src/core/history/types.ts
-import type { ObjectId, ObjectType } from '../object-id';
-
-// fabric.Object.toObject(['data']) の出力をそのまま使う薄いラッパー。
-// type / data / left / top / scaleX / scaleY / angle / fill / path / text 等を含むが、
-// TS 的には Record<string, unknown> として扱い、data フィールドだけ shape を保証する。
-export type ObjectSnapshot = Record<string, unknown> & {
-  data: { objectId: ObjectId; type: ObjectType };
-};
-
-export type Command =
-  | { kind: 'objectChanged'; objectId: ObjectId; before: ObjectSnapshot; after: ObjectSnapshot }
-  | { kind: 'objectCreated'; objectId: ObjectId; after:  ObjectSnapshot }
-  | { kind: 'objectDeleted'; objectId: ObjectId; before: ObjectSnapshot }
-  | { kind: 'compound';      commands: ReadonlyArray<Command> };
-
-export interface History {
-  push(cmd: Command): void;
-  undo(): Command | null;
-  redo(): Command | null;
-  canUndo(): boolean;
-  canRedo(): boolean;
-  clear(): void;
-  linearize(): ReadonlyArray<Command>;
-}
-```
-
-`switch` は `assertNever` で網羅性保証 (Phase B/C で kind が増えても対応漏れがコンパイル時に検出される)。
-
-### state-jump semantic と意図された制約
-
-undo/redo は **`ObjectSnapshot` を path に丸ごと書き戻す** だけの単純操作。差分計算 / 位置補正 / 対称性などの「fabric 座標モデルに依存した数学」を一切持たない。
-
-#### 状態モデルが完全である
-
-任意の path の視覚位置は
+なぜ書き戻しだけで足りるか: 任意の path の視覚位置は
 
 ```
 bboxCenterWorld = (left, top) + R(angle) · diag(scaleX, scaleY) · pathOffset
 ```
 
-で完全に決まる。ここで `pathOffset` (および `width` / `height`) は **`commands` から `_setPositionDimensions` で決定論的に算出される派生値**。したがって snapshot として保持すべき独立した state は **`{ commands, left, top, scaleX, scaleY, angle, fill, ... }`** だけで、これを書き戻せば視覚位置は一意に再現する。
+で完全に決まり、`pathOffset` / `width` / `height` は `commands` から `_setPositionDimensions` で決定論的に再算出できる。snapshot として持つべき独立 state は `{ commands, left, top, scaleX, scaleY, angle, fill, ... }` だけで、これを書き戻せば視覚位置は一意に再現する。
 
-実装上は `fabric.Object.toObject(['data'])` の出力を `ObjectSnapshot` としてそのまま使う (= path / text のフィールド全部含む)。
-
-#### 履歴外の操作の扱い
-
-camera 層 (selection / viewport / tool mode / IText 編集中) は履歴対象外なので、それらが undo/redo で巻き戻ることは無い。
-
-ただし state 層内でも **mojiplay の Phase A が "全 state 変更を履歴対象" を採用した結果**、Photoshop / Illustrator が tracked にしている操作 (move / rotate / scale / プロパティ変更 / 作成 / 削除 / アウトライン化) は全て履歴に乗る。これにより「履歴外の transform 変化を保つ」という暫定セマンティクスは不要になり、state-jump で完結する。
-
-### apply / revert 実装
-
-`History` は **「履歴を覚える」だけ**で fabric は触らない。Command を実際に canvas へ反映するのは `renderer/state.ts` 内 (private な `applyCommand` / `revertCommand`) の責務。同じく state.ts 内の private snapshot ヘルパ (`writeSnapshotToCanvas` / `createObjectOnCanvas` / `removeObjectFromCanvas`) を呼ぶ。
+### Command ADT (`core/history/types.ts`)
 
 ```ts
-// renderer/state.ts 内 (class State の private メソッド)
-private applyCommand(cmd: Command): void {
-  switch (cmd.kind) {
-    case 'objectChanged': this.writeSnapshotToCanvas(cmd.after); break;
-    case 'objectCreated': this.createObjectOnCanvas(cmd.after); break;
-    case 'objectDeleted': this.removeObjectFromCanvas(cmd.objectId); break;
-    case 'compound':      cmd.commands.forEach(c => this.applyCommand(c)); break;
-    default: { const _: never = cmd; return _; }
-  }
-  this.canvas.requestRenderAll();
-}
-
-private revertCommand(cmd: Command): void {
-  switch (cmd.kind) {
-    case 'objectChanged': this.writeSnapshotToCanvas(cmd.before); break;
-    case 'objectCreated': this.removeObjectFromCanvas(cmd.objectId); break;
-    case 'objectDeleted': this.createObjectOnCanvas(cmd.before); break;
-    case 'compound':      [...cmd.commands].reverse().forEach(c => this.revertCommand(c)); break;
-    default: { const _: never = cmd; return _; }
-  }
-  this.canvas.requestRenderAll();
-}
+type Command =
+  | { kind: 'objectChanged'; objectId: ObjectId; before: ObjectSnapshot; after: ObjectSnapshot }
+  | { kind: 'objectCreated'; objectId: ObjectId; after:  ObjectSnapshot }
+  | { kind: 'objectDeleted'; objectId: ObjectId; before: ObjectSnapshot }
+  | { kind: 'compound';      commands: ReadonlyArray<Command> };
 ```
 
-`compound` は **逆順で revert** (= apply の逆順序で打ち消す)。
+履歴対象 = state を変える全操作: アンカー / ハンドル編集 (`select-char-tool`)、アンカー追加 / 削除 (`pen-add-tool` / `pen-remove-tool`)、object 移動 / 拡縮 / 回転 (app.ts の `mouse:down` + `object:modified` hook)、toolbar property 変更 (`applyToSelection`)、文字確定 (`commitIText` の N×`objectCreated` を `compound`)、アウトライン化 (`compound` of N×(`objectDeleted` Text + `objectCreated` Path))、削除 / 複製。
 
-#### snapshot ヘルパ (state.ts 内 private)
+履歴対象外 = camera 層 (viewport zoom/pan、selection、tool mode、IText 編集中の文字入力。commit 1 回で 1 step として履歴に乗る)。
 
-state.ts 内に閉じた private 関数群が ObjectSnapshot ⇔ fabric.Object の境界変換を担う:
-
-- **`captureObjectSnapshot(obj)`** = `obj.toObject(['data'])` (= 1 行ラッパー)。app.ts の高レベルハンドラ向けに同名 method を public にも公開している
-- **`writeSnapshotToCanvas(snapshot)`** = type に応じて per-property に書き戻し:
-  - **path**: `(p as any).path = snapshot.path` で commands 配列を直接代入 (fabric 内部の正規化を回避) → `set({ left, top, scaleX, scaleY, angle, fill })` で transform / style → `_setPositionDimensions` で width / height / pathOffset を再算出
-  - **text / i-text**: `set({ text, left, top, scaleX, scaleY, angle, fill, fontFamily, fontSize, fontWeight, fontStyle })` で一括
-  - 最後に `data` を snapshot から restore (objectId / type は immutable だが groupId 等の custom field を保持)
-- **`createObjectOnCanvas(snapshot)`** = type に応じて手動で `new fabric.Path(pathData, options)` / `new fabric.Text(text, options)`、`canvas.add` で追加。`fabric.util.enlivenObjects` は同期保証が無いため不採用 (将来 image 等で必要になったら検討)
-- **`removeObjectFromCanvas(objectId)`** = `resolveObjectById` で fabric.Object を解決して `canvas.remove`
-- **`resolveObjectById(id)`** = `canvas.getObjects().find(o => o.data?.objectId === id)`
-
-### Tool-driven vs fabric-driven の区別 (重要)
-
-object:modified イベントは **2 つの起点**から飛んでくる:
-
-1. **fabric-driven**: 黒矢印モードで object を drag / scale / rotate したとき、fabric が internal で発火 (`e.action` = 'drag' / 'scale' / 'rotate' 等が入る)
-2. **tool-driven**: 白矢印 (アンカー / ハンドル編集) / pen tool が `finalizeDrag` 内で `canvas.fire('object:modified', { target: p })` を呼ぶ (action 無し)
-
-両者は**まとめて Command 化したくない**。fabric-driven は global handler で `objectChanged` Command を作るが、tool-driven は **tool 自身が `host.pushCommand` で既に積んでいる** ため、global handler が処理すると **二重 push** になる。
-
-これを区別するために **`e.action` の有無** を見る:
-
-```ts
-// src/renderer/app.ts (object:modified hook)
-canvas.on('object:modified', (e) => {
-  // ... 共通ログ ...
-  const action = (e as any).action;
-  if (!action) return;  // tool-driven な finalizeDrag からの fire は無視
+### 重要な設計ポイント (落とし穴含む)
 
-  // fabric-driven の transform を Command 化
-  // ActiveSelection は子毎に Command 生成 → compound にまとめる
-  ...
-});
-```
+1. **state-jump 一貫採用**: undo/redo は snapshot を丸ごと書き戻し。差分 / 位置補正ロジックを持たない
+2. **State (= canvas.objects) と Camera (= viewportTransform 他) を物理的に分離**: history も persistence も state のみが対象
+3. **`ObjectSnapshot` は `fabric.Object.toObject(['data'])` 出力**: 永続化フォーマットと自動一致 (format 変換不要)
+4. **`History` は fabric を知らない**: pure data 責務。fabric への反映は `renderer/state.ts` 内 private な `applyCommand` / `revertCommand` が担当
+5. **`compound` は逆順 revert**: `[a, b, c]` apply の打ち消しは `[c, b, a]` の順で各々 revert
+6. **type が変わる操作は新規 ID を発行**: outline 化 (Text→Path) は同一 identity を維持せず、`objectDeleted`(Text) + `objectCreated`(Path) の compound として扱う
+7. **`e.action` の有無で fabric-driven / tool-driven を区別**: `object:modified` には 2 経路あり。fabric-driven (黒矢印 drag/scale/rotate) は `e.action` あり、tool-driven (`finalizeDrag` 内 `canvas.fire('object:modified', { target: p })`) は `e.action` 無し。app.ts の hook は `e.action` 無しを skip して二重 push を防ぐ (= tool 自身が既に `pushCommand` 済み)
+8. **path 書き戻しの `path` 配列は `set()` 経由ではなく直接代入**: fabric 内部正規化を回避し、`_setPositionDimensions` で派生値再算出経路を確実に通す
+9. **before/after の no-op skip**: tool 経路で drag 終了時、`JSON.stringify(before) === JSON.stringify(after)` なら push しない (= 0-delta drag は履歴に乗らない)
+10. **canonical handle**: `getActiveObjects()` / `getAllObjects()` は同じ underlying `fabric.Object` には同じ `ObjectHandle` instance を返す (WeakMap キャッシュ)。`SelectGroupTool` の `alreadyExpanded` 判定は identity (`===`) に依存するため、これを破ると selection event 再発火で無限再帰し fabric の drag state が破壊される
 
-#### 前後 snapshot の捕捉
+### Tool / Use Case の責任分担
 
-fabric-driven の場合:
+| 操作 | 起点 | history push |
+|---|---|---|
+| アンカー / ハンドル drag | `tools/select-char-tool` | `pointerUp` で tool 自身が push |
+| アンカー追加 / 削除 | `tools/pen-add-tool` / `pen-remove-tool` | tool 自身が push |
+| object 移動 / scale / rotate | fabric の自然挙動 | `app.ts` の `object:modified` hook で `e.action` 判別して push |
+| toolbar property 変更 | `applyToSelection` (app.ts) | 同上 (before/after capture) |
+| 文字確定 (commitIText) | `commitIText` (app.ts) | N×`objectCreated` を compound |
+| アウトライン / 削除 / 複製 | `usecases/menu/*` | State 高レベル method 内で compound push |
+| 全選択 / Copy | `usecases/menu/select-all` / `copy-selection-as-png` | history 対象外 |
+| 保存 / 開く | `usecases/menu/file-io-interactor` | open 時に `state.applySnapshot` 内で `clearHistory` |
 
-- `mouse:down`: `e.target` が fabric.Object なら、その snapshot を `transformBeforeSnapshots: Map<ObjectId, ObjectSnapshot>` に保存。ActiveSelection なら子毎に保存
-- `object:modified`: 上記 Map から取り出して `before`、`captureObjectSnapshot(obj)` で `after`、`objectChanged` Command を構築 (multi なら `compound`)
+すべて `state.pushCommand` 経由の単一経路。
 
-tool-driven の場合は tool 内部で:
+### IText 編集中の特殊扱い
 
-- `pointerDown`: `path.captureForHistory()` で before snapshot を tool ローカルに保持
-- `pointerUp`: `path.finalizeEdit()` 後に `path.captureForHistory()` で after を取得、`host.pushCommand({ kind: 'objectChanged', ... })` を呼ぶ
+- IText 編集中 (`active.isEditing === true`) は global Cmd+Z handler で **bypass** (= 何もしない)
+- 編集 commit (Enter / Esc / クリックアウェイ) → `commitIText` 内で N×`objectCreated` を 1 個の compound Command として push
+- IText 自体は履歴対象外 (ephemeral): `objectDeleted` を積まない。undo すると「commit 直前」 = 「これらの char が無い状態」に戻る
+- 編集中の文字単位 undo は実装しない (fabric.IText は内蔵 undo を持たない、ユーザーは backspace 等で対処)
 
-`PathHandle` interface は **`getId()` と `captureForHistory()`** を持つ (`core/state.ts`)。実装は `renderer/state.ts` 内 private な `makePathHandle(p: fabric.Path)` で `data.objectId` 取り出しと `toObject(['data'])` を返す薄いラッパー。
+### ID と type の分離
 
-### Tool 側の Command 構築
+`ObjectId` は **pure ULID** (branded string)、type 情報は `data.type` に分離。両者を ID 文字列に混在させない (= ULID の lexicographic sort 性質保持、単一責任)。`ensureObjectId(obj, type)` で ID 発行と同時に `data.type` 確定、以後 immutable。type が変わる操作は新規 ID 発行 (上述 #6)。実装は `core/object-id.ts` の `monotonicFactory` (= drag finalize や複製で同 ms に複数発行されるため monotonic 必須)。
 
-各 tool の `pointerDown` で `beforeSnapshot` を private field に保持し、`pointerUp` で `host.pushCommand` する形:
+### `History` のデータ構造
 
-```ts
-// src/usecases/tools/select-char-tool.ts (anchor / handle drag)
-onPointerDown(e, host): PointerHandled {
-  const path = host.getActivePath();
-  // ... hit test ...
-  this.dragPath = path;
-  this.beforeSnapshot = path.captureForHistory();
-  return 'consumed';
-}
+固定長 ring buffer (`Command[max]`) + 論理 cursor。push 時に redo 列を切り捨て、上限超過は head ローテーションで O(1) で古い側を捨てる。実装 `core/history/history.ts`、テスト `test/history.test.ts` (12 cases、wrap-around / overflow / undo→redo / edge case 含む)。履歴上限はハードコード `max: 100`。
 
-onPointerUp(_e, host): void {
-  const p = this.dragPath; const before = this.beforeSnapshot;
-  this.drag = null; this.dragPath = null; this.beforeSnapshot = null;
-  p.finalizeEdit();
-  if (before) {
-    const after = p.captureForHistory();
-    if (JSON.stringify(after) !== JSON.stringify(before)) {  // no-op drag は skip
-      host.pushCommand({ kind: 'objectChanged', objectId: p.getId(), before, after });
-    }
-  }
-}
-```
+### 設計ファイル参照
 
-`pen-add-tool.ts` / `pen-remove-tool.ts` も同パターン (それぞれ pointerDown 直後 / 削除直前で before を捕捉)。`JSON.stringify` での before/after 比較は no-op drag を skip するための安価なチェック (fabric の toObject 出力は実用上決定論的)。
+- `core/state.ts` — State interface (抽象契約)
+- `renderer/state.ts` — 実装 (fabric.Canvas を encapsulate、private に snapshot 境界変換 + applyCommand/revertCommand + fabric event hook)
+- `core/history/types.ts` / `history.ts` — Command ADT + ring buffer
+- `core/object-id.ts` — ULID
 
-### IText 編集中の挙動
+## 永続化 (.mply)
 
-- IText 編集中 (`active.isEditing === true`) は global Cmd+Z handler で **bypass し、何もしない**
-- 編集 commit (Enter / Esc / クリックアウェイ) → `commitIText` 内で **「N 個の Text 作成」を 1 個の compound Command として push**
-- IText 自体は履歴対象外 (ephemeral): `objectDeleted` を積まない。undo すると「commit 直前の canvas 状態」 = 「これらの char が無い状態」に戻る
-- 編集中の文字入力に対する細かい undo は実装しない (fabric.IText は内蔵 undo を持たないため、ユーザーは backspace 等で対処する)
-
-### Toolbar property change
-
-`applyToSelection(props)` (`app.ts`) は active object 群に `obj.set(props)` で書き込むが、各 object について before / after snapshot を捕捉して `objectChanged` Command を push (multi-select は `compound`):
-
-```ts
-function applyToSelection(props): void {
-  const active = canvas.getActiveObjects();
-  const cmds: Command[] = [];
-  for (const obj of active) {
-    const id = obj.data?.objectId;
-    if (!id) continue;
-    const before = captureObjectSnapshot(obj);
-    obj.set(props);
-    const after = captureObjectSnapshot(obj);
-    if (JSON.stringify(after) !== JSON.stringify(before)) {
-      cmds.push({ kind: 'objectChanged', objectId: id, before, after });
-    }
-  }
-  canvas.requestRenderAll();
-  if (cmds.length === 1) historyStack.push(cmds[0]);
-  else if (cmds.length > 1) historyStack.push({ kind: 'compound', commands: cmds });
-}
-```
-
-font family / size / color / rotation 全部この経路。
-
-### `History` のデータ構造: ring buffer + cursor
-
-固定長の循環バッファ (`Command[max]`) と論理 cursor で実装する:
-
-- **state**: `buf` (固定長 array) / `head` (logical index 0 が指す物理 index) / `size` (有効エントリ数) / `cursor` (最後に apply 済みの logical index、-1 = 何も無い)
-- **アクセス**: 物理 index = `(head + logicalIndex) % max`
-- **push**:
-  - `size = cursor + 1` で redo 列を切り捨て
-  - `size < max` なら末尾に書き込んで `size++; cursor++`
-  - `size === max` なら `buf[head]` を上書きし `head = (head + 1) % max` (古い側を捨てる、O(1))
-- **undo**: `cursor--` のみ (バッファは不変)
-- **redo**: `cursor++` のみ (バッファは不変)
-
-debug / 永続化のための `linearize()` ヘルパで論理順の Command 列を返す。
-
-選定理由: 上限超過時の旧履歴破棄が O(1)、メモリが固定で predictable、mod 計算コストは無視できる範囲。
-
-実装: `src/core/history/history.ts`、テストは `test/history.test.ts` (12 ケース、wrap-around / 上限超過 / undo→redo / 各 edge case)。
-
-### ID と type の分離 (重要設計判断)
-
-**ObjectId は pure ULID (branded string) として保持**し、**type 情報は別フィールド (`data.type`) に置く**。両者を ID 文字列に混在させない。
-
-理由:
-
-- ULID の lexicographic sort 性質 (時系列順) を完全保持。将来 SQLite に保存する場合の B-tree index 効率と直結
-- ID は identity に専念、type は type に専念 (単一責任)
-- `fabric.Object.data` のシリアライズ / Map のキー / 等価比較 (`a === b`) すべて plain string として自然に動く
-- 「prefix で型判別」が欲しい log 用途は formatter ヘルパで対応 (後述 `fmtObj`)
-
-type と ID の関係:
-
-- `ensureObjectId(obj, type)` で ID を発行する瞬間に `data.type` も確定
-- 一度確定した `data.type` は **immutable** (object の lifecycle 中に書き換えない)
-- type が変わる操作 (例: outline 化 = `fabric.Text` → `fabric.Path`) は **「古い object を destroy + 新しい object を create」** として扱う。同じ identity を維持しない (= compound Command の `objectDeleted` + `objectCreated`)
-
-### `ObjectId` infra
-
-ULID 生成は `ulid` パッケージの `monotonicFactory` を `core/object-id.ts` 内で直接呼ぶ (薄いラッパーモジュールは作らない — ライブラリの API は十分シンプル、indirection の価値が無い)。monotonic 化は **必須** (drag finalize や複製操作で同一 ms に複数発行が起きるため)。仕様: https://github.com/ulid/spec
-
-```ts
-// src/core/object-id.ts
-import { monotonicFactory } from 'ulid';
-
-const newUlid = monotonicFactory();
-
-export type ObjectId = string & { readonly __brand: 'ObjectId' };
-export type ObjectType = 'text' | 'path';
-
-export interface IdentifiableData {
-  objectId?: ObjectId;
-  type?:     ObjectType;
-}
-
-export function ensureObjectId(
-  obj: { data?: IdentifiableData },
-  type: ObjectType,
-): ObjectId {
-  const data = obj.data ?? (obj.data = {} as IdentifiableData);
-  if (!data.objectId) {
-    data.objectId = newUlid() as ObjectId;
-    data.type = type;
-  }
-  return data.objectId;
-}
-```
-
-`commitIText` / `outlineTextToPath` の object 生成箇所で `ensureObjectId(obj, 'text' | 'path')` を呼んで ID と type を確保する。
-
-### log フォーマッタ `fmtObj`
-
-```ts
-// src/renderer/logger.ts
-export function fmtObj(obj: fabric.Object | null | undefined): string {
-  if (!obj) return '<null>';
-  const d = (obj as any).data;
-  if (d?.type && d?.objectId) {
-    return `${d.type}:${String(d.objectId).slice(0, 8)}`;  // 例: "text:01HK7A12"
-  }
-  return `<noid:${(obj as any).type ?? '?'}>`;
-}
-```
-
-**規律**: log で fabric.Object を識別したい場合は必ずこの関数を経由する (生 ULID を log に出さない)。
-
-`[history] push kind=...` / `[history] undo kind=...` / `[history] redo kind=...` の各経路で動作確認用 log が出ているので、debug 時はこれらを見ると undo/redo の動きが追える。`historyStack.linearize()` を console から呼べば履歴全体も俯瞰できる。
-
-### 全体フロー (3 経路)
-
-#### (1) push 経路: ユーザーが操作したとき
-
-**fabric-driven (黒矢印 drag / scale / rotate)**:
-
-```
-mouse:down (fabric)
-   ↓
-transformBeforeSnapshots に object 毎の snapshot を保存
-   ↓
-[ユーザー drag]
-   ↓
-object:modified (fabric, e.action = 'drag' 等)
-   ↓
-transformBeforeSnapshots から before を取り出し
-captureObjectSnapshot で after
-   ↓
-historyStack.push (single または compound)
-```
-
-**tool-driven (白矢印 / pen-add / pen-remove / 文字確定 / outline / delete / toolbar)**:
-
-```
-Tool が直接 host.pushCommand(cmd) を呼ぶ
-(canvas は既に "after" 状態に live 更新済みなので apply の二重呼び出しは不要)
-```
-
-#### (2) undo 経路: Cmd/Ctrl+Z
-
-```
-keydown (Cmd/Ctrl+Z, IText 編集中なら bypass)
-   ↓
-handleUndo()
-   ↓
-const cmd = historyStack.undo()
-   ↓
-revertCommand(canvas, cmd)
-   ↓
-canvas.requestRenderAll() (revertCommand 内)
-```
-
-#### (3) redo 経路: Cmd/Ctrl+Shift+Z
-
-```
-keydown (Cmd/Ctrl+Shift+Z)
-   ↓
-handleRedo()
-   ↓
-const cmd = historyStack.redo()
-   ↓
-applyCommand(canvas, cmd)
-```
-
-### app.ts での controller 配線
-
-```ts
-// src/renderer/app.ts (要点抜粋)
-const state = new State(canvas, { historyMax: 100 });
-
-function handleUndo(): void { state.undo(); }
-function handleRedo(): void { state.redo(); }
-
-// IText 編集中は browser のテキスト undo に任せる (fabric.IText は内蔵 undo 無しなので
-// 実質「edit 中は何も起きない」が、global Cmd+Z で commit 前 IText が消えるのを避ける)
-document.addEventListener('keydown', (e) => {
-  const active = canvas.getActiveObject() as fabric.IText | null;
-  if ((active as any)?.isEditing) return;
-  const meta = e.ctrlKey || e.metaKey;
-  if (!meta) return;
-  if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
-  if ((e.key === 'Z') || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); handleRedo(); }
-}, true);
-```
-
-`state` は State interface を実装しているので、各 tool には `state` を直接渡す (`tool.onPointerDown(input, state)` など)。tool が history を直接持たず State 越しに `pushCommand` で push することで、tool 側を fabric / history 実装から切り離す。
-
-### ファイル構成 (実装後)
-
-```
-src/core/
-├── object-id.ts             ObjectId / ObjectType / ensureObjectId
-│                            (ulid パッケージの monotonicFactory を直接利用)
-├── state.ts                 State interface (= 抽象契約)。Tool / app / menu の共通
-│                            操作 IF + PathHandle / ObjectHandle / PathSnapshot /
-│                            TextCreateProps を集約。fabric / DOM 不知
-└── history/
-    ├── types.ts             Command ADT + ObjectSnapshot + History interface
-    └── stack.ts             ring buffer + cursor 実装
-
-src/renderer/
-├── state.ts                 `class State implements StateContract` (alias)。core/state.ts
-│                            の State 契約に対する fabric.Canvas を内包する concrete 実装。
-│                            History 操作 / 永続化 stub / 公開 captureObjectSnapshot
-│                            ヘルパ。private に snapshot 境界変換、applyCommand /
-│                            revertCommand、History 参照、fabric event hook
-│                            (mouse:down / object:modified、arrow メソッドで
-│                            `this` binding を保つ) を全て持つ。fabric の生 API は
-│                            このファイル内に閉じ込め
-├── logger.ts                既存 + fmtObj() ヘルパ
-└── app.ts                   state instance 作成 (`new State(canvas)`)、DOM 入力
-                             ディスパッチ、Cmd+Z バインド、commitIText /
-                             outlineSelection / menuDelete / applyToSelection の
-                             Command 化 (state.captureObjectSnapshot + state.pushCommand
-                             を経由)
-
-src/usecases/tools/
-├── tool-interface.ts        Tool / ToolDescriptor / PointerInput / MovingTarget /
-│                            CanvasMouseDownInput (Tool method は State を引数で受ける)
-├── select-char-tool.ts      pointerDown で before、pointerUp で after を捕捉して push
-├── pen-add-tool.ts          同上
-└── pen-remove-tool.ts       同上 (1 click 操作なので pointerDown 直前で before)
-
-src/usecases/menu/
-├── select-all.ts            stateless free function (= state.selectAllObjects 経由)
-├── delete-selection.ts      同上 (= state.removeActiveObjects)
-├── duplicate-selection.ts   同上 (= state.duplicateActiveObjects with offset)
-├── outline-selection.ts     同上 (= state.outlineActiveTexts) + UIPort で結果通知
-├── copy-selection-as-png.ts 同上 (= state.exportActiveAsPngDataUrl + ui.copyImageToClipboard)
-└── file-io-interactor.ts    stateful class (currentPath / savedToken / saving / listeners)
-                             constructor DI で State / DocumentRepository / UIPort を受け取る
-
-src/usecases/
-└── ui-port.ts               UIPort interface (output port、両 trigger 共通)
-
-src/repository/
-├── document-repository.ts             DocumentRepository interface (port)
-└── file-system-document-repository.ts FileSystemDocumentRepository class (concrete adapter、IPC + atomic write + schema validation)
-
-test/
-├── object-id.test.ts             ensureObjectId の挙動 (6 cases)
-├── history.test.ts         History (12 cases、wrap-around / overflow / undo→redo 含む)
-├── tools-*.test.ts               各 Tool の挙動 (FakeState / FakePathHandle 経由)
-└── file-io-interactor.test.ts    FileIOInteractor (FakeState / FakeRepo / FakeUIPort で DI、19 cases)
-```
-
-### 重要な設計ポイント (まとめ)
-
-1. **state-jump semantic を一貫採用**: undo/redo は snapshot を丸ごと書き戻す。差分計算 / 位置補正ロジックは持たない
-2. **state と camera を物理的に分離**: state は `canvas.objects`、camera は `canvas.viewportTransform` 他。history も persistence も state のみが対象
-3. **`ObjectSnapshot` は `fabric.Object.toObject(['data'])` 出力**: 自動的に永続化フォーマットと一致する (後付けの format 変換が要らない)
-4. **`History` は fabric を知らない**: pure data 責務に専念。fabric への反映は adapter のみ
-5. **switch は `assertNever` で網羅性保証**: Phase B/C で Command kind が増えたとき対応漏れがコンパイルエラーになる
-6. **camera (viewport / selection / tool mode / IText 編集中) は history に積まない**: 変更しても history に影響しない
-7. **compound command は逆順 revert**: `[a, b, c]` を apply したら revert は `[c, b, a]` の順で各々 revert
-8. **type が変わる操作は新規 ID を発行する**: outline 化 (Text→Path) は同一 identity を維持せず、`objectDeleted`(Text) + `objectCreated`(Path) の compound として扱う
-9. **`e.action` の有無で fabric-driven / tool-driven を区別**: 二重 push を防ぐ (tool-driven は tool 自身が pushCommand 済み)
-10. **path 書き戻しの `path` 配列は `set()` 経由ではなく直接代入**: fabric の内部正規化を回避し、`_setPositionDimensions` で派生値を再算出する経路を確実に通す
-
-### Selection 抽象互換性のための規約 (実装方針として継続)
-
-将来 Selection 抽象 (本ファイル末尾の「将来的な構造改善」参照) を導入したとき書き直さなくて済むよう以下を遵守:
-
-1. **Command は ID ベース**: `fabric.Object` 参照ではなく `ObjectId` で対象を表す (実装済)
-2. **ID → fabric.Object の解決を 1 箇所に閉じ込める**: `renderer/state.ts` 内 private な `resolveObjectById` のみが解決責任を持つ
-3. **undo/redo は selection を能動的に切り替えない**: undo した object が active になっていれば視覚的に変化が見える、それで足りる
-4. **新しい選択経路を追加するなら host 経由を徹底**: `active.type === 'activeSelection'` 等の fabric 文字列タグ依存を新規に増やさない
-
-### テスト戦略
-
-`core/` 配下は pure data なので unit test で完結:
-
-- **`core/object-id.ts`**: ensureObjectId が同じ obj に 2 回呼ばれても同じ ID を返す、type は ID 確定時に同時に書かれる、type 引数違いでも変わらない、別 obj には別 ID (6 cases)。ULID 生成自体のテストは書かない (= ライブラリ側の責務、自前で再追試しても資産価値ゼロ)
-- **`core/history/`**: History の基本性質 (push 後 canUndo true、新 push で redo 列クリア、上限超過時 overwrite で古い側が落ちる、wrap-around 跨ぎでの linearize、空 / 部分 / フル状態の各 edge case)、`new History({ max: < 1 })` がエラー (12 cases)
-
-`select-char-tool.ts` 等のツール側は `FakeState` / `FakePathHandle` 経由で existing test (155 通過) が引き続き成立。FakeState に `pushCommand` を追加、FakePathHandle に `getId` / `captureForHistory` を追加した。
-
-`applyCommand` / `revertCommand` の fabric への副作用部分 (`writeSnapshotToCanvas` 等) は Phase A では integration 化せず目視確認に留める。state-jump semantic なので test 観点は「snapshot の値が path に正しく書き戻されるか」「`_setPositionDimensions` で派生値が再算出されるか」「`new fabric.Path/Text` で正しく object が復元されるか」のみ。
-
-### UI スコープ
-
-- Cmd/Ctrl+Z = undo、Cmd/Ctrl+Shift+Z = redo (capture phase で fabric / browser より先に取る)
-- IText 編集中 (`active.isEditing`) は global handler を bypass
-- メニューの「編集 > 元に戻す / やり直す」も同 handler に接続 (`handleMenuAction` の `'undo'` / `'redo'` ケース)
-- 履歴上限はハードコード `max: 100`。設定 UI は将来の話
-
-### 永続化 (= 保存 / 開く (.mply) 実装済)
-
-state model からほぼ機械的に得られる: snapshot 形式が `fabric.Object.toObject(['data'])` の出力と一致しているので format の後付け設計が不要。
-
-#### ファイルフォーマット
+拡張子 `.mply`、形式:
 
 ```jsonc
 {
@@ -894,39 +201,29 @@ state model からほぼ機械的に得られる: snapshot 形式が `fabric.Obj
 }
 ```
 
-拡張子は **`.mply`**。`State.toSnapshot()` (`renderer/state.ts`) が出力、`State.applySnapshot(s)` が取り込む。`applySnapshot` 内部で `canvas.clear()` → `loadFromJSON` (async) → viewport reset → `clearHistory()` の順で完了まで Promise が resolve しない (= ファイル読み込みは必ず await すること)。
+`State.toSnapshot()` 出力、`State.applySnapshot(s)` 取り込み。`applySnapshot` は内部で `canvas.clear()` → `loadFromJSON` (async) → viewport reset → `clearHistory()` の順で完了まで Promise が resolve しない (= 必ず await すること)。
 
-#### CA レイヤ配線
+### CA レイヤ配線
 
 ```
-keydown (Cmd+S / Cmd+O)
-  ↓ raw event
-app.ts の dispatcher (= Controller)
-  ↓ fileIO.saveCurrent() / openFile()
-FileIOInteractor (usecases/menu/file-io-interactor.ts、Use Case)
-  ↓ DI: state, repo, ui (constructor 経由)
-  ├ state.toSnapshot() / state.applySnapshot()  (← Presenter / Frameworks 接触は State 内部)
-  ├ repo.save(snapshot, currentPath) / repo.load()  (← Driven adapter)
-  └ ui.showToast / ui.confirmDiscard / ui.setNativeDirty  (← Output Port)
-       ↓ ElectronUIPort (renderer/ui-port-impl.ts、UIPort concrete)
-       ↓ FileSystemDocumentRepository (repository/、DocumentRepository concrete)
-            ↓ window.electronAPI.saveMply / openMply (preload)
-            ↓ IPC
-            ↓ main.ts (atomic write: tmp + rename)
+keydown (Cmd+S/O) → app.ts dispatcher → fileIO.saveCurrent/openFile()
+                    └ FileIOInteractor (usecases/menu/, DI: state/repo/ui)
+                         ├ state.toSnapshot/applySnapshot   (Presenter/Frameworks 接触は State 内)
+                         ├ repo.save/load                    (Driven adapter)
+                         └ ui.showToast/confirmDiscard/...   (Output Port)
+                              └ ElectronUIPort / FileSystemDocumentRepository
+                                   └ window.electronAPI.saveMply/openMply
+                                        └ IPC → main.ts (atomic write)
 ```
 
-FileIOInteractor は **fabric / DOM / Electron 不知**。`FakeState` / `FakeRepo` / `FakeUIPort` を constructor に注入して unit test 可能 (= `test/file-io-interactor.test.ts`、19 cases)。
+`FileIOInteractor` は fabric / DOM / Electron 不知。`State` は real、`Repository` / `UIPort` は外部 boundary なので test 時に Fake を inject (= `test/file-io-interactor.test.ts`)。
 
-#### dirty tracking (opaque token 方式)
+### 落とし穴
 
-State に `getHistoryToken(): number` を追加。`pushCommand` / `undo` / `redo` / `clearHistory` / `applySnapshot` の末尾で increment。FileIOInteractor は `savedToken: number | null` を field で持ち、save 成功時に「snapshot 採取時点の token」を記録。dirty 判定は `state.getHistoryToken() !== savedToken`。
-
-`State.onMutate(cb)` で mutation 通知を購読、UI title bar の `●` マークと main process への dirty 通知 (close guard 用) に使う。
-
-**重要 (落とし穴)**: `savedToken` capture のタイミングは IPC `await` の **前** (= snapshot 採取と同 sync block)。`await` 後に `state.getHistoryToken()` を再取得すると、await 中にユーザが編集していた場合に「実際は dirty なのに savedToken が新 token を採用」して silent 不整合になる。`saveCurrent` 内では:
+**1. `savedToken` capture timing**: IPC `await` の **前** に capture (snapshot と同 sync block で固定)。await 後に再取得すると await 中の編集を見逃して dirty=false になる silent bug:
 
 ```ts
-const tokenAtSnapshot = state.getHistoryToken();  // ← block A
+const tokenAtSnapshot = state.getHistoryToken();  // ← block A (sync)
 const snapshot        = state.toSnapshot();
 const result = await repo.save(snapshot, currentPath);  // ← await
 if (!result.ok) return false;
@@ -935,9 +232,7 @@ this.savedToken = tokenAtSnapshot;  // ← block B、再取得しない
 
 JS は single-thread なので block A 中はユーザ入力が割り込めず、snapshot と token は必ず一致した瞬間状態を捕まえられる。
 
-#### atomic write (上書き保存)
-
-main.ts の `save-mply` IPC handler は **必ず tmp + rename パターン**で書き出す:
+**2. atomic write**: `save-mply` IPC handler は **必ず tmp + rename** で書き出す:
 
 ```ts
 const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
@@ -945,217 +240,123 @@ fs.writeFileSync(tmpPath, json, 'utf-8');
 fs.renameSync(tmpPath, filePath);
 ```
 
-POSIX `rename(2)` / Windows `MoveFileEx(MOVEFILE_REPLACE_EXISTING)` は同一ファイルシステム内で atomic = 旧ファイルか新ファイルのいずれかしか観測されない。`fs.writeFileSync(filePath, ...)` を直接呼ぶと書き込み中のクラッシュ / 電源断 / disk full で**既存ファイルが半端な状態で破壊される**リスクがある。失敗時は tmp を unlink で片付ける。
+直接 `fs.writeFileSync(filePath, ...)` だと書き込み中のクラッシュ / 電源断 / disk full で既存ファイルが半端な状態で破壊される。POSIX `rename(2)` / Windows `MoveFileEx(MOVEFILE_REPLACE_EXISTING)` は atomic = 旧ファイルか新ファイルのいずれかしか観測されない。失敗時は tmp を unlink で片付ける。
 
-#### unsaved changes 警告 (close guard)
+**3. close guard (unsaved changes 警告)**: `win.on('close')` は同期で `e.preventDefault()` が必要なため 2 段階フロー: main 側で `isDirty` 保持、close 時に renderer に IPC `app-close-request` → renderer が決断 (`destroy` / `cancel`) を `respondAppClose` で返す。詳細は `src/main.ts` の `wireCloseGuard`。
 
-dirty 状態で「開く」/ Window 閉じ要求 → 3 択 dialog (保存 / 保存しない / キャンセル)。Electron の `win.on('close')` は同期で `e.preventDefault()` する必要があるため、main 側で `isDirty` を保持して close 時に renderer に IPC `app-close-request` を投げ、renderer が決断 (`destroy` / `cancel`) を `respondAppClose` で返す 2 段階フロー。
+### dirty tracking (opaque token 方式)
 
-詳細は `src/main.ts` の `wireCloseGuard` 関数参照。
+State に `getHistoryToken(): number` (`pushCommand` / `undo` / `redo` / `clearHistory` / `applySnapshot` 末尾で increment)。FileIOInteractor が `savedToken` を field で持ち、save 成功時に capture。dirty 判定は `state.getHistoryToken() !== savedToken`。`State.onMutate(cb)` で mutation 通知購読、UI title bar の `●` マークと main process への dirty 通知に使う。
 
-## 将来的な構造改善: camera 層の selection を一級概念として整理する
+## テスト
 
-### 位置付け
+Jest + ts-jest、テストファイルは `test/` 配下。
 
-State / Viewport 分離モデル ([前述の Undo/Redo セクション](#undoredo--永続化に向けた-state--viewport-分離モデル) 参照) では、mojiplay の状態は **state (document、永続化 / 履歴対象) と camera (ephemeral)** に分かれる。
-
-Selection は **camera 層の一部** に位置付けられる:
-
-| Camera 層の構成要素 | 内容 | 履歴 / 永続化 |
-|---|---|---|
-| Viewport | zoom / pan (`canvas.viewportTransform`) | 対象外 |
-| Selection (本セクションの対象) | どの object / anchor / handle が active か | 対象外 (Illustrator 形式) |
-| Tool mode | 現在のツール (黒矢印 / 白矢印 / 文字 / pen-add / pen-remove) | 対象外 |
-
-つまり Selection の整理は **camera 層の整理** であり、state / history / 永続化とは独立した課題。
-
-### 現状の散らばり (依然として残っている)
-
-「現在の選択は何か」というドメイン概念が複数の場所に分散している:
-
-- `canvas.getActiveObject()` (fabric の生状態)
-- `host.getActiveObjects()` / `setActiveSelection()` (一応の boundary だが書き手の一つに過ぎない)
-- `menuSelectAll` / `outlineSelection` 等は host を経由せず直接 fabric API を叩く
-- `commitIText` 等で `hasControls` のような選択時挙動を per-object プロパティに埋め込む
-- `select-char` モードの fabric 自然 selection event は host 不経由
-- アンカー / ハンドルの選択は tool ローカルの `drag` フィールドで管理 (= 別レイヤだが、object 選択と協調する場面で経路が分かれている)
-
-加えて `active.type === 'activeSelection'` のような **fabric の文字列型タグでドメインが分岐** しているコードもある (`syncToolbarToSelection` など)。
-
-### なぜ依然として必要か (動機の更新版)
-
-1. **構造的な書き手散乱** (= 元 motivation 1 を再評価):
-   - 1 文字選択時のハンドルが出ないバグは `hasControls: true` の 1 行修正で fix 済み (`commitIText` 内)。**表面的な修正**で済んだ
-   - だが「N=1 と N≥2 で active object の型が違う」「writer が複数経路にいる」という構造は残っているので、**今後同型のバグが別の形で再発し得る** (例: ボーダー色がついたりつかなかったり、トランスフォーム挙動が一致しないなど)
-
-2. **camera 層の概念整理が中途半端**:
-   - State / Viewport 分離モデルでは camera 層を ephemeral として明確に位置付けたが、その内部 (selection / viewport / tool mode) はバラバラに住んでいる
-   - viewport は `canvas.viewportTransform` 1 箇所、tool mode は `currentMode` 変数 1 箇所、selection は **N 箇所**。selection だけ整理が必要
-
-3. **テスト可能性**:
-   - 選択の振る舞いが fabric の event / 各 tool / 各 menu にまたがって決まるので pure function として spec を書けない
-   - ドメイン側が一級概念を持てば selection のロジックは pure に書けて test できる
-
-4. **将来の機能で確実に痛む**:
-   - 「複数アンカー同時選択」(milestone に既存) は anchor 選択を tool ローカルに閉じ込めたままだと辛い
-   - 「object と anchor を同時に選択」「shift クリックで anchor を追加選択」など、現在の tool-local drag state では表現しきれないケースが出る
-   - 「Cmd+A で全選択」を anchor / object に応じて切り替える、なども一級概念がないと配線が散る
-
-### 目指す構造
-
-```
-┌─────────────────────────────────────┐
-│  Selection (domain, single SoT)     │  ← 全 read/write はこれ経由
-│  - kind: 'objects' | 'anchors' |    │
-│          'handles' | 'none'         │
-│  - ObjectId[] / AnchorRef[] / ...    │
-└──────────┬──────────────┬───────────┘
-           │              │
-   ┌───────▼──────┐  ┌────▼──────────┐
-   │ fabric       │  │ toolbar /     │
-   │ adapter      │  │ tools /       │
-   │ (render)     │  │ menu actions  │
-   └──────────────┘  │ (subscribe)   │
-                     └───────────────┘
+```bash
+npm test              # 全テスト実行
+npx jest --watch      # ウォッチモード
+npx jest copy-export  # 特定ファイルのみ
 ```
 
-- fabric の selection event (`selection:created` / `:updated` / `:cleared`) は adapter 経由で `Selection` を更新
-- tool / toolbar / outline / menu 等は `Selection` を読み、変更は `Selection` API のみ
-- `Selection` は object 選択 (N=1 / N≥2) と anchor / handle 選択 (sub-selection) を統一的に表現
-- selection は履歴対象外 (camera 層)。Undo/Redo は selection を触らない
+### テスト戦略
 
-### ObjectId infra との関係
+**Pure data (core/ + Interface Adapter)** は fabric / DOM 抜きで unit test:
 
-Undo/Redo 実装で導入された `ObjectId` (pure ULID) を、Selection の identity にそのまま使う:
+- `core/path/*` — types / Path / Anchors / bezier / coords / segment-hit / overlay-layout
+- `core/object-id.ts` — `ensureObjectId` の挙動
+- `core/history/history.ts` — ring buffer + cursor (wrap-around / overflow / undo→redo / edge case)
+- `core/outline-position.ts` — アウトライン位置計算
+- `renderer/path-adapter.ts` — fabric 生タプル ↔ PathCommand 境界変換 (Interface Adapter)
+- `renderer/copy-export.ts` — `toCanvasElement` 引数の typed wrapper
 
-```ts
-type Selection =
-  | { kind: 'none' }
-  | { kind: 'objects'; ids: ReadonlyArray<ObjectId> }
-  | { kind: 'anchors'; pathId: ObjectId; anchorIndices: ReadonlyArray<number> }
-  | { kind: 'handles'; pathId: ObjectId; handle: HandleRef };
-```
+**Tool / Interactor** は **real `class State` (renderer/state.ts) + fabric の最小 stub** で test。State は production の唯一の実装なので fake にすると tautology になる:
 
-fabric.Object の生参照を持たないので、永続化や undo 後の object 復元 (`enlivenObjects` で新 instance 化) でも参照が切れない。
+- `test/fabric-stub.ts` — fabric の最小 stub (Canvas / Path / Text / IText / ActiveSelection / Polyline.prototype._setPositionDimensions) を集約。`installFabricStub()` で `globalThis.fabric` & `window` stub を install
+- 各 tool test (`tools-*.test.ts`) は `installFabricStub()` の後 `new State(new FakeFabricCanvas() as never)` で real State を構築、fixture 投入は `state.applySnapshot()` 経由
+- assertion は **State の public API のみ** 経由 (`getActivePath().snapshot()` / `linearizeHistory()` / `getActiveObjects()` / `toSnapshot()` 等)。fabric stub の internal counter / 内部 field は peek しない (例外: cursor は実 DOM 観測なので `fabricCanvas.upperCanvasEl.style.cursor` で OK = production でも user は DOM 経由で見る)
+- `file-io-interactor.test.ts` は real State + 外部 boundary の test double (`FakeRepo` / `FakeUI` = file system / OS dialog 代用。これらは production も interface 経由なので legitimate な test double)
 
-### 導入タイミング
+### test 用 tsconfig 設定
 
-Undo/Redo + 永続化が一段落した後、**複数アンカー同時選択** (milestone 既存) の実装手前が自然なタイミング。複数 anchor 選択は selection の sub-selection 機能を本格的に必要とする最初の機能で、ここで Selection 抽象を入れない場合 tool ローカル drag state にさらに複雑な data 構造を詰め込むことになる。
+`tsconfig.test.json` に `lib: ["ES2022","DOM"]` / `types: [..., "fabric"]` / `allowUmdGlobalAccess: true` / `src/globals/` の include を入れている (= ts-jest が `src/renderer/state.ts` を test から compile するため)。`src/renderer/outline-conversion` は top-level で `document.getElementById` を呼ぶので test 側で `jest.mock` で stub する (font-enumeration の lazy 化が本筋だが未着手)。
 
-新しい機能を足す際は、この方向と整合する形で実装してください:
+## 新しいコードを書く時のガイドライン
 
-- 新しい選択経路を追加するなら host 経由を徹底し、fabric API 直叩きを増やさない
-- `active.type === 'activeSelection'` のような fabric 文字列タグでの分岐を新規には書かない (host 越しに `getActiveObjects()` の length で判定する)
-- ハンドル / アンカー選択を扱う新しい機能は、tool-local drag state を拡張する前に「これは Selection 抽象に乗せるべきか」を一度検討する
+### CA 層を意識する
 
-## CA (Clean Architecture) / Hexagonal 用語での現アーキテクチャ
+新規ファイルを書くとき**どの CA 層か** を考える (Entity / UseCase / Port / Adapter / Presenter / Framework)。
 
-mojiplay は CA / Hexagonal Architecture をベースに構成。今回の refactor で sibling 階層が綺麗に揃った状態。
+- **`core/`**: pure function + value object + 抽象 interface。DOM/fabric/Electron 不知
+- **`usecases/`**: アプリ固有 orchestration。tool-driven は `tools/`、menu-triggered は `menu/`
+  - state または external dependency があるなら **class + DI** (例: `FileIOInteractor`、`SelectCharTool`)。constructor で State / Repository / UIPort を受け取る
+  - stateless な単発 orchestration は **free function** (例: `selectAll(state)`)
+  - pure な変換 (validator / formatter) も free function 据え置き (= AnemicHelper anti-pattern を避ける)
+- **`repository/`**: 永続化 port + concrete を併置。port: `<entity>-repository.ts`、concrete: `<adapter>-<entity>-repository.ts`
+- **`renderer/`**: 副作用あり (DOM/fabric/Electron)。State concrete impl、UI 配線、event dispatcher、Presenter
+- **`globals/`**: 外部世界の ambient `.d.ts` のみ
 
-### 層と mojiplay モジュールの対応 (refactor 後)
+path 関連のロジック (アンカー / ハンドル / ベジェ評価 / コマンド変換) は `core/path/`、tool 実装は `usecases/tools/`、menu / keyboard 起点 use case は `usecases/menu/`。
 
-| CA 層 (内→外) | 役割 | mojiplay の dir | 例 |
-|---|---|---|---|
-| **Entities** (innermost) | 業務 object / pure rules / value object | `core/` | `core/path/*`、`core/object-id.ts`、`core/history/types.ts`、`core/document/snapshot.ts` |
-| **Use Case (Interactor)** | アプリ固有 orchestration | `usecases/` | `usecases/tools/select-char-tool.ts` (PointerInput-driven)、`usecases/menu/file-io-interactor.ts` (stateful)、`usecases/menu/delete-selection.ts` (stateless free function) |
-| **Use Case (Output Port)** | use case が依存する外部世界の抽象 | `usecases/ui-port.ts`、`repository/document-repository.ts` | UIPort、DocumentRepository |
-| **Driven Adapter (Repository / Gateway)** | Output Port の concrete | `repository/` | `repository/file-system-document-repository.ts` (Electron + fs) |
-| **Driving Adapter (Controller)** | UI 入力 → use case 呼出 | `renderer/app.ts` | DOM event dispatcher (mousedown / keydown / menu click → tool method 呼出 / use case 呼出) |
-| **Presenter** | Use Case 出力 → view 形式 | `renderer/state.ts` 内 private、`renderer/toast.ts` | snapshot writer / toast |
-| **Frameworks & Drivers** (outermost) | UI / fs / external | fabric.js / DOM / Electron | `main.ts`、`preload.ts`、`renderer/state.ts` の fabric 直接利用、`renderer/ui-port-impl.ts` の electronAPI bridge |
+### 既存の癒着を新規に増やさない
 
-### 依存方向 (CA dependency rule)
+- 新しい tool / use case に fabric を直接 import しない (= State interface 経由)
+- core/ に fabric / DOM / Electron を import しない
+- `*Controller` を Use Case の suffix に使わない (= `*Interactor` か free function、または `*Tool`)
+- `active.type === 'activeSelection'` のような fabric 文字列タグ依存を新規には書かない (= `host.getActiveObjects().length` で判定)
+- 既存の癒着を「ついでに直す」のは scope を意識的に切ってから
 
-```
-core           (Entities)
-  ↑
-usecases       (Use Case Interactor + Port)
-  ↑                       ↑
-repository     renderer    (driven adapter / presenter / frameworks)
-   (concrete)
-```
+### pure helper を core に動かすかの判定
 
-- `core/` は何も import しない (= 一切外向き依存なし)
-- `usecases/` は core / repository (port) のみ依存。**fabric / DOM / Electron 不知**
-- `repository/` は core のみ依存
-- `renderer/` は全レイヤ import 可能
+CA dependency rule (= 外向き依存禁止) は守るが、「全 pure 関数は core にあるべき」ではない。renderer / tools 内の pure helper を core/ に動かす実利は以下 3 点で判定:
 
-### 用語の注意 (今回の refactor で確定)
+1. **多層から import されているか** (= dependency 圧)
+2. **単独でテスト書きたい domain knowledge か** (= 罠 / 仕様の塊)
+3. **コードベース読んだ時「これ core じゃね?」と迷うか** (= 認知負荷)
 
-- **Controller** は **CA で input adapter** を指す。Use Case 実装に `*Controller` の suffix を付けない (= `FileIOController` ❌、`FileIOInteractor` ✅)
-- mojiplay で **Controller 役を担うのは `app.ts` 内の DOM event dispatcher のみ**。tool の `onPointerDown` 等は use case (= Interactor) であって Controller ではない (= raw event の翻訳は app.ts 側でやる)
-- **Use Case 実装 = Interactor** (Robert Martin CA 用語)。stateful なら class、stateless なら free function
+**全部 No なら据え置き**。pure であることだけで動かすと import path noise が増えるだけ。逆に dependency rule 違反 (例: core から fabric を触る) なら問答無用で動かす。
 
-### 残存する癒着
+### 新機能への指針
 
-#### State (`renderer/state.ts`) は Presenter + Frameworks を兼ねる
+- 移動 / 選択 / スナップは `fabric.Text` 特有フィールドではなく **汎用プロパティ** (`target.left`, `target.top`, `target.angle`) に対して書く。スナップハンドラがテンプレ
+- `data` にテキスト専用フィールドを足さない (以前 `data.baselineY` があったが削除済)
+- Illustrator / Photoshop / Figma の UX 慣習を優先 (例: Alt で一時制約解除、Cmd+Shift+O でアウトライン化)
 
-`class State` は fabric.Canvas を内包し、以下を統合:
-- **Use Case 接点 (Interface)**: `core/state.ts` の `interface State` で抽象契約
-- **Presenter 部分**: `private writeSnapshotToCanvas` / `createObjectOnCanvas` / `removeObjectFromCanvas` (Command / snapshot → fabric.Canvas 状態変更)
-- **Frameworks 接触**: fabric.Canvas API 呼出全部、`canvas.on('mouse:down')` / `canvas.on('object:modified')` 等の event hook
-- **高レベル selection 操作** (今回追加): `removeActiveObjects` / `duplicateActiveObjects` / `selectAllObjects` / `outlineActiveTexts` / `exportActiveAsPngDataUrl` (= 旧 actions/ の fabric 操作を State 内に閉じ込め、use case を fabric 不知に保つため)
+### Selection 抽象化への配慮 (将来の方向)
 
-これは **fabric.Canvas が view + model を兼ねる fabric の設計に追従**。fabric を pure renderer にするには Document state を別途持って一方向 sync が必要だが、それは別 refactor (本ファイル「camera 層の selection」セクション参照)。
+camera 層の selection は現状 fabric の生 active object に散らばっており (`canvas.getActiveObject()` / `host.getActiveObjects()` / 各 tool ローカルの `drag` フィールド等)、将来 `Selection` (kind: `'objects' | 'anchors' | 'handles' | 'none'`、ID ベース) として一級概念に整理予定。**複数アンカー同時選択** を本格的にやる手前が自然な着手タイミング。それまでは:
 
-#### core 内に Use Case 性が混在
+- 新しい選択経路を追加するなら **host 経由を徹底**、fabric API 直叩きを増やさない
+- ハンドル / アンカー選択を扱う新機能は、tool-local drag state を拡張する前に「これは Selection 抽象に乗せるべきか」を一度検討
+- Command は ID ベース (`fabric.Object` 参照ではなく `ObjectId`) を維持。fabric.Object 解決の唯一の経路は `renderer/state.ts` 内 private `resolveObjectById`
+- undo/redo は selection を能動的に切り替えない (= camera 層は履歴対象外)
 
-`core/history/history.ts` の History (ring buffer) は pure data 構造だが、push/undo/redo の semantic はアプリ固有。Entity と Use Case の中間。pure data として core に置くのは test 容易性 + dependency 方向の保全のため。
+## 実装済 / 今後実装予定
 
-### この整理から導かれる将来的な refactor 候補
+実装済:
 
-1. **Document state レイヤ導入**: State の Presenter + Frameworks 癒着を解消。`core/document/` に pure な DocumentState (Map<ObjectId, ObjectState>) を導入し、fabric は pure renderer として一方向 sync。前述の Selection 抽象とまとめて検討する候補。大規模 refactor
-2. **`renderer/state.ts` の高レベル method を usecases/ に逆移管**: `removeActiveObjects` 等は今 State にあるが、State interface を fabric 抽象 (例: `state.addObject(snapshot)` / `state.removeObject(id)` 等の primitive) に絞れば、orchestration ロジックは use case 側に書ける。中規模
+- アウトライン化 + アンカー / ハンドル編集
+- アンカー追加 / 削除 (pen ツール)
+- Undo/Redo + state-jump semantic
+- 保存 / 開く (`.mply` + atomic write + dirty tracking + close guard)
 
-### 新コードを書くときの規律
+今後:
 
-- 新規ファイルを書くとき、**どの CA 層か** を意識する (Entity / UseCase / Port / Adapter / Presenter / Framework)
-- 既存の癒着を新規に増やさない:
-  - 新しい tool / use case に fabric を直接 import しない (= State interface 経由)
-  - core/ に fabric を新規 import しない
-  - `*Controller` を Use Case の suffix に使わない (= `*Interactor` か free function、または `*Tool` (tool-driven 限定))
-- 既存の癒着を「ついでに直す」誘惑に乗らない (refactor は意識的に、scope を切ってから)
-- **stateful (state を持つ) なら class + DI**、**stateless なら free function**。pure な変換 (validator / formatter) を class でラップしない (= AnemicHelper anti-pattern を避ける)
+- bbox 再計算の改善 (`pathOffset` 補正の精緻化)
+- 複数アンカー同時選択 (= Selection 抽象化と同時着手予定)
+- スムーズ / コーナーアンカーの変換
+- アンカードラッグ時のグリッドスナップ
 
-### 「pure helper を core に動かすか」の判定基準
+## UI 言語
 
-CA の dependency rule は **「domain (core) は外側に依存してはいけない」** であって、**「全 pure 関数は core にあるべき」** ではない。renderer / tools 内に住んでいる pure helper を core/ に動かす実利があるかは、以下の 3 つで判定する:
-
-1. **多層から import されているか?** (= core にないと usecases/ が困る、等の dependency 圧)
-2. **単独でテスト書きたい domain knowledge か?** (= 罠 / 仕様の塊で、独立 test の価値があるか)
-3. **コードベース読んだ時「これ core じゃね?」と迷うか?** (= 認知負荷の問題)
-
-**全部 No なら据え置き**で良い。Pure であることだけで core に動かすと import path の noise が増えるだけで、可読性 / 保守性 / テスト可能性のいずれも改善しない。
-
-逆に、**dependency rule (= 外向き依存禁止) に違反している場合は問答無用で動かす**。これは「動かす実利」ではなく「アーキテクチャの正しさ」の問題で、判定基準とは別軸。
-
-#### 過去の判断例 (= 動かした / 動かさなかったログ)
-
-- ✓ **動かした**: `tools/overlay-layout.ts` → `core/path/overlay-layout.ts` (= tools/ にあったが pure compute で PointerInput を受けない、Domain の誤分類だった)
-- ✓ **動かした**: `core/copy-export.ts` → `renderer/copy-export.ts` (= core/ にあったが fabric.Object の typed wrap で外部世界を知る、Gateway の誤分類だった)
-- ✓ **動かした (= 今回 refactor)**: `core/file-io-controller.ts` → `usecases/menu/file-io-interactor.ts` (= Use Case 層は core じゃないし、Controller suffix も誤り)
-- ✓ **動かした (= 今回 refactor)**: 旧 `core/document/repository.ts` → `repository/document-repository.ts` (= Repository は use case 配下でも renderer 配下でもない top-level sibling concept)
-- ✓ **動かした (= 今回 refactor)**: 旧 `src/tools/*` → `src/usecases/tools/*` (= tools は CA 用語の Use Case であって独立 dir に住む必要なし。usecases/ 配下に集約)
-- ✓ **動かした (= 今回 refactor)**: 旧 `renderer/actions/*` → `usecases/menu/*` (= 同じ理由。actions という名前は CA 用語じゃないので usecases/menu/ に rename + fabric 不知化)
-- ✗ **動かさない**: `renderer/group-id.ts` (8 行の generateGroupId)、`renderer/logger.ts` の fmtObj 等 (= 全部 renderer 内 private helper、判定基準 1〜3 全部 No)
-
-## UI言語
-
-ツールバーのラベル、ツールチップ、トーストメッセージには**日本語**を使用しています。新しいユーザー向け文字列を追加する場合も、これに合わせて日本語を維持してください。
+ツールバーラベル / ツールチップ / トーストは**日本語**。新規ユーザー向け文字列も日本語維持。
 
 ## 外部リソース
 
 ### Trello Wiki カード (= mojiplay の正式な設計 / 進捗 Wiki)
 
-mojiplay の Trello Wiki カードは **https://trello.com/c/lQu6eVB3** (これ 1 つだけ)。
+mojiplay の Trello Wiki カードは **https://trello.com/c/lQu6eVB3** (これ 1 つだけ)。「Trello 更新して」「Wiki 書き直して」「現状を Trello に反映して」等の依頼を受けたら、必ずこのカードを編集すること。
 
-「Trello 更新して」「Wiki 書き直して」「現状を Trello に反映して」等の依頼を受けたら、**必ずこのカードを編集** すること。
+**注意**:
 
-#### やってはいけないこと
-
-- `mcp__claude_ai_Trello_Discussion_Log__list_recent_discussions` で `mojiplay:` で始まるカードが他にも見つかっても、**Wiki と勘違いしないこと**。それらは過去の議論ログ (= snapshot) であって、現状を反映する Wiki ではない
-- 議論ログカードの body を Wiki 化するために `update_card_body` で書き換えるのは禁止 (= 過去議論の記録性が壊れる)。Wiki 用の更新は上記 1 つの正カードに集約
-
-#### 実装メモ
-
-- Trello MCP には card の archive / delete を直接実行する API は無い (`save_discussion` / `update_card_body` / `append_to_discussion` / `add_attachment_url` のみ)。誤って書き換え / 新規作成した場合は **ユーザに Trello UI 上で archive を依頼する** しかない
+- `mcp__claude_ai_Trello_Discussion_Log__list_recent_discussions` で `mojiplay:` で始まる他のカードが見つかっても **Wiki と勘違いしない**こと。それらは過去議論ログ (snapshot) で、`update_card_body` で書き換えると過去議論の記録性が壊れる。Wiki 用の更新は上記 1 つの正カードに集約
+- Trello MCP には card archive / delete API は無い (`save_discussion` / `update_card_body` / `append_to_discussion` / `add_attachment_url` のみ)。誤って書き換え / 新規作成した場合は **ユーザに Trello UI 上で archive を依頼する**しかない
