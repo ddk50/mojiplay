@@ -999,8 +999,26 @@ Use Case を別 class (`MoveAnchorUseCase` 等) に切り出す ROI は現状低
 - 新規ファイルを書くとき、**どの CA 層か** を意識する (Entity / UseCase / Controller / Presenter / Gateway / Framework)
 - 上記の「癒着」を新規に増やさない
   - 例: 新しい tool に history 操作を直接書かない (= state 経由)
-  - 例: core/ に fabric を新規 import しない (copy-export.ts は既知の例外)
+  - 例: core/ に fabric を新規 import しない (fabric を扱う adapter は renderer/ に置く)
 - 既存の癒着を「ついでに直す」誘惑に乗らない (refactor は意識的に、scope を切ってから)
+
+### 「pure helper を core に動かすか」の判定基準
+
+CA の dependency rule は **「domain (core) は外側に依存してはいけない」** であって、**「全 pure 関数は core にあるべき」** ではない。renderer / tools 内に住んでいる pure helper を core/ に動かす実利があるかは、以下の 3 つで判定する:
+
+1. **多層から import されているか?** (= core にないと tools/ が困る、等の dependency 圧)
+2. **単独でテスト書きたい domain knowledge か?** (= 罠 / 仕様の塊で、独立 test の価値があるか)
+3. **コードベース読んだ時「これ core じゃね?」と迷うか?** (= 認知負荷の問題)
+
+**全部 No なら据え置き**で良い。Pure であることだけで core に動かすと import path の noise が増えるだけで、可読性 / 保守性 / テスト可能性のいずれも改善しない。
+
+逆に、**dependency rule (= 外向き依存禁止) に違反している場合は問答無用で動かす**。これは「動かす実利」ではなく「アーキテクチャの正しさ」の問題で、判定基準とは別軸。
+
+#### 過去の判断例 (= 動かした / 動かさなかったログ)
+
+- ✓ **動かした**: `tools/overlay-layout.ts` → `core/path/overlay-layout.ts` (= tools/ にあったが pure compute で PointerInput を受けない、Domain の誤分類だった)
+- ✓ **動かした**: `core/copy-export.ts` → `renderer/copy-export.ts` (= core/ にあったが fabric.Object の typed wrap で外部世界を知る、Gateway の誤分類だった)
+- ✗ **動かさない**: `renderer/group-id.ts` (8 行の generateGroupId)、`renderer/logger.ts` の fmtObj、`actions/outline.ts` の isOutlineable 等 (= 全部 renderer 内 private helper、判定基準 1〜3 全部 No)
 
 ## UI言語
 
