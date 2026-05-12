@@ -2,7 +2,7 @@
 //
 // FileIOInteractor が DOM / IPC を直接知らずに済むよう、UI 副作用をこの 1 ファイルに集約。
 
-import type { UIPort, DiscardChoice } from '../usecases/ui-port';
+import type { UIPort, DiscardChoice } from '../usecases/ui-port-interface';
 import { showToast } from './toast';
 
 export class ElectronUIPort implements UIPort {

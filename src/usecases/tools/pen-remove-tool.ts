@@ -10,7 +10,7 @@ import type {
   Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
-import type { State } from '../../core/state';
+import type { State } from '../../core/state-interface';
 
 export class PenRemoveTool implements Tool {
   readonly descriptor: ToolDescriptor = {

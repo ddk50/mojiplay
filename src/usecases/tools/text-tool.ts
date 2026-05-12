@@ -12,7 +12,7 @@ import type {
   Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
-import type { State, TextCreateProps } from '../../core/state';
+import type { State, TextCreateProps } from '../../core/state-interface';
 
 type FontPropsProvider = () => TextCreateProps;
 

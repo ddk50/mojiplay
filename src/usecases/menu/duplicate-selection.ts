@@ -7,7 +7,7 @@
 // オフセットは「画面上 10px」相当 (= 10 / zoom の canvas 座標)。zoom 倍率に
 // 関わらず一貫して "ややずれて見える" よう viewport 倍率を加味する。
 
-import type { State } from '../../core/state';
+import type { State } from '../../core/state-interface';
 
 const SCREEN_PX_OFFSET = 10;
 

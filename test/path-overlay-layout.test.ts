@@ -6,7 +6,7 @@
 import type { PathCommand } from '../src/core/path/types';
 import type { Mat2x3 } from '../src/core/path/coords';
 import { Path } from '../src/core/path/path';
-import type { PathSnapshot } from '../src/core/state';
+import type { PathSnapshot } from '../src/core/state-interface';
 import {
   computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt,
 } from '../src/core/path/overlay-layout';

@@ -107,8 +107,15 @@ class FakeFabricText {
 class FakeFabricIText extends FakeFabricText {
   override readonly type = 'i-text';
   isEditing = false;
+  // State.handleTextEditingExited は __charBounds / _textLines / lineHeight を読む。
+  // production fabric は initDimensions() で populate するが、stub では test 側が
+  // 直接セットすることもできる (= 編集後の commit splitting を simulate)。
+  __charBounds: Array<Array<{ left: number; width: number }>> = [];
+  _textLines: string[][] = [];
+  lineHeight = 1.16;
   enterEditing(): void { this.isEditing = true; }
   exitEditing(): void { this.isEditing = false; }
+  initDimensions(): void { /* no-op (test 側で事前 populate) */ }
 }
 
 // ── ActiveSelection ──────────────────────────────────────────────────────
@@ -152,12 +159,20 @@ export class FakeFabricCanvas {
   upperCanvasEl: { style: { cursor: string } } = { style: { cursor: '' } };
   viewportTransform: number[] = [1, 0, 0, 1, 0, 0];
 
+  // State.setMode が assign する canvas-level fields
+  selection = true;
+  defaultCursor = 'default';
+  hoverCursor = 'move';
+  backgroundColor: string | undefined = undefined;
+
   add(o: FabricObjectLike): void { this._objects.push(o); }
   remove(o: FabricObjectLike): void {
     this._objects = this._objects.filter(x => x !== o);
     if (this._active === o) this._active = null;
   }
   getObjects(): FabricObjectLike[] { return this._objects.slice(); }
+  forEachObject(cb: (o: FabricObjectLike) => void): void { this._objects.forEach(cb); }
+  contains(o: FabricObjectLike): boolean { return this._objects.indexOf(o) >= 0; }
 
   getActiveObject(): CanvasActive { return this._active; }
   getActiveObjects(): FabricObjectLike[] {

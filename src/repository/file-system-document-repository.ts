@@ -5,7 +5,7 @@
 //
 // schema validation (validateSnapshot) は stateless transform なので free function 据え置き。
 
-import type { DocumentRepository } from './document-repository';
+import type { DocumentRepository } from './document-repository-interface';
 import type {
   DocumentSnapshot, LoadResult, SaveResult, LoadError,
 } from '../core/document/snapshot';

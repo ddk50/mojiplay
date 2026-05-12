@@ -8,8 +8,8 @@
 // メインプロセスのカスタムメニュー Edit > Copy から IPC で通知される経路と
 // keydown handler の両方から呼ばれるので、200ms 間隔の debounce で二重発火を防ぐ。
 
-import type { State } from '../../core/state';
-import type { UIPort } from '../ui-port';
+import type { State } from '../../core/state-interface';
+import type { UIPort } from '../ui-port-interface';
 
 const DEBOUNCE_MS = 200;
 const PNG_MULTIPLIER = 10;

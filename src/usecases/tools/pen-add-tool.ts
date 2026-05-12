@@ -53,7 +53,7 @@ import type {
   Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
-import type { State, PathHandle } from '../../core/state';
+import type { State, PathHandle } from '../../core/state-interface';
 
 interface PenAddDragState {
   readonly cmdIndex: number;        // 分割した命令の前半 (新アンカー終端) の index

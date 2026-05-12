@@ -22,9 +22,9 @@ import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 installFabricStub();
 
 import { FileIOInteractor } from '../src/usecases/menu/file-io-interactor';
-import type { DocumentRepository } from '../src/repository/document-repository';
+import type { DocumentRepository } from '../src/repository/document-repository-interface';
 import type { DocumentSnapshot, LoadResult, SaveResult } from '../src/core/document/snapshot';
-import type { UIPort, DiscardChoice } from '../src/usecases/ui-port';
+import type { UIPort, DiscardChoice } from '../src/usecases/ui-port-interface';
 import type { Command, ObjectSnapshot } from '../src/core/history/types';
 import type { ObjectId } from '../src/core/object-id';
 import { State } from '../src/renderer/state';

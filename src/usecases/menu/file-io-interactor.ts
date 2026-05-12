@@ -13,10 +13,10 @@
 //     await 後に getHistoryToken() を再取得すると await 中の編集を見逃して dirty=false
 //     になる silent bug。詳細は CLAUDE.md / 計画書「排他制御 / 一貫性」セクション参照
 
-import type { State } from '../../core/state';
+import type { State } from '../../core/state-interface';
 import type { LoadError } from '../../core/document/snapshot';
-import type { DocumentRepository } from '../../repository/document-repository';
-import type { UIPort } from '../ui-port';
+import type { DocumentRepository } from '../../repository/document-repository-interface';
+import type { UIPort } from '../ui-port-interface';
 
 export interface DocStatus {
   /** 現在のファイル名 (= basename)。未保存なら null。 */

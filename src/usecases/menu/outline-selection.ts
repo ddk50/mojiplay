@@ -4,8 +4,8 @@
 // fabric.Text → fabric.Path 変換の中身は state.outlineActiveTexts() に閉じ込め、
 // ここではユーザ向けの toast メッセージ組み立てのみを担当。
 
-import type { State } from '../../core/state';
-import type { UIPort } from '../ui-port';
+import type { State } from '../../core/state-interface';
+import type { UIPort } from '../ui-port-interface';
 
 export async function outlineSelection(state: State, ui: UIPort): Promise<void> {
   const result = await state.outlineActiveTexts();

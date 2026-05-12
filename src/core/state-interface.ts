@@ -71,6 +71,21 @@ export interface TextCreateProps {
   readonly fill:        string;
 }
 
+/** ツールモード識別子。Controller (KeyboardController / CanvasInputController) と
+ *  State (commitIText 時の selectable 判定 + canvas 設定) で共有する。 */
+export type Mode = 'select-group' | 'select-char' | 'text' | 'pen-add' | 'pen-remove';
+
+/** 選択中オブジェクトに一括適用するプロパティ (toolbar property 変更用)。
+ *  fabric 不知の型として core/ に置く。実装側 (renderer/state.ts) で fabric props にマップ。 */
+export interface SelectionProps {
+  readonly fontFamily?: string;
+  readonly fontSize?:   number;
+  readonly fontWeight?: number | string;
+  readonly fontStyle?:  'normal' | 'italic' | 'oblique';
+  readonly fill?:       string;
+  readonly angle?:      number;
+}
+
 // ── State (抽象契約) ───────────────────────────────────────────────────────
 
 /**
@@ -143,10 +158,39 @@ export interface State {
 
   /**
    * IText 編集中なら commit を完了させる (= save 直前に呼ぶ)。
-   * controller が fabric 不知でいるため state に委譲。
-   * 実装は canvas.discardActiveObject() で 'text:editing:exited' を発火させる。
+   * 実装内部で 'text:editing:exited' を hook して 1 文字ずつの fabric.Text に分割し、
+   * N×objectCreated を compound として history に push する。
+   * 詳細は CLAUDE.md「文字モデル」「Enter 確定フロー」参照。
    */
   commitActiveText(): void;
+
+  // ── 高レベル副作用 (= 旧 app.ts の business logic を State 内に閉じ込め) ──
+
+  /**
+   * 選択中の object 群に property を一括適用 (toolbar property 変更用)。
+   * 各 object の before/after snapshot を取って Command 化、no-op (差分ゼロ) の
+   * object は skip、残りを compound として history に push する。
+   */
+  applyPropsToSelection(props: SelectionProps): void;
+
+  /**
+   * モード切替の canvas 副作用を吸収する (cursor / selectable / evented /
+   * canvas.selection / discardActiveObject)。Controller の Tool dispatch
+   * (onActivate / onDeactivate) は呼び元 (Controller) に残す。
+   * mode は State 内部にも保持され、commitActiveText の selectable 判定と
+   * getCurrentMode() で参照される。
+   */
+  setMode(mode: Mode): void;
+
+  /** 現在のモード。KeyboardController などが分岐に使う。 */
+  getCurrentMode(): Mode;
+
+  /** canvas を全クリア (button: クリア / 起動初期化想定)。 */
+  clearAll(): void;
+
+  /** contextTop に描かれている overlay (アンカー / ハンドル) をクリア。
+   *  選択変更 / モード切替時に Controller が呼ぶ。 */
+  clearOverlay(): void;
 
   // ── dirty tracking ──
 

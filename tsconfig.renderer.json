@@ -16,6 +16,7 @@
     "src/core/**/*.ts",
     "src/usecases/**/*.ts",
     "src/repository/**/*.ts",
+    "src/controllers/**/*.ts",
     "src/renderer/**/*.ts",
     "src/globals/**/*.d.ts"
   ]

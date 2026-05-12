@@ -21,7 +21,7 @@ import type {
   Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
-import type { State, PathHandle } from '../../core/state';
+import type { State, PathHandle } from '../../core/state-interface';
 import type { ObjectSnapshot } from '../../core/history/types';
 
 export interface SnapConfig {

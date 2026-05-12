@@ -15,7 +15,7 @@ import type {
   Tool, ToolDescriptor, PointerInput, PointerHandled,
   MovingTarget, CanvasMouseDownInput,
 } from './tool-interface';
-import type { State, ObjectHandle } from '../../core/state';
+import type { State, ObjectHandle } from '../../core/state-interface';
 
 export class SelectGroupTool implements Tool {
   readonly descriptor: ToolDescriptor = {

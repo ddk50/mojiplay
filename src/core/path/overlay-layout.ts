@@ -14,7 +14,7 @@
 import type { HandleRef } from './types';
 import type { Mat2x3, PathTransform } from './coords';
 import { pathLocalToScreen } from './coords';
-import type { PathSnapshot } from '../state';
+import type { PathSnapshot } from '../state-interface';
 
 export interface AnchorScreenPos {
   readonly anchorIndex: number;

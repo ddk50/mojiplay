@@ -21,8 +21,9 @@ import type { Command, ObjectSnapshot } from '../core/history/types';
 import { History } from '../core/history/history';
 import type {
   ObjectHandle, PathHandle, PathSnapshot, TextCreateProps,
+  Mode, SelectionProps,
   State as StateContract,
-} from '../core/state';
+} from '../core/state-interface';
 import type { DocumentSnapshot } from '../core/document/snapshot';
 import type { Mat2x3 } from '../core/path/coords';
 import { Path } from '../core/path/path';
@@ -58,15 +59,21 @@ export class State implements StateContract {
   private tokenCounter = 0;
   private mutationListeners: Array<() => void> = [];
 
+  // 現在のツールモード。setMode で更新、commitActiveText の selectable 判定で参照。
+  // Controller 側の Tool dispatch / button class 切替は依然 Controller の責務。
+  private currentMode: Mode = 'select-group';
+
   constructor(canvas: fabric.Canvas, options: CreateStateOptions = {}) {
     this.canvas = canvas;
     this.history = new History({ max: options.historyMax ?? 100 });
     this.upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement;
 
     // fabric event hook (mouse:down で before snapshot capture、object:modified で
-    // fabric-driven な transform を Command 化して history に push)
+    // fabric-driven な transform を Command 化して history に push、
+    // text:editing:exited で IText を 1 文字ずつ fabric.Text に分割)
     this.canvas.on('mouse:down', this.handleMouseDown);
     this.canvas.on('object:modified', this.handleObjectModified);
+    this.canvas.on('text:editing:exited', this.handleTextEditingExited);
   }
 
   // ===== ToolHost interface 実装 =====
@@ -190,9 +197,77 @@ export class State implements StateContract {
 
   commitActiveText(): void {
     // discardActiveObject は IText 編集中なら 'text:editing:exited' を発火させ、
-    // app.ts の commitIText ハンドラが分割を完了する。それ以外なら無害な選択解除。
+    // private handleTextEditingExited が 1 文字ずつ fabric.Text に分割する。
+    // それ以外なら無害な選択解除。
     this.canvas.discardActiveObject();
     this.canvas.requestRenderAll();
+  }
+
+  // ===== 高レベル副作用 (= 旧 app.ts business logic) =====
+
+  applyPropsToSelection(props: SelectionProps): void {
+    const active = this.canvas.getActiveObjects();
+    if (!active.length) return;
+
+    const cmds: Command[] = [];
+    for (const obj of active) {
+      const id = (obj as any).data?.objectId as ObjectId | undefined;
+      if (!id) continue;
+      const before = this.captureObjectSnapshot(obj);
+      obj.set(props as Partial<fabric.Object>);
+      const after = this.captureObjectSnapshot(obj);
+      if (JSON.stringify(after) !== JSON.stringify(before)) {
+        cmds.push({ kind: 'objectChanged', objectId: id, before, after });
+      }
+    }
+    this.canvas.requestRenderAll();
+
+    if (cmds.length === 1) {
+      this.pushCommand(cmds[0]);
+      logger.debug('[history] push toolbar property change');
+    } else if (cmds.length > 1) {
+      this.pushCommand({ kind: 'compound', commands: cmds });
+      logger.debug(`[history] push compound (toolbar) ${cmds.length} changes`);
+    }
+  }
+
+  setMode(mode: Mode): void {
+    this.currentMode = mode;
+    const isSelectMode = mode === 'select-group' || mode === 'select-char';
+    const isPenMode    = mode === 'pen-add' || mode === 'pen-remove';
+    this.canvas.selection     = isSelectMode;
+    this.canvas.defaultCursor = mode === 'text' ? 'text' : 'default';
+    // 白矢印 (select-char) は Illustrator の Direct Selection 同様に標準アローを維持
+    // (path 本体ホバーで move カーソルになると「十字」表示になり混乱する)。
+    this.canvas.hoverCursor =
+      mode === 'text'        ? 'text' :
+      mode === 'select-char' ? 'default' :
+      'move';
+
+    this.canvas.forEachObject(o => {
+      o.selectable = isSelectMode;
+      o.evented    = isSelectMode;
+    });
+
+    this.clearOverlay();
+    // ペンモードでは選択中パスを維持する (= IText 編集中の commit は別経路)。
+    if (!isSelectMode && !isPenMode) this.canvas.discardActiveObject();
+    this.canvas.requestRenderAll();
+  }
+
+  getCurrentMode(): Mode {
+    return this.currentMode;
+  }
+
+  clearAll(): void {
+    this.canvas.clear();
+    this.canvas.backgroundColor = '';
+    this.canvas.renderAll();
+  }
+
+  clearOverlay(): void {
+    const ctx = (this.canvas as any).contextTop as CanvasRenderingContext2D | undefined;
+    if (ctx) this.canvas.clearContext(ctx);
   }
 
   // ===== dirty tracking =====
@@ -692,5 +767,101 @@ export class State implements StateContract {
       logger.debug(`[history] push compound ${cmds.length} changes action=${action}`);
       this.pushCommand({ kind: 'compound', commands: cmds });
     }
+  };
+
+  /**
+   * IText 編集終了 (Enter / Esc / クリックアウェイ) で発火。
+   * IText を 1 文字ずつの fabric.Text に分割し、N×objectCreated を 1 個の
+   * compound Command として push する。詳細は CLAUDE.md「文字モデル」参照。
+   *
+   * 位置計算は IText の内部計測 (__charBounds) をそのまま流用する。__charBounds は
+   * pair-wise なカーニング (例: "AV" / "To") を反映しているので、編集中の見た目と
+   * ピクセル一致する。initDimensions() で populated を保証してから読む。
+   */
+  private readonly handleTextEditingExited = (e: fabric.IEvent): void => {
+    const it = e.target as fabric.IText | undefined;
+    if (!it) return;
+    // 二重呼び出し防止 (Enter keydown → exitEditing → text:editing:exited の流れ)
+    if (!this.canvas.contains(it)) return;
+
+    const text = it.text || '';
+    if (!text.trim()) {
+      this.canvas.remove(it);
+      this.canvas.requestRenderAll();
+      return;
+    }
+
+    const groupId    = generateGroupId();
+    const fontFamily = it.fontFamily || 'Arial';
+    const fontSize   = (it.fontSize as number) || 72;
+    const fontWeight = (it.fontWeight as number | string) ?? 400;
+    const fontStyle: 'normal' | 'italic' | 'oblique' =
+      (it.fontStyle as 'normal' | 'italic' | 'oblique') || 'normal';
+    const fill       = (it.fill as string) || '#000000';
+    const startX     = (it.left as number) || 0;
+    const startY     = (it.top  as number) || 0;
+
+    (it as any).initDimensions();
+    const lines  = (it as any)._textLines  as string[][];
+    const bounds = (it as any).__charBounds as Array<Array<{ left: number; width: number }>>;
+    const lineHeightPx = fontSize * ((it.lineHeight as number) || 1.16);
+
+    const newSelectable = this.currentMode !== 'text';
+
+    let charIndex = 0;
+    const createdCommands: Command[] = [];
+
+    for (let li = 0; li < lines.length; li++) {
+      const line = lines[li];
+      for (let ci = 0; ci < line.length; ci++) {
+        const char = line[ci];
+        // 空白は fabric.Text を生成しない (既存挙動踏襲)。bounds[li][ci].left は
+        // 空白を含んだ座標なので、スキップしても次文字の left はズレない。
+        if (char === ' ') { charIndex++; continue; }
+
+        const obj = new fabric.Text(char, {
+          left:        startX + bounds[li][ci].left,
+          top:         startY + li * lineHeightPx,
+          fontFamily,
+          fontSize,
+          fontWeight,
+          fontStyle,
+          fill,
+          selectable:  newSelectable,
+          evented:     newSelectable,
+          hasControls: true,
+          hasBorders:  true,
+          data: { groupId, charIndex, sourceText: text },
+        });
+        const objectId = ensureObjectId(obj as any, 'text');
+
+        this.canvas.add(obj);
+        createdCommands.push({
+          kind: 'objectCreated',
+          objectId,
+          after: this.captureObjectSnapshot(obj),
+        });
+        charIndex++;
+      }
+    }
+
+    this.canvas.remove(it);
+    this.canvas.requestRenderAll();
+
+    if (createdCommands.length === 1) {
+      this.pushCommand(createdCommands[0]);
+    } else if (createdCommands.length > 1) {
+      this.pushCommand({ kind: 'compound', commands: createdCommands });
+    }
+    if (createdCommands.length > 0) {
+      logger.debug(`[history] push commitIText: ${createdCommands.length} chars`);
+    }
+
+    const vt = this.canvas.viewportTransform;
+    logger.debug(
+      `[commitIText] created ${charIndex} chars for groupId=${groupId}` +
+      ` startX=${startX} startY=${startY}` +
+      ` vt=[${vt?.map(n => n.toFixed(3)).join(',')}] zoom=${this.canvas.getZoom()}`
+    );
   };
 }
