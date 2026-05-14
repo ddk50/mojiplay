@@ -23,7 +23,7 @@ import { State } from './state';
 import { ElectronUIPort } from './ui-port-impl';
 import { ElectronHostShell } from './electron-host-shell';
 import { FileIOInteractor } from '../usecases/menu/file-io-interactor';
-import { FileSystemDocumentRepository } from '../repository/file-system-document-repository';
+import { FileSystemDocumentRepository } from '../repository/file-system-document';
 import { createMenuActionRegistry } from '../usecases/menu/menu-action-registry';
 import type { MenuActionRegistry } from '../usecases/menu/menu-action-registry-interface';
 import { buildToolbar } from './toolbar';

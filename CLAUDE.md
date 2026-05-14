@@ -38,8 +38,8 @@ src/
 │   ├── ui-port-interface.ts    # UIPort: toast / dialog / 画像 clipboard
 │   └── host-shell-interface.ts # HostShell: PNG 保存 / zoom / fullscreen / paste/copy/close IPC / log
 ├── repository/           # Driven adapter (Gateway): port + concrete を sibling 配置
-│   ├── document-repository-interface.ts
-│   └── file-system-document-repository.ts
+│   ├── document-interface.ts
+│   └── file-system-document.ts
 ├── controllers/          # Interface Adapter (Input、外→内): DOM/fabric event を Use Case に dispatch
 │   │                     # ファイル名は -controller suffix 省略 (ディレクトリ名で自明)
 │   ├── canvas-input-interface.ts / canvas-input.ts  # pointer/wheel/selection/object event → Tool
