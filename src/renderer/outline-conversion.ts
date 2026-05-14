@@ -12,7 +12,7 @@ import { parseStyle } from './font-enumeration';
 import { logger } from './logger';
 import { computeOutlinePathPosition } from '../core/outline-position';
 import { ensureObjectId } from '../core/object-id';
-import { getFontSizeMult, getFontSizeFraction, getPathOffset } from './fabric-internals';
+import { getPathOffset } from './fabric-internals';
 
 // family|weight|italic をキーに fontkit.Font をキャッシュ。失敗時も null を
 // キャッシュして再試行のコストを避ける。
@@ -139,13 +139,7 @@ export async function outlineTextToPath(ft: fabric.Text): Promise<fabric.Path | 
   // 位置計算は純粋関数 computeOutlinePathPosition に切り出し済み
   // (src/core/outline-position.ts, ユニットテストあり)。
   const { left: pathLeft, top: pathTop } = computeOutlinePathPosition(
-    {
-      left: ft.left ?? 0,
-      top: ft.top ?? 0,
-      fontSize,
-      fontSizeMult: getFontSizeMult(ft),
-      fontSizeFraction: getFontSizeFraction(ft),
-    },
+    { left: ft.left ?? 0, top: ft.top ?? 0, fontSize },
     { minX: bb.minX, minY: bb.minY },
   );
 

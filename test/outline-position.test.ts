@@ -42,9 +42,11 @@
 //         の位置に baseline を置く。我々の式 (0.879 倍が無い) は fontSize の
 //         0.121 倍分 (72pt で 8.7px) 下へ baseline がズレて計算されていた。
 //
-//   対策: fabric の内部定数をそのまま参照する式に修正。computeOutlinePathPosition
-//         がその式の本体。fabric インスタンスに定数が無い場合のデフォルト値
-//         (1.13 / 0.222) は純粋関数内で持つ。
+//   対策: 同じ式を再現する純粋関数 computeOutlinePathPosition を切り出し。fabric
+//         が source 内で literal として持つ 1.13 / 0.222 を、内部参照ではなく
+//         outline-position.ts に literal として hardcode してある (= fabric の
+//         internal access が無くても済む。fabric 5.x で per-instance override
+//         される事は無く、6 で値が変わったら本テストで検出する)。
 //
 //   テスト可能性: ✓ 純粋な算数なので本テストで守る。リグレッションテストは
 //                 production ログから取った実値を使用。
@@ -54,22 +56,13 @@
 import { computeOutlinePathPosition } from '../src/core/outline-position';
 
 describe('computeOutlinePathPosition', () => {
-  test('fabric デフォルト定数 (_fontSizeMult=1.13, _fontSizeFraction=0.222) で計算できる', () => {
+  test('fabric デフォルト定数 (FABRIC_FONT_SIZE_MULT=1.13, FABRIC_FONT_SIZE_FRACTION=0.222) で計算できる', () => {
     const r = computeOutlinePathPosition(
       { left: 100, top: 200, fontSize: 72 },
       { minX: 5, minY: -50 },
     );
     expect(r.left).toBe(105);
     expect(r.top).toBeCloseTo(213.29808, 3);
-  });
-
-  test('明示的な fontSizeMult / fontSizeFraction でデフォルトを上書きできる', () => {
-    const r = computeOutlinePathPosition(
-      { left: 0, top: 0, fontSize: 100, fontSizeMult: 1, fontSizeFraction: 0 },
-      { minX: 10, minY: -40 },
-    );
-    expect(r.left).toBe(10);
-    expect(r.top).toBe(60);
   });
 
   test('回帰: ft=(198,143), fontSize=72, "H" グリフ (production log 由来) を再現できる', () => {

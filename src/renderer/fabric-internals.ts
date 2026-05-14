@@ -3,11 +3,14 @@
 // 背景: fabric 5.3.x は contextTop / upperCanvasEl / __charBounds / pathOffset /
 // _setPositionDimensions 等を公式に export していない。これらに依存しないと:
 //   - アンカー編集 (path の commands を mutate して bbox を再算出)
-//   - アウトライン化 (Text の baseline 計算で _fontSizeMult / _fontSizeFraction を流用)
 //   - IText 分割 (__charBounds でペアワイズカーニング込みの char 座標を取得)
 //   - overlay 描画 (contextTop に直接描いてアンカー / ハンドル / marquee を出す)
 // が実現できない。これらは fabric が「vector editor として使われる」ことを想定して
 // いないため API として開いてない部分。
+//
+// 一方、fabric.Text の baseline 計算定数 (_fontSizeMult / _fontSizeFraction) は
+// fabric source の literal で per-instance override されることが無いため、
+// src/core/outline-position.ts に literal として hardcode してある (= internal access 不要)。
 //
 // 方針:
 //   - 各 internal の型は **このファイル内でだけ** local 宣言する (global merging しない)。
@@ -27,11 +30,6 @@ interface ITextInternal {
   _textLines?: ReadonlyArray<ReadonlyArray<string>>;
   __charBounds?: ReadonlyArray<ReadonlyArray<{ left: number; width: number }>>;
   initDimensions(): void;
-}
-
-interface TextInternal {
-  _fontSizeMult?: number;
-  _fontSizeFraction?: number;
 }
 
 interface PathInternal {
@@ -78,18 +76,6 @@ export function getITextCharBounds(
   it: fabric.IText,
 ): ReadonlyArray<ReadonlyArray<{ left: number; width: number }>> {
   return (it as unknown as ITextInternal).__charBounds ?? [];
-}
-
-// ── Text ──────────────────────────────────────────────────────────────────
-
-/** fabric.Text の baseline 計算に使う font size 補正定数 (5.3 default: 1.13)。 */
-export function getFontSizeMult(t: fabric.Text): number | undefined {
-  return (t as unknown as TextInternal)._fontSizeMult;
-}
-
-/** 同上 fraction (5.3 default: 0.222)。 */
-export function getFontSizeFraction(t: fabric.Text): number | undefined {
-  return (t as unknown as TextInternal)._fontSizeFraction;
 }
 
 // ── Path ──────────────────────────────────────────────────────────────────

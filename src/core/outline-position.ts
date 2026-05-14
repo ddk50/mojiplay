@@ -3,14 +3,23 @@
 // fabric.Text → fabric.Path 変換時、パスの world 座標を計算する算数部分だけを
 // 切り出したモジュール。fabric / fontkit / DOM 非依存なので単体テスト可能。
 
+/**
+ * fabric.Text の baseline 計算定数 (fabric 5.3 source からの literal)。
+ *
+ * fabric は `fillText(textBaseline='alphabetic')` で描画し、各 Text instance に
+ * `_fontSizeMult = 1.13` / `_fontSizeFraction = 0.222` を保持する (fabric 5.x で
+ * per-instance に override されることは無い)。fabric の internal を毎回読まずに
+ * literal として持つことで、`_fontSizeMult` / `_fontSizeFraction` への internal
+ * access を不要にしている。fabric 6 で値が変わったら CI で位置回帰テストが落ちる
+ * (test/outline-position.test.ts)。
+ */
+const FABRIC_FONT_SIZE_MULT = 1.13;
+const FABRIC_FONT_SIZE_FRACTION = 0.222;
+
 export interface OutlineTextAnchor {
   readonly left: number;
   readonly top: number;
   readonly fontSize: number;
-  /** fabric.Text._fontSizeMult (fabric 5.3 default: 1.13) */
-  readonly fontSizeMult?: number;
-  /** fabric.Text._fontSizeFraction (fabric 5.3 default: 0.222) */
-  readonly fontSizeFraction?: number;
 }
 
 export interface GlyphInkBBox {
@@ -28,27 +37,26 @@ export interface CanvasPosition {
  * の左上ワールド座標を計算する。
  *
  * ## 計算根拠
- * fabric.Text は `fillText(textBaseline='alphabetic')` で描画する。fabric 5.3 の
- * `_renderTextCommon` / `_renderChars` を追跡すると、1行テキストの baseline 世界 y は:
+ * fabric 5.3 の `_renderTextCommon` / `_renderChars` を追跡すると、1行テキストの
+ * baseline 世界 y は:
  *
- *   baseline = text.top + text.fontSize * _fontSizeMult * (1 - _fontSizeFraction)
- *            ≈ text.top + text.fontSize * 0.879   (fabric デフォルト定数で)
+ *   baseline = text.top + text.fontSize * FABRIC_FONT_SIZE_MULT * (1 - FABRIC_FONT_SIZE_FRACTION)
+ *            ≈ text.top + text.fontSize * 0.879
  *
  * グリフインクの visual top-left は `(text.left + bbox.minX, baseline + bbox.minY)`。
  * `bbox.minY` は Y-flip 済みで、ascender 側 (baseline より上) が負値。
  *
  * ## 注意
  * 単純な `text.top + text.fontSize` ではない。fabric は内部で 1.13 倍の
- * `_fontSizeMult` と 0.222 の `_fontSizeFraction` という定数で baseline 位置を
- * ずらしており、この式を忠実に再現しないと 72pt で約 8.7px のズレが発生する。
+ * mult と 0.222 の fraction という定数で baseline 位置をずらしており、この式を
+ * 忠実に再現しないと 72pt で約 8.7px のズレが発生する。
  */
 export function computeOutlinePathPosition(
   text: OutlineTextAnchor,
   bbox: GlyphInkBBox,
 ): CanvasPosition {
-  const mult = text.fontSizeMult ?? 1.13;
-  const frac = text.fontSizeFraction ?? 0.222;
-  const baselineY = text.top + text.fontSize * mult * (1 - frac);
+  const baselineY =
+    text.top + text.fontSize * FABRIC_FONT_SIZE_MULT * (1 - FABRIC_FONT_SIZE_FRACTION);
   return {
     left: text.left + bbox.minX,
     top: baselineY + bbox.minY,
