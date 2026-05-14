@@ -323,6 +323,16 @@ export class FakeFabricCanvas {
   getZoom(): number {
     return 1;
   }
+
+  // State.exportCanvasAsPngDataUrl 経路で呼ばれる。test では中身を検証しないので
+  // 固定の dataURL を返す (= 「呼ばれたかどうか」だけ test 側で観測可能にする)。
+  toDataURL(_opts: {
+    format?: string;
+    multiplier?: number;
+    enableRetinaScaling?: boolean;
+  }): string {
+    return 'data:image/png;base64,STUB';
+  }
 }
 
 function reviveObject(o: { type: string; [k: string]: unknown }): FabricObjectLike {

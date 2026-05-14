@@ -82,6 +82,7 @@ class FakeRepo implements DocumentRepository {
 class FakeUI implements UIPort {
   toasts: Array<{ message: string; isError: boolean }> = [];
   discardAnswer: DiscardChoice = 'cancel';
+  yesNoAnswer = false;
   dirtyValues: boolean[] = [];
 
   showToast(message: string, isError = false): void {
@@ -89,6 +90,9 @@ class FakeUI implements UIPort {
   }
   async confirmDiscard(_message: string): Promise<DiscardChoice> {
     return this.discardAnswer;
+  }
+  async confirmYesNo(_message: string): Promise<boolean> {
+    return this.yesNoAnswer;
   }
   setNativeDirty(dirty: boolean): void {
     this.dirtyValues.push(dirty);

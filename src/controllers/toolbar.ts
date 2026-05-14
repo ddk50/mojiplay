@@ -99,11 +99,9 @@ export class ToolbarControllerImpl implements ToolbarController {
     void this.menuActions.execute('select-all');
   };
 
-  /** btn-clear click。確認 dialog → state.clearAll()。 */
+  /** btn-clear click。 */
   readonly onClearClick = (): void => {
-    if (confirm('キャンバスの内容をすべて削除しますか？')) {
-      this.state.clearAll();
-    }
+    void this.menuActions.execute('clear-all');
   };
 
   /** btn-export click。 */

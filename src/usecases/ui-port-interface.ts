@@ -13,6 +13,10 @@ export interface UIPort {
   /** 「保存しますか?」3 択ダイアログ。OS native dialog 経由の想定。 */
   confirmDiscard(message: string): Promise<DiscardChoice>;
 
+  /** 破壊的操作 (clearAll 等) の確認 yes/no ダイアログ。
+   *  user が yes (= 続行) を選んだら true、cancel なら false。 */
+  confirmYesNo(message: string): Promise<boolean>;
+
   /** main process に dirty 状態を通知 (= window 閉じ時の 3 択 dialog 判定で使う)。 */
   setNativeDirty(dirty: boolean): void;
 

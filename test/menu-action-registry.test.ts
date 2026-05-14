@@ -20,11 +20,15 @@ import type { FileIOInteractor } from '../src/usecases/menu/file-io-interactor';
 
 class FakeUI implements UIPort {
   toasts: Array<{ message: string; isError: boolean }> = [];
+  yesNoAnswer = false;
   showToast(message: string, isError = false): void {
     this.toasts.push({ message, isError });
   }
   async confirmDiscard(_m: string): Promise<DiscardChoice> {
     return 'cancel';
+  }
+  async confirmYesNo(_m: string): Promise<boolean> {
+    return this.yesNoAnswer;
   }
   setNativeDirty(_d: boolean): void {
     /* no-op */
@@ -38,9 +42,11 @@ class FakeHost implements HostShell {
   zoomCalls: Array<'in' | 'out' | 'reset'> = [];
   fullscreenCalls = 0;
   devToolsCalls = 0;
+  savePngCalls: string[] = [];
   log = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
-  async savePng(_d: string): Promise<{ ok: true; filePath: string }> {
-    return { ok: true, filePath: '' };
+  async savePng(d: string): Promise<{ ok: true; filePath: string }> {
+    this.savePngCalls.push(d);
+    return { ok: true, filePath: '/tmp/canvas.png' };
   }
   async copyImageToClipboard(_d: string): Promise<void> {
     /* no-op */
@@ -185,5 +191,46 @@ describe('MenuActionRegistry', () => {
     await registry.execute('outline');
     expect(ui.toasts.length).toBeGreaterThan(0);
     expect(ui.toasts[0]).toMatchObject({ isError: true });
+  });
+
+  test("execute('clear-all') yes で State.clearAll を呼ぶ", async () => {
+    const { registry, state, ui } = setup();
+    await state.applySnapshot({
+      format: 'mojiplay',
+      version: 1,
+      canvas: {
+        objects: [
+          { type: 'text', text: 'A', data: { objectId: 'id1', type: 'text' } },
+          { type: 'text', text: 'B', data: { objectId: 'id2', type: 'text' } },
+        ],
+      } as unknown,
+    });
+    expect(state.getAllObjects()).toHaveLength(2);
+    ui.yesNoAnswer = true;
+    await registry.execute('clear-all');
+    expect(state.getAllObjects()).toHaveLength(0);
+  });
+
+  test("execute('clear-all') no で State.clearAll を呼ばない", async () => {
+    const { registry, state, ui } = setup();
+    await state.applySnapshot({
+      format: 'mojiplay',
+      version: 1,
+      canvas: {
+        objects: [{ type: 'text', text: 'A', data: { objectId: 'id1', type: 'text' } }],
+      } as unknown,
+    });
+    expect(state.getAllObjects()).toHaveLength(1);
+    ui.yesNoAnswer = false;
+    await registry.execute('clear-all');
+    expect(state.getAllObjects()).toHaveLength(1);
+  });
+
+  test("execute('export-canvas-png') が host.savePng を canvas dataURL で呼ぶ", async () => {
+    const { registry, host, ui } = setup();
+    await registry.execute('export-canvas-png');
+    expect(host.savePngCalls).toHaveLength(1);
+    expect(host.savePngCalls[0]).toMatch(/^data:image\/png/);
+    expect(ui.toasts.some((t) => !t.isError && t.message.includes('保存しました'))).toBe(true);
   });
 });
