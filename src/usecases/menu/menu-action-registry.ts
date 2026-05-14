@@ -16,6 +16,7 @@ import { deleteSelection } from './delete-selection';
 import { duplicateSelection } from './duplicate-selection';
 import { doCopy } from './copy-selection-as-png';
 import { outlineSelection } from './outline-selection';
+import { exportCanvasAsPng } from './export-canvas-as-png';
 
 export function createMenuActionRegistry(deps: MenuActionRegistryDeps): MenuActionRegistry {
   const { state, ui, fileIO, host } = deps;
@@ -48,6 +49,7 @@ export function createMenuActionRegistry(deps: MenuActionRegistryDeps): MenuActi
     { id: 'file-open', execute: () => fileIO.openFile() },
     { id: 'file-save', execute: () => fileIO.saveCurrent() },
     { id: 'file-save-as', execute: () => fileIO.saveAs() },
+    { id: 'export-canvas-png', execute: () => exportCanvasAsPng(state, host, ui) },
   ];
 
   const map = new Map<string, MenuAction>(actions.map((a) => [a.id, a]));

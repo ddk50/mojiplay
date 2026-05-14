@@ -252,6 +252,13 @@ export interface State {
     multiplier: number,
   ): { dataUrl: string; width: number; height: number } | null;
 
+  /**
+   * canvas 全体を PNG dataURL に export する。selection は事前に解除する
+   * (selection bracket が PNG に焼き込まれないように)。
+   * @param multiplier 解像度倍率 (= 通常 2)
+   */
+  exportCanvasAsPngDataUrl(multiplier: number): string;
+
   // ── debug ──
 
   /** History の論理順 Command 列 (debug / 永続化 inspection 用)。 */

@@ -534,6 +534,16 @@ export class State implements StateContract {
     return exportObjectToPngDataUrl(active, multiplier);
   }
 
+  exportCanvasAsPngDataUrl(multiplier: number): string {
+    this.canvas.discardActiveObject();
+    this.canvas.renderAll();
+    return this.canvas.toDataURL({
+      format: 'png',
+      multiplier,
+      enableRetinaScaling: true,
+    });
+  }
+
   // ===== 高レベル handler 用ヘルパ =====
 
   /**

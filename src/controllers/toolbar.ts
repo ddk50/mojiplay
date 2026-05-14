@@ -13,20 +13,17 @@
 import type { State, Mode, SelectionProps } from '../core/state-interface';
 import type { Tool } from '../usecases/tools/tool-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
-import type { HostShell } from '../usecases/host-shell-interface';
 import type { MenuActionRegistry } from '../usecases/menu/menu-action-registry-interface';
 import type { ToolbarController, ToolbarControllerDeps } from './toolbar-interface';
+import { switchMode } from '../usecases/menu/switch-mode';
 import { fontFamilySel, fontStyleSel, populateStyleList } from '../renderer/font-enumeration';
 import { currentFontStyle } from '../renderer/font-current';
-import { showToast } from '../renderer/toast';
 
 export class ToolbarControllerImpl implements ToolbarController {
   private readonly state: State;
   private readonly tools: Record<Mode, Tool>;
   private readonly selectCharTool: SelectCharTool;
-  private readonly host: HostShell;
   private readonly menuActions: MenuActionRegistry;
-  private readonly canvas: fabric.Canvas;
   private readonly modeButtons: Record<string, HTMLButtonElement>;
 
   // DOM 参照
@@ -46,23 +43,13 @@ export class ToolbarControllerImpl implements ToolbarController {
   private readonly btnExport = document.getElementById('btn-export') as HTMLButtonElement;
   private readonly btnOutline = document.getElementById('btn-outline') as HTMLButtonElement;
 
-  // snap config (select-char モード専用)
-  private snapEnabled: boolean;
-  private snapPitch: number;
-  private snapThreshold: number;
-
   constructor(deps: ToolbarControllerDeps) {
     this.state = deps.state;
     this.tools = deps.tools;
     this.selectCharTool = deps.selectCharTool;
-    this.host = deps.host;
     this.menuActions = deps.menuActions;
-    this.canvas = deps.canvas;
     this.modeButtons = deps.modeButtons;
 
-    this.snapEnabled = this.snapEnabledInput.checked;
-    this.snapPitch = Math.max(1, parseInt(this.snapPitchInput.value, 10) || 8);
-    this.snapThreshold = Math.max(1, parseInt(this.snapThresholdInput.value, 10) || 5);
     this.syncSnapConfigToTool();
   }
 
@@ -119,21 +106,9 @@ export class ToolbarControllerImpl implements ToolbarController {
     }
   };
 
-  /** btn-export click。canvas を PNG export して host.savePng で保存。 */
-  readonly onExportClick = async (): Promise<void> => {
-    this.canvas.discardActiveObject();
-    this.canvas.renderAll();
-    const dataURL = this.canvas.toDataURL({
-      format: 'png',
-      multiplier: 2,
-      enableRetinaScaling: true,
-    });
-    const r = await this.host.savePng(dataURL);
-    if (r.ok) {
-      showToast(`保存しました: ${r.filePath}`);
-    } else if (r.reason !== 'canceled') {
-      showToast(`エラー: ${r.reason}`, true);
-    }
+  /** btn-export click。 */
+  readonly onExportClick = (): void => {
+    void this.menuActions.execute('export-canvas-png');
   };
 
   /** btn-outline click。 */
@@ -143,38 +118,22 @@ export class ToolbarControllerImpl implements ToolbarController {
 
   // ── snap config ─────────────────────────────────────────────────────
 
-  /** snap-enabled checkbox の change。 */
-  readonly onSnapEnabledChange = (): void => {
-    this.snapEnabled = this.snapEnabledInput.checked;
-    this.syncSnapConfigToTool();
-  };
-
-  /** snap-pitch input の input。 */
-  readonly onSnapPitchChange = (): void => {
-    this.snapPitch = Math.max(1, parseInt(this.snapPitchInput.value, 10) || 8);
-    this.syncSnapConfigToTool();
-  };
-
-  /** snap-threshold input の input。 */
-  readonly onSnapThresholdChange = (): void => {
-    this.snapThreshold = Math.max(1, parseInt(this.snapThresholdInput.value, 10) || 5);
+  /** snap 関連 input (enabled/pitch/threshold) の change。
+   *  どれが変わっても DOM 全部読み直して tool に push する (= 状態を controller に
+   *  持たない、DOM が source of truth)。 */
+  readonly onSnapConfigChange = (): void => {
     this.syncSnapConfigToTool();
   };
 
   // ── mode 切替 ────────────────────────────────────────────────────────
 
   /** mode button click または初期化時に呼ぶ。
-   *  is-active class 切替 + Tool の onActivate/onDeactivate + state.setMode。 */
+   *  is-active class 切替 (= presentation) + switchMode use case 呼び出し。 */
   readonly setMode = (m: Mode): void => {
-    const prev = this.state.getCurrentMode();
     for (const k of Object.keys(this.modeButtons)) {
       this.modeButtons[k].classList.toggle('is-active', k === m);
     }
-    if (prev !== m) {
-      this.tools[prev].onDeactivate(this.state);
-      this.tools[m].onActivate(this.state);
-    }
-    this.state.setMode(m);
+    switchMode(this.state, this.tools, m);
   };
 
   // ====================================================================
@@ -191,9 +150,9 @@ export class ToolbarControllerImpl implements ToolbarController {
     this.btnClear.addEventListener('click', this.onClearClick);
     this.btnExport.addEventListener('click', this.onExportClick);
     this.btnOutline.addEventListener('click', this.onOutlineClick);
-    this.snapEnabledInput.addEventListener('change', this.onSnapEnabledChange);
-    this.snapPitchInput.addEventListener('input', this.onSnapPitchChange);
-    this.snapThresholdInput.addEventListener('input', this.onSnapThresholdChange);
+    this.snapEnabledInput.addEventListener('change', this.onSnapConfigChange);
+    this.snapPitchInput.addEventListener('input', this.onSnapConfigChange);
+    this.snapThresholdInput.addEventListener('input', this.onSnapConfigChange);
 
     for (const id of Object.keys(this.modeButtons)) {
       this.modeButtons[id].addEventListener('click', () => this.setMode(id as Mode));
@@ -211,9 +170,9 @@ export class ToolbarControllerImpl implements ToolbarController {
     this.btnClear.removeEventListener('click', this.onClearClick);
     this.btnExport.removeEventListener('click', this.onExportClick);
     this.btnOutline.removeEventListener('click', this.onOutlineClick);
-    this.snapEnabledInput.removeEventListener('change', this.onSnapEnabledChange);
-    this.snapPitchInput.removeEventListener('input', this.onSnapPitchChange);
-    this.snapThresholdInput.removeEventListener('input', this.onSnapThresholdChange);
+    this.snapEnabledInput.removeEventListener('change', this.onSnapConfigChange);
+    this.snapPitchInput.removeEventListener('input', this.onSnapConfigChange);
+    this.snapThresholdInput.removeEventListener('input', this.onSnapConfigChange);
     // mode button listeners は無名 closure なので detach 不要 (window.unload で破棄)。
   }
 
@@ -223,9 +182,9 @@ export class ToolbarControllerImpl implements ToolbarController {
 
   private syncSnapConfigToTool(): void {
     this.selectCharTool.setSnapConfig({
-      enabled: this.snapEnabled,
-      pitch: this.snapPitch,
-      threshold: this.snapThreshold,
+      enabled: this.snapEnabledInput.checked,
+      pitch: Math.max(1, parseInt(this.snapPitchInput.value, 10) || 8),
+      threshold: Math.max(1, parseInt(this.snapThresholdInput.value, 10) || 5),
     });
   }
 }

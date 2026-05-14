@@ -124,9 +124,7 @@ const toolbarController: ToolbarController = new ToolbarControllerImpl({
   state,
   tools,
   selectCharTool,
-  host,
   menuActions,
-  canvas,
   modeButtons,
 });
 
