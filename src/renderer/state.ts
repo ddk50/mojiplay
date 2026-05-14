@@ -20,8 +20,12 @@ import type { ObjectId } from '../core/object-id';
 import type { Command, ObjectSnapshot } from '../core/history/types';
 import { History } from '../core/history/history';
 import type {
-  ObjectHandle, PathHandle, PathSnapshot, TextCreateProps,
-  Mode, SelectionProps,
+  ObjectHandle,
+  PathHandle,
+  PathSnapshot,
+  TextCreateProps,
+  Mode,
+  SelectionProps,
   State as StateContract,
 } from '../core/state-interface';
 import type { DocumentSnapshot } from '../core/document/snapshot';
@@ -32,11 +36,32 @@ import { logger, fmtObj } from './logger';
 import { generateGroupId } from './group-id';
 import { outlineTextToPath } from './outline-conversion';
 import { exportObjectToPngDataUrl } from './copy-export';
+import {
+  getUpperCanvasEl,
+  getContextTop,
+  focusITextTextarea,
+  initITextDimensions,
+  getITextLines,
+  getITextCharBounds,
+  getPathOffset,
+  markPathDirty,
+  recomputePathDimensions,
+} from './fabric-internals';
 
 export interface CreateStateOptions {
   /** History 上限。default 100 */
   historyMax?: number;
 }
+
+// fabric.Path.path は @types/fabric が `Point[]` と誤定義しているが、実体は
+// [['M', x, y], ['L', x, y], ...] という command tuple 配列。reads / writes 時に
+// `as unknown as { path: PathCommandArray }` で narrow する。
+type PathCommandArray = ReadonlyArray<ReadonlyArray<number | string>>;
+
+// State 内部の ObjectHandle は fabric.Object 参照を _obj に保持する。
+// 公開 interface (ObjectHandle) に _obj は出さず、setActiveSelection 等の
+// State 内部で型 narrow して取り出す。
+type InternalHandle = ObjectHandle & { _obj: fabric.Object };
 
 export class State implements StateContract {
   private readonly canvas: fabric.Canvas;
@@ -48,7 +73,10 @@ export class State implements StateContract {
   // 毎回別 instance を返すと「展開済み」を検出できず無限再帰し、fabric の
   // drag state を破壊する。WeakMap で fabric.Object が GC されると自動で抜けるので
   // メモリリークも無い。
-  private readonly objectHandleCache = new WeakMap<fabric.Object, ObjectHandle & { _obj: fabric.Object }>();
+  private readonly objectHandleCache = new WeakMap<
+    fabric.Object,
+    ObjectHandle & { _obj: fabric.Object }
+  >();
 
   // fabric-driven な transform (drag / scale / rotate) の直前 snapshot を保持。
   // mouse:down で capture、object:modified で消費。ObjectId をキー (multi-select 用)。
@@ -66,7 +94,7 @@ export class State implements StateContract {
   constructor(canvas: fabric.Canvas, options: CreateStateOptions = {}) {
     this.canvas = canvas;
     this.history = new History({ max: options.historyMax ?? 100 });
-    this.upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement;
+    this.upperCanvas = getUpperCanvasEl(canvas);
 
     // fabric event hook (mouse:down で before snapshot capture、object:modified で
     // fabric-driven な transform を Command 化して history に push、
@@ -98,18 +126,19 @@ export class State implements StateContract {
   getActiveObjects(): ReadonlyArray<ObjectHandle> {
     const active = this.canvas.getActiveObject();
     if (!active) return [];
-    const objs: fabric.Object[] = active.type === 'activeSelection'
-      ? (active as fabric.ActiveSelection).getObjects()
-      : [active];
-    return objs.map(o => this.makeObjectHandle(o));
+    const objs: fabric.Object[] =
+      active.type === 'activeSelection'
+        ? (active as fabric.ActiveSelection).getObjects()
+        : [active];
+    return objs.map((o) => this.makeObjectHandle(o));
   }
 
   getAllObjects(): ReadonlyArray<ObjectHandle> {
-    return this.canvas.getObjects().map(o => this.makeObjectHandle(o));
+    return this.canvas.getObjects().map((o) => this.makeObjectHandle(o));
   }
 
   setActiveSelection(handles: ReadonlyArray<ObjectHandle>): void {
-    const objs = handles.map(h => (h as any)._obj as fabric.Object);
+    const objs = handles.map((h) => (h as InternalHandle)._obj);
     this.canvas.discardActiveObject();
     if (objs.length === 1) {
       this.canvas.setActiveObject(objs[0]);
@@ -122,20 +151,20 @@ export class State implements StateContract {
 
   createTextAt(x: number, y: number, props: TextCreateProps): void {
     const it = new fabric.IText('', {
-      left:       x,
-      top:        y,
+      left: x,
+      top: y,
       fontFamily: props.fontFamily,
-      fontSize:   props.fontSize,
+      fontSize: props.fontSize,
       fontWeight: props.fontWeight,
-      fontStyle:  props.fontStyle,
-      fill:       props.fill,
+      fontStyle: props.fontStyle,
+      fill: props.fill,
       selectable: true,
-      evented:    true,
+      evented: true,
     });
     this.canvas.add(it);
     this.canvas.setActiveObject(it);
     it.enterEditing();
-    (it as any).hiddenTextarea?.focus();
+    focusITextTextarea(it);
   }
 
   pushCommand(cmd: Command): void {
@@ -169,25 +198,27 @@ export class State implements StateContract {
     this.bumpToken();
   }
 
-  canUndo(): boolean { return this.history.canUndo(); }
-  canRedo(): boolean { return this.history.canRedo(); }
+  canUndo(): boolean {
+    return this.history.canUndo();
+  }
+  canRedo(): boolean {
+    return this.history.canRedo();
+  }
 
   // ===== 永続化 (snapshot 境界変換) =====
 
   toSnapshot(): DocumentSnapshot {
     return {
-      format:  'mojiplay',
+      format: 'mojiplay',
       version: 1,
-      canvas:  this.canvas.toJSON(['data']),
+      canvas: this.canvas.toJSON(['data']),
     };
   }
 
   async applySnapshot(s: DocumentSnapshot): Promise<void> {
     this.canvas.clear();
     // canvas.loadFromJSON は内部で enlivenObjects を呼ぶため非同期。callback で resolve。
-    await new Promise<void>(resolve =>
-      this.canvas.loadFromJSON(s.canvas, () => resolve())
-    );
+    await new Promise<void>((resolve) => this.canvas.loadFromJSON(s.canvas, () => resolve()));
     this.canvas.viewportTransform = [1, 0, 0, 1, 0, 0];
     this.canvas.requestRenderAll();
     // 注: data.objectId は信頼してそのまま採用 (再発行しない)。
@@ -211,7 +242,7 @@ export class State implements StateContract {
 
     const cmds: Command[] = [];
     for (const obj of active) {
-      const id = (obj as any).data?.objectId as ObjectId | undefined;
+      const id = obj.data?.objectId;
       if (!id) continue;
       const before = this.captureObjectSnapshot(obj);
       obj.set(props as Partial<fabric.Object>);
@@ -234,19 +265,17 @@ export class State implements StateContract {
   setMode(mode: Mode): void {
     this.currentMode = mode;
     const isSelectMode = mode === 'select-group' || mode === 'select-char';
-    const isPenMode    = mode === 'pen-add' || mode === 'pen-remove';
-    this.canvas.selection     = isSelectMode;
+    const isPenMode = mode === 'pen-add' || mode === 'pen-remove';
+    this.canvas.selection = isSelectMode;
     this.canvas.defaultCursor = mode === 'text' ? 'text' : 'default';
     // 白矢印 (select-char) は Illustrator の Direct Selection 同様に標準アローを維持
     // (path 本体ホバーで move カーソルになると「十字」表示になり混乱する)。
     this.canvas.hoverCursor =
-      mode === 'text'        ? 'text' :
-      mode === 'select-char' ? 'default' :
-      'move';
+      mode === 'text' ? 'text' : mode === 'select-char' ? 'default' : 'move';
 
-    this.canvas.forEachObject(o => {
+    this.canvas.forEachObject((o) => {
       o.selectable = isSelectMode;
-      o.evented    = isSelectMode;
+      o.evented = isSelectMode;
     });
 
     this.clearOverlay();
@@ -266,18 +295,20 @@ export class State implements StateContract {
   }
 
   clearOverlay(): void {
-    const ctx = (this.canvas as any).contextTop as CanvasRenderingContext2D | undefined;
+    const ctx = getContextTop(this.canvas);
     if (ctx) this.canvas.clearContext(ctx);
   }
 
   // ===== dirty tracking =====
 
-  getHistoryToken(): number { return this.tokenCounter; }
+  getHistoryToken(): number {
+    return this.tokenCounter;
+  }
 
   onMutate(cb: () => void): () => void {
     this.mutationListeners.push(cb);
     return () => {
-      this.mutationListeners = this.mutationListeners.filter(c => c !== cb);
+      this.mutationListeners = this.mutationListeners.filter((c) => c !== cb);
     };
   }
 
@@ -300,7 +331,7 @@ export class State implements StateContract {
     // History: 削除前に各 object の snapshot を捕捉、compound として push。
     const cmds: Command[] = [];
     for (const obj of selected) {
-      const id = (obj as any).data?.objectId as ObjectId | undefined;
+      const id = obj.data?.objectId;
       if (id) {
         cmds.push({
           kind: 'objectDeleted',
@@ -310,7 +341,7 @@ export class State implements StateContract {
       }
     }
 
-    selected.forEach(obj => this.canvas.remove(obj));
+    selected.forEach((obj) => this.canvas.remove(obj));
     this.canvas.discardActiveObject();
     this.canvas.renderAll();
 
@@ -337,27 +368,33 @@ export class State implements StateContract {
     const newObjects: fabric.Object[] = [];
 
     for (const orig of selected) {
-      const snapshot = (orig as any).toObject(['data']) as any;
-      const origData = snapshot.data ?? {};
+      const snapshot = orig.toObject(['data']) as ObjectSnapshot;
+      const origData = snapshot.data;
       const type = snapshot.type as string;
       const objType: 'text' | 'path' = origData.type ?? (type === 'path' ? 'path' : 'text');
 
       // groupId 再マップ (同じ元 groupId なら同じ新 groupId を共有)
-      const oldGid = origData.groupId as string | undefined;
+      const oldGid = origData.groupId;
       let newGid: string | undefined;
       if (oldGid) {
         let mapped = groupIdRemap.get(oldGid);
-        if (!mapped) { mapped = generateGroupId(); groupIdRemap.set(oldGid, mapped); }
+        if (!mapped) {
+          mapped = generateGroupId();
+          groupIdRemap.set(oldGid, mapped);
+        }
         newGid = mapped;
       }
 
       let cloned: fabric.Object;
       if (type === 'path') {
         const { path: pathData, type: _t, data: _d, ...opts } = snapshot;
-        cloned = new fabric.Path(pathData, opts);
+        cloned = new fabric.Path(
+          pathData as unknown as fabric.Point[],
+          opts as fabric.IPathOptions,
+        );
       } else if (type === 'text' || type === 'i-text') {
         const { text: textValue, type: _t, data: _d, ...opts } = snapshot;
-        cloned = new fabric.Text(textValue, opts);
+        cloned = new fabric.Text(textValue as string, opts as fabric.TextOptions);
       } else {
         logger.warn(`[duplicate] skipping unknown type: ${type}`);
         continue;
@@ -365,17 +402,17 @@ export class State implements StateContract {
 
       cloned.set({
         left: (cloned.left ?? 0) + offset.x,
-        top:  (cloned.top  ?? 0) + offset.y,
+        top: (cloned.top ?? 0) + offset.y,
       });
 
       // data: 新 objectId は ensureObjectId で発行、groupId は再マップ後の値、
       // sourceText / charIndex / outlined 等の custom field は origData から保持。
-      (cloned as any).data = {
+      cloned.data = {
         ...origData,
         objectId: undefined,
-        groupId:  newGid,
+        groupId: newGid,
       };
-      const newId = ensureObjectId(cloned as any, objType);
+      const newId = ensureObjectId(cloned, objType);
 
       cloned.setCoords();
       this.canvas.add(cloned);
@@ -416,14 +453,14 @@ export class State implements StateContract {
   }
 
   async outlineActiveTexts(): Promise<{
-    succeeded:      number;
-    failedChars:    string;
+    succeeded: number;
+    failedChars: string;
     failedFamilies: ReadonlyArray<string>;
   }> {
     const isOutlineable = (obj: fabric.Object): boolean => {
-      const anyObj = obj as any;
-      if (anyObj.data?.outlined) return false;
-      return typeof anyObj.text === 'string' && typeof anyObj.fontFamily === 'string';
+      if (obj.data?.outlined) return false;
+      const t = obj as fabric.Object & Partial<fabric.Text>;
+      return typeof t.text === 'string' && typeof t.fontFamily === 'string';
     };
     const targets = this.canvas.getActiveObjects().filter(isOutlineable) as fabric.Text[];
     if (targets.length === 0) {
@@ -434,13 +471,16 @@ export class State implements StateContract {
     this.canvas.discardActiveObject();
 
     const conversions = await Promise.all(
-      targets.map(async (ft) => ({ ft, path: await outlineTextToPath(ft) }))
+      targets.map(async (ft) => ({ ft, path: await outlineTextToPath(ft) })),
     );
 
-    const succeeded = conversions.filter(x => x.path) as Array<{ ft: fabric.Text; path: fabric.Path }>;
-    const failed    = conversions.filter(x => !x.path);
-    const failedChars    = failed.map(x => x.ft.text || '').join('');
-    const failedFamilies = Array.from(new Set(failed.map(x => x.ft.fontFamily || '?')));
+    const succeeded = conversions.filter((x) => x.path) as Array<{
+      ft: fabric.Text;
+      path: fabric.Path;
+    }>;
+    const failed = conversions.filter((x) => !x.path);
+    const failedChars = failed.map((x) => x.ft.text || '').join('');
+    const failedFamilies = Array.from(new Set(failed.map((x) => x.ft.fontFamily || '?')));
 
     if (succeeded.length === 0) {
       return { succeeded: 0, failedChars, failedFamilies };
@@ -449,26 +489,28 @@ export class State implements StateContract {
     const vt = this.canvas.viewportTransform;
     logger.debug(
       `[outline] outlineActiveTexts: succeeded=${succeeded.length}` +
-      ` viewportTransform=[${vt?.map(n => n.toFixed(3)).join(',')}]` +
-      ` zoom=${this.canvas.getZoom()}`
+        ` viewportTransform=[${vt?.map((n) => n.toFixed(3)).join(',')}]` +
+        ` zoom=${this.canvas.getZoom()}`,
     );
 
     const outlineCommands: Command[] = [];
     for (const { ft, path } of succeeded) {
-      const ftId   = (ft   as any).data?.objectId as ObjectId | undefined;
-      const pathId = (path as any).data?.objectId as ObjectId | undefined;
-      if (ftId) outlineCommands.push({
-        kind: 'objectDeleted',
-        objectId: ftId,
-        before: this.captureObjectSnapshot(ft),
-      });
+      const ftId = ft.data?.objectId;
+      const pathId = path.data?.objectId;
+      if (ftId)
+        outlineCommands.push({
+          kind: 'objectDeleted',
+          objectId: ftId,
+          before: this.captureObjectSnapshot(ft),
+        });
       this.canvas.remove(ft);
       this.canvas.add(path);
-      if (pathId) outlineCommands.push({
-        kind: 'objectCreated',
-        objectId: pathId,
-        after: this.captureObjectSnapshot(path),
-      });
+      if (pathId)
+        outlineCommands.push({
+          kind: 'objectCreated',
+          objectId: pathId,
+          after: this.captureObjectSnapshot(path),
+        });
     }
     if (outlineCommands.length === 1) {
       this.pushCommand(outlineCommands[0]);
@@ -483,11 +525,13 @@ export class State implements StateContract {
     return { succeeded: succeeded.length, failedChars, failedFamilies };
   }
 
-  exportActiveAsPngDataUrl(multiplier: number): { dataUrl: string; width: number; height: number } | null {
+  exportActiveAsPngDataUrl(
+    multiplier: number,
+  ): { dataUrl: string; width: number; height: number } | null {
     const active = this.canvas.getActiveObject();
     if (!active) return null;
     logger.debug(`[copy] export active=${fmtObj(active)} multiplier=${multiplier}`);
-    return exportObjectToPngDataUrl(active as any, multiplier);
+    return exportObjectToPngDataUrl(active, multiplier);
   }
 
   // ===== 高レベル handler 用ヘルパ =====
@@ -517,13 +561,13 @@ export class State implements StateContract {
 
   private bumpToken(): void {
     this.tokenCounter++;
-    this.mutationListeners.forEach(cb => cb());
+    this.mutationListeners.forEach((cb) => cb());
   }
 
   // ----- ObjectSnapshot 境界変換 -----
 
   private resolveObjectById(id: ObjectId): fabric.Object | null {
-    return this.canvas.getObjects().find(o => (o as any).data?.objectId === id) ?? null;
+    return this.canvas.getObjects().find((o) => o.data?.objectId === id) ?? null;
   }
 
   private writeSnapshotToCanvas(snapshot: ObjectSnapshot): void {
@@ -536,37 +580,37 @@ export class State implements StateContract {
     if (type === 'path') {
       const p = obj as fabric.Path;
       // path 配列の上書きは set() に任せず直接代入 (fabric 内部の正規化を回避)。
-      (p as any).path = (snapshot as any).path;
+      (p as unknown as { path: PathCommandArray }).path = snapshot.path as PathCommandArray;
       p.set({
-        left:   snapshot.left   as number,
-        top:    snapshot.top    as number,
+        left: snapshot.left as number,
+        top: snapshot.top as number,
         scaleX: snapshot.scaleX as number,
         scaleY: snapshot.scaleY as number,
-        angle:  snapshot.angle  as number,
-        fill:   snapshot.fill   as string | undefined,
+        angle: snapshot.angle as number,
+        fill: snapshot.fill as string | undefined,
       });
       // commands 変更後、width / height / pathOffset を再算出
-      (fabric.Polyline.prototype as any)._setPositionDimensions.call(p, { left: p.left, top: p.top });
-      (p as any).dirty = true;
+      recomputePathDimensions(p, { left: p.left, top: p.top });
+      markPathDirty(p);
     } else if (type === 'text' || type === 'i-text') {
       const t = obj as fabric.Text;
       t.set({
-        text:       snapshot.text       as string,
-        left:       snapshot.left       as number,
-        top:        snapshot.top        as number,
-        scaleX:     snapshot.scaleX     as number,
-        scaleY:     snapshot.scaleY     as number,
-        angle:      snapshot.angle      as number,
-        fill:       snapshot.fill       as string | undefined,
+        text: snapshot.text as string,
+        left: snapshot.left as number,
+        top: snapshot.top as number,
+        scaleX: snapshot.scaleX as number,
+        scaleY: snapshot.scaleY as number,
+        angle: snapshot.angle as number,
+        fill: snapshot.fill as string | undefined,
         fontFamily: snapshot.fontFamily as string | undefined,
-        fontSize:   snapshot.fontSize   as number | undefined,
+        fontSize: snapshot.fontSize as number | undefined,
         fontWeight: snapshot.fontWeight as string | number | undefined,
-        fontStyle:  snapshot.fontStyle  as fabric.IText['fontStyle'],
+        fontStyle: snapshot.fontStyle as fabric.IText['fontStyle'],
       });
     }
 
     // data (objectId / type / その他 custom field) を snapshot から復元。
-    (obj as any).data = { ...(obj as any).data, ...snapshot.data };
+    obj.data = { ...obj.data, ...snapshot.data };
 
     obj.setCoords();
   }
@@ -576,17 +620,17 @@ export class State implements StateContract {
     let obj: fabric.Object;
 
     if (type === 'path') {
-      const { path: pathData, type: _t, ...opts } = snapshot as any;
-      obj = new fabric.Path(pathData, opts as fabric.IPathOptions);
+      const { path: pathData, type: _t, ...opts } = snapshot;
+      obj = new fabric.Path(pathData as unknown as fabric.Point[], opts as fabric.IPathOptions);
     } else if (type === 'text' || type === 'i-text') {
-      const { text: textValue, type: _t, ...opts } = snapshot as any;
-      obj = new fabric.Text(textValue, opts as fabric.TextOptions);
+      const { text: textValue, type: _t, ...opts } = snapshot;
+      obj = new fabric.Text(textValue as string, opts as fabric.TextOptions);
     } else {
       throw new Error(`Unknown object type for createObjectOnCanvas: ${type}`);
     }
 
-    if (!(obj as any).data || !(obj as any).data.objectId) {
-      (obj as any).data = { ...snapshot.data };
+    if (!obj.data || !obj.data.objectId) {
+      obj.data = { ...snapshot.data };
     }
 
     this.canvas.add(obj);
@@ -602,47 +646,49 @@ export class State implements StateContract {
 
   /** drag 終了時の bbox 再計算 + pathOffset 補正 + object:modified 発火。 */
   private finalizeDrag(p: fabric.Path): void {
-    const oldPO = { x: (p as any).pathOffset.x, y: (p as any).pathOffset.y };
-    (fabric.Polyline.prototype as any)._setPositionDimensions.call(p, {
-      left: p.left,
-      top:  p.top,
-    });
-    const newPO = (p as any).pathOffset as { x: number; y: number };
+    const oldPOSrc = getPathOffset(p);
+    const oldPO = { x: oldPOSrc.x, y: oldPOSrc.y };
+    recomputePathDimensions(p, { left: p.left, top: p.top });
+    const newPO = getPathOffset(p);
     const dxLocal = oldPO.x - newPO.x;
     const dyLocal = oldPO.y - newPO.y;
     const sx = (p.scaleX as number) ?? 1;
     const sy = (p.scaleY as number) ?? 1;
-    const rad = ((p.angle as number) ?? 0) * Math.PI / 180;
+    const rad = (((p.angle as number) ?? 0) * Math.PI) / 180;
     const cos = Math.cos(rad);
     const sin = Math.sin(rad);
     p.left = (p.left ?? 0) + dxLocal * sx * cos - dyLocal * sy * sin;
-    p.top  = (p.top  ?? 0) + dxLocal * sx * sin + dyLocal * sy * cos;
+    p.top = (p.top ?? 0) + dxLocal * sx * sin + dyLocal * sy * cos;
     p.setCoords();
-    this.canvas.fire('object:modified', { target: p } as any);
+    this.canvas.fire('object:modified', { target: p });
   }
 
   private makePathHandle(p: fabric.Path): PathHandle {
+    const pp = p as unknown as { path: PathCommandArray };
     return {
-      snapshot: (): PathSnapshot => ({
-        path:       new Path(fromFabricPath((p as any).path as ReadonlyArray<ReadonlyArray<unknown>>)),
-        pathMatrix: p.calcTransformMatrix() as unknown as Mat2x3,
-        pathOffset: { x: (p as any).pathOffset.x, y: (p as any).pathOffset.y },
-      }),
+      snapshot: (): PathSnapshot => {
+        const po = getPathOffset(p);
+        return {
+          path: new Path(fromFabricPath(pp.path)),
+          pathMatrix: p.calcTransformMatrix() as unknown as Mat2x3,
+          pathOffset: { x: po.x, y: po.y },
+        };
+      },
       setPath: (path: Path) => {
-        (p as any).path = toFabricPath(path.commands);
-        (p as any).dirty = true;
+        pp.path = toFabricPath(path.commands) as PathCommandArray;
+        markPathDirty(p);
       },
       finalizeEdit: () => this.finalizeDrag(p),
-      getId: () => (p as any).data?.objectId as ObjectId,
+      getId: () => p.data!.objectId!,
       captureForHistory: () => p.toObject(['data']) as ObjectSnapshot,
     };
   }
 
-  private makeObjectHandle(o: fabric.Object): ObjectHandle & { _obj: fabric.Object } {
+  private makeObjectHandle(o: fabric.Object): InternalHandle {
     let h = this.objectHandleCache.get(o);
     if (!h) {
       h = {
-        getGroupId: () => (o as any).data?.groupId,
+        getGroupId: () => o.data?.groupId,
         _obj: o,
       };
       this.objectHandleCache.set(o, h);
@@ -653,7 +699,7 @@ export class State implements StateContract {
   private getActiveOutlinedPath(): fabric.Path | null {
     const obj = this.canvas.getActiveObject();
     if (!obj || obj.type !== 'path') return null;
-    if (!(obj as any).data?.outlined) return null;
+    if (!obj.data?.outlined) return null;
     return obj as fabric.Path;
   }
 
@@ -671,7 +717,7 @@ export class State implements StateContract {
         this.removeObjectFromCanvas(cmd.objectId);
         break;
       case 'compound':
-        cmd.commands.forEach(c => this.applyCommand(c));
+        cmd.commands.forEach((c) => this.applyCommand(c));
         break;
       default: {
         const _: never = cmd;
@@ -694,7 +740,7 @@ export class State implements StateContract {
         break;
       case 'compound':
         // 逆順で revert (= apply の逆順序で打ち消す)
-        [...cmd.commands].reverse().forEach(c => this.revertCommand(c));
+        [...cmd.commands].reverse().forEach((c) => this.revertCommand(c));
         break;
       default: {
         const _: never = cmd;
@@ -715,11 +761,12 @@ export class State implements StateContract {
   private readonly handleMouseDown = (opt: fabric.IEvent): void => {
     const target = opt.target;
     if (!target) return;
-    const objs: fabric.Object[] = target.type === 'activeSelection'
-      ? (target as fabric.ActiveSelection).getObjects()
-      : [target];
+    const objs: fabric.Object[] =
+      target.type === 'activeSelection'
+        ? (target as fabric.ActiveSelection).getObjects()
+        : [target];
     for (const o of objs) {
-      const id = (o as any).data?.objectId as ObjectId | undefined;
+      const id = o.data?.objectId;
       if (id) this.transformBeforeSnapshots.set(id, this.captureObjectSnapshot(o));
     }
   };
@@ -735,21 +782,20 @@ export class State implements StateContract {
     const vt = this.canvas.viewportTransform;
     logger.debug(
       `[object:modified] ${fmtObj(o)} left=${o.left} top=${o.top}` +
-      ` data.groupId=${(o as any).data?.groupId ?? '-'}` +
-      ` action=${(e as any).action ?? '-'}` +
-      ` vt=[${vt?.map((n: number) => n.toFixed(3)).join(',')}]`
+        ` data.groupId=${o.data?.groupId ?? '-'}` +
+        ` action=${e.action ?? '-'}` +
+        ` vt=[${vt?.map((n: number) => n.toFixed(3)).join(',')}]`,
     );
 
-    const action = (e as any).action;
-    if (!action) return;  // tool-driven な finalizeDrag からの fire は skip
+    const action = e.action;
+    if (!action) return; // tool-driven な finalizeDrag からの fire は skip
 
-    const objs: fabric.Object[] = o.type === 'activeSelection'
-      ? (o as fabric.ActiveSelection).getObjects()
-      : [o];
+    const objs: fabric.Object[] =
+      o.type === 'activeSelection' ? (o as fabric.ActiveSelection).getObjects() : [o];
 
     const cmds: Command[] = [];
     for (const obj of objs) {
-      const id = (obj as any).data?.objectId as ObjectId | undefined;
+      const id = obj.data?.objectId;
       if (!id) continue;
       const before = this.transformBeforeSnapshots.get(id);
       this.transformBeforeSnapshots.delete(id);
@@ -791,19 +837,19 @@ export class State implements StateContract {
       return;
     }
 
-    const groupId    = generateGroupId();
+    const groupId = generateGroupId();
     const fontFamily = it.fontFamily || 'Arial';
-    const fontSize   = (it.fontSize as number) || 72;
+    const fontSize = (it.fontSize as number) || 72;
     const fontWeight = (it.fontWeight as number | string) ?? 400;
     const fontStyle: 'normal' | 'italic' | 'oblique' =
       (it.fontStyle as 'normal' | 'italic' | 'oblique') || 'normal';
-    const fill       = (it.fill as string) || '#000000';
-    const startX     = (it.left as number) || 0;
-    const startY     = (it.top  as number) || 0;
+    const fill = (it.fill as string) || '#000000';
+    const startX = (it.left as number) || 0;
+    const startY = (it.top as number) || 0;
 
-    (it as any).initDimensions();
-    const lines  = (it as any)._textLines  as string[][];
-    const bounds = (it as any).__charBounds as Array<Array<{ left: number; width: number }>>;
+    initITextDimensions(it);
+    const lines = getITextLines(it);
+    const bounds = getITextCharBounds(it);
     const lineHeightPx = fontSize * ((it.lineHeight as number) || 1.16);
 
     const newSelectable = this.currentMode !== 'text';
@@ -817,23 +863,26 @@ export class State implements StateContract {
         const char = line[ci];
         // 空白は fabric.Text を生成しない (既存挙動踏襲)。bounds[li][ci].left は
         // 空白を含んだ座標なので、スキップしても次文字の left はズレない。
-        if (char === ' ') { charIndex++; continue; }
+        if (char === ' ') {
+          charIndex++;
+          continue;
+        }
 
         const obj = new fabric.Text(char, {
-          left:        startX + bounds[li][ci].left,
-          top:         startY + li * lineHeightPx,
+          left: startX + bounds[li][ci].left,
+          top: startY + li * lineHeightPx,
           fontFamily,
           fontSize,
           fontWeight,
           fontStyle,
           fill,
-          selectable:  newSelectable,
-          evented:     newSelectable,
+          selectable: newSelectable,
+          evented: newSelectable,
           hasControls: true,
-          hasBorders:  true,
+          hasBorders: true,
           data: { groupId, charIndex, sourceText: text },
         });
-        const objectId = ensureObjectId(obj as any, 'text');
+        const objectId = ensureObjectId(obj, 'text');
 
         this.canvas.add(obj);
         createdCommands.push({
@@ -860,8 +909,8 @@ export class State implements StateContract {
     const vt = this.canvas.viewportTransform;
     logger.debug(
       `[commitIText] created ${charIndex} chars for groupId=${groupId}` +
-      ` startX=${startX} startY=${startY}` +
-      ` vt=[${vt?.map(n => n.toFixed(3)).join(',')}] zoom=${this.canvas.getZoom()}`
+        ` startX=${startX} startY=${startY}` +
+        ` vt=[${vt?.map((n) => n.toFixed(3)).join(',')}] zoom=${this.canvas.getZoom()}`,
     );
   };
 }

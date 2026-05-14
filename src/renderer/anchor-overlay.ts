@@ -13,18 +13,19 @@
 import type { State } from '../core/state-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
 import { computeOverlayLayout } from '../core/path/overlay-layout';
+import { getContextTop, getRetinaScaling } from './fabric-internals';
 
-const ANCHOR_MARKER_PX     = 7;
-const ANCHOR_FILL          = '#ffffff';
-const ANCHOR_STROKE        = '#0066ff';
+const ANCHOR_MARKER_PX = 7;
+const ANCHOR_FILL = '#ffffff';
+const ANCHOR_STROKE = '#0066ff';
 // 選択中アンカーは塗り潰しを反転 (Illustrator 流: hollow → filled)。
 const ANCHOR_SELECTED_FILL = '#0066ff';
 
 const HANDLE_LINE_COLOR = '#0066ff';
 const HANDLE_LINE_WIDTH = 1;
-const HANDLE_CIRCLE_R   = 4;
-const HANDLE_FILL       = '#ffffff';
-const HANDLE_STROKE     = '#0066ff';
+const HANDLE_CIRCLE_R = 4;
+const HANDLE_FILL = '#ffffff';
+const HANDLE_STROKE = '#0066ff';
 
 export function drawAnchorOverlay(
   state: State,
@@ -38,7 +39,7 @@ export function drawAnchorOverlay(
   if (mode !== 'select-char' && mode !== 'pen-add' && mode !== 'pen-remove') return;
   const path = state.getActivePath();
   if (!path) return;
-  const ctx = (canvas as any).contextTop as CanvasRenderingContext2D | undefined;
+  const ctx = getContextTop(canvas);
   if (!ctx) return;
   canvas.clearContext(ctx);
 
@@ -49,7 +50,7 @@ export function drawAnchorOverlay(
   const hCache = layout.handles;
 
   ctx.save();
-  const retina = (canvas as any).getRetinaScaling?.() ?? window.devicePixelRatio ?? 1;
+  const retina = getRetinaScaling(canvas);
   ctx.setTransform(retina, 0, 0, retina, 0, 0);
 
   // Pass 1: ハンドル線 (最背面)
@@ -76,15 +77,12 @@ export function drawAnchorOverlay(
 
   // Pass 3: アンカー四角 (最前面)。select-char モードでは選択中アンカーを
   // 塗り潰し色違いで描画 (= Illustrator 流の "filled = selected")。
-  const selectedSet = mode === 'select-char'
-    ? selectCharTool.getSelectedAnchorIndices()
-    : null;
+  const selectedSet = mode === 'select-char' ? selectCharTool.getSelectedAnchorIndices() : null;
   ctx.strokeStyle = ANCHOR_STROKE;
   ctx.lineWidth = 1;
   for (const a of aCache) {
-    ctx.fillStyle = (selectedSet && selectedSet.has(a.anchorIndex))
-      ? ANCHOR_SELECTED_FILL
-      : ANCHOR_FILL;
+    ctx.fillStyle =
+      selectedSet && selectedSet.has(a.anchorIndex) ? ANCHOR_SELECTED_FILL : ANCHOR_FILL;
     ctx.fillRect(a.sx - half, a.sy - half, ANCHOR_MARKER_PX, ANCHOR_MARKER_PX);
     ctx.strokeRect(a.sx - half, a.sy - half, ANCHOR_MARKER_PX, ANCHOR_MARKER_PX);
   }

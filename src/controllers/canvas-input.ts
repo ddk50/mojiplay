@@ -18,12 +18,11 @@
 import type { State, Mode } from '../core/state-interface';
 import type { Tool } from '../usecases/tools/tool-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
-import type {
-  CanvasInputController, CanvasInputControllerDeps,
-} from './canvas-input-interface';
+import type { CanvasInputController, CanvasInputControllerDeps } from './canvas-input-interface';
 import { buildPointerInput } from '../renderer/canvas-coords';
 import { drawAnchorOverlay } from '../renderer/anchor-overlay';
 import { syncToolbarToSelection, setRotationInput } from '../renderer/toolbar-sync';
+import { getUpperCanvasEl } from '../renderer/fabric-internals';
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 20;
@@ -41,7 +40,7 @@ export class CanvasInputControllerImpl implements CanvasInputController {
     this.tools = deps.tools;
     this.selectCharTool = deps.selectCharTool;
     this.canvas = deps.canvas;
-    this.upperCanvas = (deps.canvas as any).upperCanvasEl as HTMLCanvasElement;
+    this.upperCanvas = getUpperCanvasEl(deps.canvas);
     this.onZoomChanged = deps.onZoomChanged;
   }
 
@@ -56,7 +55,10 @@ export class CanvasInputControllerImpl implements CanvasInputController {
    */
   readonly onUpperCanvasMouseDown = (e: MouseEvent): void => {
     const tool = this.tools[this.state.getCurrentMode()];
-    const result = tool.onPointerDown(buildPointerInput(e, this.canvas, this.upperCanvas), this.state);
+    const result = tool.onPointerDown(
+      buildPointerInput(e, this.canvas, this.upperCanvas),
+      this.state,
+    );
     if (result !== 'consumed') return;
 
     e.stopImmediatePropagation();
@@ -84,9 +86,14 @@ export class CanvasInputControllerImpl implements CanvasInputController {
   /** fabric の mouse:down (fabric の hit-test 後)。TextTool が空き領域クリックで使う。 */
   readonly onCanvasMouseDown = (opt: fabric.IEvent): void => {
     const w = this.canvas.getPointer(opt.e as MouseEvent);
-    this.tools[this.state.getCurrentMode()].onCanvasMouseDown({
-      worldX: w.x, worldY: w.y, hasTarget: !!opt.target,
-    }, this.state);
+    this.tools[this.state.getCurrentMode()].onCanvasMouseDown(
+      {
+        worldX: w.x,
+        worldY: w.y,
+        hasTarget: !!opt.target,
+      },
+      this.state,
+    );
   };
 
   /** Alt + ホイールで zoom (Photoshop 流、カーソル位置中心)。 */
@@ -113,9 +120,9 @@ export class CanvasInputControllerImpl implements CanvasInputController {
     this.tools[this.state.getCurrentMode()].onObjectMoving(
       {
         getLeft: () => target.left ?? 0,
-        getTop:  () => target.top  ?? 0,
+        getTop: () => target.top ?? 0,
         setLeft: (v: number) => target.set({ left: v }),
-        setTop:  (v: number) => target.set({ top:  v }),
+        setTop: (v: number) => target.set({ top: v }),
       },
       { altKey: !!mouseEvt?.altKey },
       this.state,
@@ -155,26 +162,26 @@ export class CanvasInputControllerImpl implements CanvasInputController {
   attach(): void {
     this.upperCanvas.addEventListener('mousedown', this.onUpperCanvasMouseDown, true);
     this.upperCanvas.addEventListener('mousemove', this.onUpperCanvasMouseMove, true);
-    this.canvas.on('mouse:down',         this.onCanvasMouseDown);
-    this.canvas.on('mouse:wheel',        this.onCanvasMouseWheel);
-    this.canvas.on('object:moving',      this.onObjectMoving);
-    this.canvas.on('object:rotating',    this.onObjectRotating);
-    this.canvas.on('selection:cleared',  this.onSelectionCleared);
-    this.canvas.on('selection:created',  this.onSelectionChanged);
-    this.canvas.on('selection:updated',  this.onSelectionChanged);
-    this.canvas.on('after:render',       this.onAfterRender);
+    this.canvas.on('mouse:down', this.onCanvasMouseDown);
+    this.canvas.on('mouse:wheel', this.onCanvasMouseWheel);
+    this.canvas.on('object:moving', this.onObjectMoving);
+    this.canvas.on('object:rotating', this.onObjectRotating);
+    this.canvas.on('selection:cleared', this.onSelectionCleared);
+    this.canvas.on('selection:created', this.onSelectionChanged);
+    this.canvas.on('selection:updated', this.onSelectionChanged);
+    this.canvas.on('after:render', this.onAfterRender);
   }
 
   detach(): void {
     this.upperCanvas.removeEventListener('mousedown', this.onUpperCanvasMouseDown, true);
     this.upperCanvas.removeEventListener('mousemove', this.onUpperCanvasMouseMove, true);
-    this.canvas.off('mouse:down',         this.onCanvasMouseDown as never);
-    this.canvas.off('mouse:wheel',        this.onCanvasMouseWheel as never);
-    this.canvas.off('object:moving',      this.onObjectMoving as never);
-    this.canvas.off('object:rotating',    this.onObjectRotating as never);
-    this.canvas.off('selection:cleared',  this.onSelectionCleared as never);
-    this.canvas.off('selection:created',  this.onSelectionChanged as never);
-    this.canvas.off('selection:updated',  this.onSelectionChanged as never);
-    this.canvas.off('after:render',       this.onAfterRender as never);
+    this.canvas.off('mouse:down', this.onCanvasMouseDown as never);
+    this.canvas.off('mouse:wheel', this.onCanvasMouseWheel as never);
+    this.canvas.off('object:moving', this.onObjectMoving as never);
+    this.canvas.off('object:rotating', this.onObjectRotating as never);
+    this.canvas.off('selection:cleared', this.onSelectionCleared as never);
+    this.canvas.off('selection:created', this.onSelectionChanged as never);
+    this.canvas.off('selection:updated', this.onSelectionChanged as never);
+    this.canvas.off('after:render', this.onAfterRender as never);
   }
 }

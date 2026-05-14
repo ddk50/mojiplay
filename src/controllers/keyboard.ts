@@ -12,9 +12,8 @@
 import type { State } from '../core/state-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
 import type { MenuActionRegistry } from '../usecases/menu/menu-action-registry-interface';
-import type {
-  KeyboardController, KeyboardControllerDeps,
-} from './keyboard-interface';
+import type { KeyboardController, KeyboardControllerDeps } from './keyboard-interface';
+import { isITextEditing } from '../renderer/fabric-internals';
 
 export class KeyboardControllerImpl implements KeyboardController {
   private readonly state: State;
@@ -130,13 +129,19 @@ export class KeyboardControllerImpl implements KeyboardController {
 
     // 矢印キー: select-char モードで選択中アンカーを world delta で平行移動
     // (1 unit / Shift+矢印で 10 unit、Photoshop 慣例)。Modifier 無し前提。
-    if (this.state.getCurrentMode() === 'select-char' &&
-        !e.ctrlKey && !e.metaKey && !e.altKey && !this.isToolbarInput()) {
-      let dx = 0, dy = 0;
-      if      (e.key === 'ArrowLeft')  dx = -1;
-      else if (e.key === 'ArrowRight') dx =  1;
-      else if (e.key === 'ArrowUp')    dy = -1;
-      else if (e.key === 'ArrowDown')  dy =  1;
+    if (
+      this.state.getCurrentMode() === 'select-char' &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey &&
+      !this.isToolbarInput()
+    ) {
+      let dx = 0,
+        dy = 0;
+      if (e.key === 'ArrowLeft') dx = -1;
+      else if (e.key === 'ArrowRight') dx = 1;
+      else if (e.key === 'ArrowUp') dy = -1;
+      else if (e.key === 'ArrowDown') dy = 1;
       if (dx !== 0 || dy !== 0) {
         const step = e.shiftKey ? 10 : 1;
         if (this.selectCharTool.getSelectedAnchorIndices().size > 0) {
@@ -147,8 +152,10 @@ export class KeyboardControllerImpl implements KeyboardController {
     }
 
     // F12 / Ctrl+Shift+I: DevTools 開閉
-    if (e.key === 'F12' ||
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i'))) {
+    if (
+      e.key === 'F12' ||
+      ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i'))
+    ) {
       e.preventDefault();
       void this.menuActions.execute('devtools');
     }
@@ -173,8 +180,7 @@ export class KeyboardControllerImpl implements KeyboardController {
   // ====================================================================
 
   private isEditingIText(): boolean {
-    const active = this.canvas.getActiveObject() as fabric.IText | null;
-    return !!(active as any)?.isEditing;
+    return isITextEditing(this.canvas.getActiveObject());
   }
 
   private isToolbarInput(): boolean {
