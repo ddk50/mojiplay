@@ -13,6 +13,11 @@ import type { State } from '../core/state-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
 import type { MenuActionRegistry } from '../usecases/menu/menu-action-registry-interface';
 import type { KeyboardController, KeyboardControllerDeps } from './keyboard-interface';
+import {
+  arrowKeyToDirection,
+  arrowStepMagnitude,
+  moveSelectedAnchorsByArrow,
+} from '../usecases/menu/move-selected-anchors-by-arrow';
 
 export class KeyboardControllerImpl implements KeyboardController {
   private readonly state: State;
@@ -135,17 +140,11 @@ export class KeyboardControllerImpl implements KeyboardController {
       !e.altKey &&
       !this.isToolbarInput()
     ) {
-      let dx = 0,
-        dy = 0;
-      if (e.key === 'ArrowLeft') dx = -1;
-      else if (e.key === 'ArrowRight') dx = 1;
-      else if (e.key === 'ArrowUp') dy = -1;
-      else if (e.key === 'ArrowDown') dy = 1;
-      if (dx !== 0 || dy !== 0) {
-        const step = e.shiftKey ? 10 : 1;
-        if (this.selectCharTool.getSelectedAnchorIndices().size > 0) {
+      const dir = arrowKeyToDirection(e.key);
+      if (dir) {
+        const magnitude = arrowStepMagnitude(e.shiftKey);
+        if (moveSelectedAnchorsByArrow(this.state, this.selectCharTool, dir, magnitude)) {
           e.preventDefault();
-          this.selectCharTool.moveSelectedAnchorsBy(this.state, dx * step, dy * step);
         }
       }
     }

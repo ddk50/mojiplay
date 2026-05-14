@@ -324,6 +324,10 @@ export class State implements StateContract {
     return this.canvas.getZoom() || 1;
   }
 
+  zoomToPoint(zoom: number, focal: { x: number; y: number }): void {
+    this.canvas.zoomToPoint(focal, zoom);
+  }
+
   removeActiveObjects(): void {
     const selected = this.canvas.getActiveObjects();
     if (!selected.length) return;

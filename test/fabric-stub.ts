@@ -321,7 +321,18 @@ export class FakeFabricCanvas {
     /* no-op */
   }
   getZoom(): number {
-    return 1;
+    return this._zoom;
+  }
+  zoomToPoint(focal: { x: number; y: number }, zoom: number): void {
+    this._zoom = zoom;
+    this._lastZoomFocal = focal;
+  }
+  // test 側で readback するための field
+  private _zoom = 1;
+  private _lastZoomFocal: { x: number; y: number } | null = null;
+  /** test 専用: 直近の zoomToPoint focal を peek。 */
+  getLastZoomFocal(): { x: number; y: number } | null {
+    return this._lastZoomFocal;
   }
 
   // State.exportCanvasAsPngDataUrl 経路で呼ばれる。test では中身を検証しないので

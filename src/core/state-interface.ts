@@ -217,6 +217,14 @@ export interface State {
    */
   getZoom(): number;
 
+  /**
+   * focal point を中心に zoom を設定する (= canvas.zoomToPoint 相当)。camera 層の
+   * 操作なので history には乗らない。
+   * @param zoom 新しい zoom 倍率 (clamp は呼び側で済ませる前提)
+   * @param focal screen 座標 (canvas DOM の origin 基準) の zoom 中心
+   */
+  zoomToPoint(zoom: number, focal: { x: number; y: number }): void;
+
   /** 選択中の object をすべて削除。history に compound objectDeleted を push。 */
   removeActiveObjects(): void;
 
