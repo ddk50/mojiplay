@@ -518,5 +518,123 @@ describe('FileIOInteractor', () => {
 
       expect(state.toSnapshot()).toEqual(v3Snapshot);
     });
+
+    // アウトライン化済 path (`type: 'path'` + `data.outlined: true`) を含む round-trip。
+    // i-text のみだと、以下が静かに壊れても気づけない:
+    //   - data.outlined フラグの persistence (= open 後にアンカー編集 / pen tool が効くか)
+    //   - path commands (M / C / L / Z 列) の損失なし復元
+    //   - data.groupId の保持 (= 単語単位選択が壊れないか)
+    //   - text と path が同じ groupId で混在するケース (アウトライン化部分適用相当)
+    describe('outlined path を含む round-trip', () => {
+      const SAMPLE_PATH_OBJECTS: ReadonlyArray<Record<string, unknown>> = [
+        {
+          type: 'path',
+          path: [['M', 0, 0], ['C', 10, 0, 10, 10, 0, 10], ['L', -5, 5], ['Z']],
+          left: 100,
+          top: 200,
+          fill: '#000000',
+          data: { objectId: 'p1', type: 'path', outlined: true, groupId: 'g1', charIndex: 0 },
+        },
+        {
+          type: 'path',
+          path: [['M', 5, 5], ['C', 15, 5, 15, 15, 5, 15], ['Z']],
+          left: 150,
+          top: 200,
+          fill: '#000000',
+          data: { objectId: 'p2', type: 'path', outlined: true, groupId: 'g1', charIndex: 1 },
+        },
+      ];
+
+      test('outlined path のみの canvas が同一 snapshot で復元される', async () => {
+        const repo = new FakeRepo();
+        const stateA = new State(new FakeFabricCanvas() as never);
+        const ctrlA = new FileIOInteractor(stateA, repo, new FakeUI(), basename);
+        await loadCanvasContent(stateA, SAMPLE_PATH_OBJECTS);
+        const savedSnapshot = stateA.toSnapshot();
+        expect(await ctrlA.saveCurrent()).toBe(true);
+
+        const stateB = new State(new FakeFabricCanvas() as never);
+        const ctrlB = new FileIOInteractor(stateB, repo, new FakeUI(), basename);
+        await ctrlB.openFile();
+
+        expect(stateB.toSnapshot()).toEqual(savedSnapshot);
+      });
+
+      test('open 後も data.outlined と data.groupId が保持される (アンカー編集可能性 / 単語性の維持)', async () => {
+        const repo = new FakeRepo();
+        const stateA = new State(new FakeFabricCanvas() as never);
+        const ctrlA = new FileIOInteractor(stateA, repo, new FakeUI(), basename);
+        await loadCanvasContent(stateA, SAMPLE_PATH_OBJECTS);
+        await ctrlA.saveCurrent();
+
+        const stateB = new State(new FakeFabricCanvas() as never);
+        const ctrlB = new FileIOInteractor(stateB, repo, new FakeUI(), basename);
+        await ctrlB.openFile();
+
+        const snap = stateB.toSnapshot() as {
+          canvas: { objects: Array<{ data?: Record<string, unknown> }> };
+        };
+        expect(snap.canvas.objects).toHaveLength(2);
+        expect(snap.canvas.objects[0].data).toMatchObject({
+          outlined: true,
+          groupId: 'g1',
+          type: 'path',
+        });
+        expect(snap.canvas.objects[1].data).toMatchObject({
+          outlined: true,
+          groupId: 'g1',
+          type: 'path',
+        });
+      });
+
+      test('path commands 配列 (M/C/L/Z) が損失なく復元される', async () => {
+        const repo = new FakeRepo();
+        const stateA = new State(new FakeFabricCanvas() as never);
+        const ctrlA = new FileIOInteractor(stateA, repo, new FakeUI(), basename);
+        await loadCanvasContent(stateA, [SAMPLE_PATH_OBJECTS[0]]);
+        await ctrlA.saveCurrent();
+
+        const stateB = new State(new FakeFabricCanvas() as never);
+        const ctrlB = new FileIOInteractor(stateB, repo, new FakeUI(), basename);
+        await ctrlB.openFile();
+
+        const snap = stateB.toSnapshot() as {
+          canvas: { objects: Array<{ path?: ReadonlyArray<ReadonlyArray<unknown>> }> };
+        };
+        expect(snap.canvas.objects[0].path).toEqual([
+          ['M', 0, 0],
+          ['C', 10, 0, 10, 10, 0, 10],
+          ['L', -5, 5],
+          ['Z'],
+        ]);
+      });
+
+      test('text と outlined path が混在する canvas も同一 snapshot で復元される', async () => {
+        const repo = new FakeRepo();
+        const stateA = new State(new FakeFabricCanvas() as never);
+        const ctrlA = new FileIOInteractor(stateA, repo, new FakeUI(), basename);
+        await loadCanvasContent(stateA, [
+          {
+            type: 'i-text',
+            text: 'A',
+            left: 0,
+            top: 0,
+            fontFamily: 'Arial',
+            fontSize: 16,
+            data: { objectId: 't1', groupId: 'g-text' },
+          },
+          ...SAMPLE_PATH_OBJECTS,
+        ]);
+        const savedSnapshot = stateA.toSnapshot();
+        await ctrlA.saveCurrent();
+
+        const stateB = new State(new FakeFabricCanvas() as never);
+        const ctrlB = new FileIOInteractor(stateB, repo, new FakeUI(), basename);
+        await ctrlB.openFile();
+
+        expect(stateB.toSnapshot()).toEqual(savedSnapshot);
+        expect(stateB.getAllObjects()).toHaveLength(3);
+      });
+    });
   });
 });
