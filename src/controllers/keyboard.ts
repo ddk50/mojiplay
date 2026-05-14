@@ -13,7 +13,6 @@ import type { State } from '../core/state-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
 import type { MenuActionRegistry } from '../usecases/menu/menu-action-registry-interface';
 import type { KeyboardController, KeyboardControllerDeps } from './keyboard-interface';
-import { isITextEditing } from '../renderer/fabric-internals';
 
 export class KeyboardControllerImpl implements KeyboardController {
   private readonly state: State;
@@ -180,7 +179,8 @@ export class KeyboardControllerImpl implements KeyboardController {
   // ====================================================================
 
   private isEditingIText(): boolean {
-    return isITextEditing(this.canvas.getActiveObject());
+    const active = this.canvas.getActiveObject();
+    return active?.type === 'i-text' && (active as fabric.IText).isEditing === true;
   }
 
   private isToolbarInput(): boolean {

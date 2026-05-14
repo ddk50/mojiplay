@@ -1,28 +1,28 @@
 // fabric の undocumented internal フィールド / メソッドへのアクセスを集約する単一窓口。
 //
 // 背景: fabric 5.3.x は contextTop / upperCanvasEl / __charBounds / pathOffset /
-// _setPositionDimensions 等を公式に export していない。これらに依存しないと
-// アンカー編集 / アウトライン化 / IText 分割 / overlay 描画ができないが、call site で
-// `(x as any)` を散らかしたり、global 名前空間に declaration merging で「公開 API の
-// ように見せる嘘の型」を生やしたりすると、fabric 側の minor version bump で rename
-// された時に runtime まで検出できない。
+// _setPositionDimensions 等を公式に export していない。これらに依存しないと:
+//   - アンカー編集 (path の commands を mutate して bbox を再算出)
+//   - アウトライン化 (Text の baseline 計算で _fontSizeMult / _fontSizeFraction を流用)
+//   - IText 分割 (__charBounds でペアワイズカーニング込みの char 座標を取得)
+//   - overlay 描画 (contextTop に直接描いてアンカー / ハンドル / marquee を出す)
+// が実現できない。これらは fabric が「vector editor として使われる」ことを想定して
+// いないため API として開いてない部分。
 //
 // 方針:
 //   - 各 internal の型は **このファイル内でだけ** local 宣言する (global merging しない)。
 //   - cast (`as unknown as ...`) は helper 内部に閉じ込め、call site は typed wrapper
 //     しか触らない。
 //   - fabric が internal を rename / 削除したら、修正範囲はこのファイル 1 つで完結する。
-//   - fabric.Object.data は mojiplay 固有の user data なので、ここではなく
-//     src/globals/fabric-augment.d.ts で素直に augment し続ける (= 嘘ではない拡張)。
+//   - fabric が docs で記載してる public API (Object.data / IText.isEditing /
+//     Canvas.getRetinaScaling) は src/globals/fabric-augment.d.ts に書く (= 嘘ではない拡張)。
 
 interface CanvasInternal {
   readonly contextTop?: CanvasRenderingContext2D;
   readonly upperCanvasEl: HTMLCanvasElement;
-  getRetinaScaling?(): number;
 }
 
 interface ITextInternal {
-  isEditing?: boolean;
   hiddenTextarea?: HTMLTextAreaElement;
   _textLines?: ReadonlyArray<ReadonlyArray<string>>;
   __charBounds?: ReadonlyArray<ReadonlyArray<{ left: number; width: number }>>;
@@ -56,22 +56,7 @@ export function getContextTop(c: fabric.Canvas): CanvasRenderingContext2D | unde
   return (c as unknown as CanvasInternal).contextTop;
 }
 
-/** retina スケール (= window.devicePixelRatio 相当)。contextTop に直接描画するときに
- *  setTransform で掛ける必要がある。 */
-export function getRetinaScaling(c: fabric.Canvas): number {
-  return (
-    (c as unknown as CanvasInternal).getRetinaScaling?.() ??
-    (typeof window !== 'undefined' ? window.devicePixelRatio : undefined) ??
-    1
-  );
-}
-
 // ── IText ─────────────────────────────────────────────────────────────────
-
-/** IText が編集中か。null/undefined / 非 IText obj に対しても安全に false を返す。 */
-export function isITextEditing(obj: fabric.Object | null | undefined): boolean {
-  return !!(obj as ITextInternal | null | undefined)?.isEditing;
-}
 
 /** 編集モード時の hidden <textarea> にフォーカス。enterEditing 直後に呼ぶ。 */
 export function focusITextTextarea(it: fabric.IText): void {
