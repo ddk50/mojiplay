@@ -99,12 +99,8 @@ describe('computeOutlinePathPosition', () => {
   });
 
   test('fontSize=0 の degenerate でも NaN や例外を出さない', () => {
-    const r = computeOutlinePathPosition(
-      { left: 50, top: 50, fontSize: 0 },
-      { minX: 0, minY: 0 },
-    );
+    const r = computeOutlinePathPosition({ left: 50, top: 50, fontSize: 0 }, { minX: 0, minY: 0 });
     expect(r.left).toBe(50);
     expect(r.top).toBe(50);
   });
 });
-

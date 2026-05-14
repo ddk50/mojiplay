@@ -22,9 +22,9 @@ import type { State } from '../../core/state-interface';
 // ── 入力 ─────────────────────────────────────────────────────────────────
 
 export interface PointerInput {
-  readonly screenX: number;  // upperCanvas DOM の topleft 基準 (px)
+  readonly screenX: number; // upperCanvas DOM の topleft 基準 (px)
   readonly screenY: number;
-  readonly worldX: number;   // canvas オブジェクト空間
+  readonly worldX: number; // canvas オブジェクト空間
   readonly worldY: number;
   readonly altKey: boolean;
   readonly shiftKey: boolean;
@@ -65,8 +65,8 @@ export interface CanvasMouseDownInput {
 // "core/tools が DOM を触らない" 原則は守られる: tool は string 値を保持する
 // だけで document.* / fabric には触れない。
 export interface ToolDescriptor {
-  readonly id:      string;
-  readonly label:   string;
+  readonly id: string;
+  readonly label: string;
   readonly iconSvg: string;
 }
 

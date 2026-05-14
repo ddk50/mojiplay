@@ -26,15 +26,22 @@ async function setupWithPath(commands: ReadonlyArray<PathCommand>): Promise<{
   const fabricCanvas = new FakeFabricCanvas();
   const state = new State(fabricCanvas as never);
   const snapshot: DocumentSnapshot = {
-    format: 'mojiplay', version: 1,
+    format: 'mojiplay',
+    version: 1,
     canvas: {
-      objects: [{
-        type: 'path',
-        path: toFabricPath(commands),
-        data: { objectId: 'p1', type: 'path', outlined: true },
-        left: 0, top: 0, scaleX: 1, scaleY: 1, angle: 0,
-        pathOffset: { x: 0, y: 0 },
-      }],
+      objects: [
+        {
+          type: 'path',
+          path: toFabricPath(commands),
+          data: { objectId: 'p1', type: 'path', outlined: true },
+          left: 0,
+          top: 0,
+          scaleX: 1,
+          scaleY: 1,
+          angle: 0,
+          pathOffset: { x: 0, y: 0 },
+        },
+      ],
     },
   };
   await state.applySnapshot(snapshot);
@@ -69,7 +76,7 @@ describe('PenRemoveTool', () => {
     // index=1 のアンカー (100, 0) を狙う
     const r = tool.onPointerDown(pointer(100, 0), state);
     expect(r).toBe('consumed');
-    expect(commandsOf(state)).toHaveLength(4);  // 元 5 → アンカー 1 個分の L が消えて 4
+    expect(commandsOf(state)).toHaveLength(4); // 元 5 → アンカー 1 個分の L が消えて 4
     expect(state.canUndo()).toBe(true);
   });
 
@@ -90,7 +97,7 @@ describe('PenRemoveTool', () => {
   test('アンカー数下限では consumed を返すが path も history も触らない', async () => {
     const { state } = await setupWithPath([
       { type: 'M', to: { x: 0, y: 0 } },
-      { type: 'L', to: { x: 100, y: 0 } },  // この L を削除すると M 単独になり拒否される
+      { type: 'L', to: { x: 100, y: 0 } }, // この L を削除すると M 単独になり拒否される
     ]);
     const tool = new PenRemoveTool();
 

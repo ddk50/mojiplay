@@ -8,15 +8,23 @@ import { logger } from './logger';
 export type StyleInfo = { label: string; weight: number; italic: boolean };
 
 const WEIGHT_MAP: Record<string, number> = {
-  thin: 100, hairline: 100,
-  extralight: 200, ultralight: 200,
+  thin: 100,
+  hairline: 100,
+  extralight: 200,
+  ultralight: 200,
   light: 300,
-  '': 400, normal: 400, regular: 400, book: 400,
+  '': 400,
+  normal: 400,
+  regular: 400,
+  book: 400,
   medium: 500,
-  semibold: 600, demibold: 600,
+  semibold: 600,
+  demibold: 600,
   bold: 700,
-  extrabold: 800, ultrabold: 800,
-  black: 900, heavy: 900,
+  extrabold: 800,
+  ultrabold: 800,
+  black: 900,
+  heavy: 900,
 };
 
 export function parseStyle(s: string): StyleInfo {
@@ -30,7 +38,7 @@ export function parseStyle(s: string): StyleInfo {
 export const fontsByFamily = new Map<string, StyleInfo[]>();
 
 export const fontFamilySel = document.getElementById('font-family') as HTMLSelectElement;
-export const fontStyleSel  = document.getElementById('font-style')  as HTMLSelectElement;
+export const fontStyleSel = document.getElementById('font-style') as HTMLSelectElement;
 
 export function styleValue(weight: number, italic: boolean): string {
   return `${weight}|${italic ? 'italic' : 'normal'}`;
@@ -41,9 +49,8 @@ export function populateStyleList(family: string): void {
   const previous = fontStyleSel.value;
   fontStyleSel.innerHTML = '';
 
-  const list: StyleInfo[] = (styles && styles.length > 0)
-    ? styles
-    : [{ label: 'Regular', weight: 400, italic: false }];
+  const list: StyleInfo[] =
+    styles && styles.length > 0 ? styles : [{ label: 'Regular', weight: 400, italic: false }];
 
   for (const s of list) {
     const opt = document.createElement('option');
@@ -52,7 +59,7 @@ export function populateStyleList(family: string): void {
     fontStyleSel.appendChild(opt);
   }
 
-  const values = list.map(s => styleValue(s.weight, s.italic));
+  const values = list.map((s) => styleValue(s.weight, s.italic));
   if (values.includes(previous)) {
     fontStyleSel.value = previous;
   } else {
@@ -71,17 +78,19 @@ export async function populateFontList(): Promise<void> {
     for (const f of fonts) {
       const info = parseStyle(f.style);
       let arr = fontsByFamily.get(f.family);
-      if (!arr) { arr = []; fontsByFamily.set(f.family, arr); }
-      if (!arr.some(x => x.weight === info.weight && x.italic === info.italic)) {
+      if (!arr) {
+        arr = [];
+        fontsByFamily.set(f.family, arr);
+      }
+      if (!arr.some((x) => x.weight === info.weight && x.italic === info.italic)) {
         arr.push(info);
       }
     }
     for (const arr of fontsByFamily.values()) {
-      arr.sort((a, b) => (a.weight - b.weight) || (Number(a.italic) - Number(b.italic)));
+      arr.sort((a, b) => a.weight - b.weight || Number(a.italic) - Number(b.italic));
     }
 
-    const families = Array.from(fontsByFamily.keys())
-      .sort((a, b) => a.localeCompare(b, 'ja'));
+    const families = Array.from(fontsByFamily.keys()).sort((a, b) => a.localeCompare(b, 'ja'));
 
     const previous = fontFamilySel.value;
     fontFamilySel.innerHTML = '';

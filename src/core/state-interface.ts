@@ -41,7 +41,7 @@ export interface ObjectHandle {
 /** path snapshot — Tool が drag 中の math 計算に使う read-only な path 状態。 */
 export interface PathSnapshot {
   readonly path: Path;
-  readonly pathMatrix: Mat2x3;     // calcTransformMatrix の結果 (local-pathOffset → world)
+  readonly pathMatrix: Mat2x3; // calcTransformMatrix の結果 (local-pathOffset → world)
   readonly pathOffset: Point;
 }
 
@@ -64,11 +64,11 @@ export interface PathHandle {
 
 /** TextTool が State.createTextAt に渡す生成リクエストのフォントプロパティ。 */
 export interface TextCreateProps {
-  readonly fontFamily:  string;
-  readonly fontSize:    number;
-  readonly fontWeight:  number | string;
-  readonly fontStyle:   'normal' | 'italic';
-  readonly fill:        string;
+  readonly fontFamily: string;
+  readonly fontSize: number;
+  readonly fontWeight: number | string;
+  readonly fontStyle: 'normal' | 'italic';
+  readonly fill: string;
 }
 
 /** ツールモード識別子。Controller (KeyboardController / CanvasInputController) と
@@ -79,11 +79,11 @@ export type Mode = 'select-group' | 'select-char' | 'text' | 'pen-add' | 'pen-re
  *  fabric 不知の型として core/ に置く。実装側 (renderer/state.ts) で fabric props にマップ。 */
 export interface SelectionProps {
   readonly fontFamily?: string;
-  readonly fontSize?:   number;
+  readonly fontSize?: number;
   readonly fontWeight?: number | string;
-  readonly fontStyle?:  'normal' | 'italic' | 'oblique';
-  readonly fill?:       string;
-  readonly angle?:      number;
+  readonly fontStyle?: 'normal' | 'italic' | 'oblique';
+  readonly fill?: string;
+  readonly angle?: number;
 }
 
 // ── State (抽象契約) ───────────────────────────────────────────────────────
@@ -238,8 +238,8 @@ export interface State {
    * @returns 成否のサマリ。失敗詳細は呼び出し側で UI 表示するために返す。
    */
   outlineActiveTexts(): Promise<{
-    succeeded:      number;
-    failedChars:    string;
+    succeeded: number;
+    failedChars: string;
     failedFamilies: ReadonlyArray<string>;
   }>;
 
@@ -248,7 +248,9 @@ export interface State {
    * @param multiplier 解像度倍率 (= 通常 10、retina 相当)
    * @returns active object が無ければ null
    */
-  exportActiveAsPngDataUrl(multiplier: number): { dataUrl: string; width: number; height: number } | null;
+  exportActiveAsPngDataUrl(
+    multiplier: number,
+  ): { dataUrl: string; width: number; height: number } | null;
 
   // ── debug ──
 

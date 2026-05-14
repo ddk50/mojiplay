@@ -7,7 +7,10 @@
 
 import type { DocumentRepository } from './document-repository-interface';
 import type {
-  DocumentSnapshot, LoadResult, SaveResult, LoadError,
+  DocumentSnapshot,
+  LoadResult,
+  SaveResult,
+  LoadError,
 } from '../core/document/snapshot';
 
 export class FileSystemDocumentRepository implements DocumentRepository {
@@ -24,7 +27,11 @@ export class FileSystemDocumentRepository implements DocumentRepository {
 
   async load(): Promise<LoadResult> {
     if (!window.electronAPI?.openMply) {
-      return { ok: false, canceled: false, error: { kind: 'io', message: 'electronAPI.openMply が未配線' } };
+      return {
+        ok: false,
+        canceled: false,
+        error: { kind: 'io', message: 'electronAPI.openMply が未配線' },
+      };
     }
     const r = await window.electronAPI.openMply();
     if (!r.ok) {
@@ -35,7 +42,11 @@ export class FileSystemDocumentRepository implements DocumentRepository {
     try {
       parsed = JSON.parse(r.content);
     } catch (err) {
-      return { ok: false, canceled: false, error: { kind: 'invalid-json', message: (err as Error).message } };
+      return {
+        ok: false,
+        canceled: false,
+        error: { kind: 'invalid-json', message: (err as Error).message },
+      };
     }
     const validated = validateSnapshot(parsed);
     if (validated.kind === 'err') {
@@ -45,9 +56,9 @@ export class FileSystemDocumentRepository implements DocumentRepository {
   }
 }
 
-function validateSnapshot(raw: unknown):
-  | { kind: 'ok';  snapshot: DocumentSnapshot }
-  | { kind: 'err'; error: LoadError } {
+function validateSnapshot(
+  raw: unknown,
+): { kind: 'ok'; snapshot: DocumentSnapshot } | { kind: 'err'; error: LoadError } {
   if (!raw || typeof raw !== 'object') {
     return { kind: 'err', error: { kind: 'format-mismatch', got: raw } };
   }

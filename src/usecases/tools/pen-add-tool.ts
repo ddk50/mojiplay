@@ -50,32 +50,36 @@ import { screenToPathLocal } from '../../core/path/coords';
 import { findClosestSegment } from '../../core/path/segment-hit';
 import type { ObjectSnapshot } from '../../core/history/types';
 import type {
-  Tool, ToolDescriptor, PointerInput, PointerHandled,
-  MovingTarget, CanvasMouseDownInput,
+  Tool,
+  ToolDescriptor,
+  PointerInput,
+  PointerHandled,
+  MovingTarget,
+  CanvasMouseDownInput,
 } from './tool-interface';
 import type { State, PathHandle } from '../../core/state-interface';
 
 interface PenAddDragState {
-  readonly cmdIndex: number;        // 分割した命令の前半 (新アンカー終端) の index
+  readonly cmdIndex: number; // 分割した命令の前半 (新アンカー終端) の index
   readonly origCmdType: 'C' | 'Q' | 'L';
-  readonly anchor: Point;           // 新アンカー位置 (固定)
-  readonly prev:   Point;           // 直前のアンカー位置 (L→C 変換時のデフォルトハンドル算出用)
-  readonly next:   Point;           // 直後のアンカー位置
+  readonly anchor: Point; // 新アンカー位置 (固定)
+  readonly prev: Point; // 直前のアンカー位置 (L→C 変換時のデフォルトハンドル算出用)
+  readonly next: Point; // 直後のアンカー位置
 }
 
 const PEN_HIT_THRESHOLD = 8;
-const PEN_SAMPLES       = 50;
+const PEN_SAMPLES = 50;
 
 export class PenAddTool implements Tool {
   readonly descriptor: ToolDescriptor = {
-    id:    'pen-add',
+    id: 'pen-add',
     label: 'アンカーポイント追加 (+ペン)',
     iconSvg:
       '<svg class="tool-icon pen-icon" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">' +
-        '<path class="pen-nib" d="M9,1 L13,5.5 L11.5,10.5 L9,16 L6.5,10.5 L5,5.5 Z"/>' +
-        '<circle class="pen-dot" cx="9" cy="6.5" r="1.6"/>' +
-        '<line class="pen-sign" x1="14.5" y1="12" x2="14.5" y2="17" stroke-width="1.8" stroke-linecap="round"/>' +
-        '<line class="pen-sign" x1="12" y1="14.5" x2="17" y2="14.5" stroke-width="1.8" stroke-linecap="round"/>' +
+      '<path class="pen-nib" d="M9,1 L13,5.5 L11.5,10.5 L9,16 L6.5,10.5 L5,5.5 Z"/>' +
+      '<circle class="pen-dot" cx="9" cy="6.5" r="1.6"/>' +
+      '<line class="pen-sign" x1="14.5" y1="12" x2="14.5" y2="17" stroke-width="1.8" stroke-linecap="round"/>' +
+      '<line class="pen-sign" x1="12" y1="14.5" x2="17" y2="14.5" stroke-width="1.8" stroke-linecap="round"/>' +
       '</svg>',
   };
 
@@ -83,9 +87,13 @@ export class PenAddTool implements Tool {
   private dragPath: PathHandle | null = null;
   private beforeSnapshot: ObjectSnapshot | null = null;
 
-  isDragging(): boolean { return this.drag !== null; }
+  isDragging(): boolean {
+    return this.drag !== null;
+  }
 
-  onActivate(_state: State): void { /* no-op */ }
+  onActivate(_state: State): void {
+    /* no-op */
+  }
   onDeactivate(state: State): void {
     this.drag = null;
     this.dragPath = null;
@@ -99,12 +107,17 @@ export class PenAddTool implements Tool {
 
     const snapshot = path.snapshot();
     const transform: PathTransform = {
-      pathMatrix:     snapshot.pathMatrix,
-      pathOffset:     snapshot.pathOffset,
+      pathMatrix: snapshot.pathMatrix,
+      pathOffset: snapshot.pathOffset,
       viewportMatrix: state.getViewportMatrix(),
     };
     const hit = findClosestSegment(
-      snapshot.path.commands, e.screenX, e.screenY, transform, PEN_HIT_THRESHOLD, PEN_SAMPLES,
+      snapshot.path.commands,
+      e.screenX,
+      e.screenY,
+      transform,
+      PEN_HIT_THRESHOLD,
+      PEN_SAMPLES,
     );
     if (!hit) return 'pass';
 
@@ -141,8 +154,8 @@ export class PenAddTool implements Tool {
       const path = this.dragPath;
       const snapshot = path.snapshot();
       const transform: PathTransform = {
-        pathMatrix:     snapshot.pathMatrix,
-        pathOffset:     snapshot.pathOffset,
+        pathMatrix: snapshot.pathMatrix,
+        pathOffset: snapshot.pathOffset,
         viewportMatrix: state.getViewportMatrix(),
       };
       const local = screenToPathLocal({ x: e.screenX, y: e.screenY }, transform);
@@ -160,9 +173,10 @@ export class PenAddTool implements Tool {
       // 前半セグメント = anchor で終わる C コマンド。
       // c1 (前アンカーの outgoing) は元が C ならその値、それ以外は 1/3 等分点。
       // c2 (新アンカーの incoming) は anchor から pointer の対称ハンドル。
-      const firstC1: Point = origCmdType === 'C' && curFirst.type === 'C'
-        ? curFirst.c1
-        : { x: prev.x + (anchor.x - prev.x) / 3, y: prev.y + (anchor.y - prev.y) / 3 };
+      const firstC1: Point =
+        origCmdType === 'C' && curFirst.type === 'C'
+          ? curFirst.c1
+          : { x: prev.x + (anchor.x - prev.x) / 3, y: prev.y + (anchor.y - prev.y) / 3 };
       updated[cmdIndex] = {
         type: 'C',
         c1: firstC1,
@@ -173,9 +187,13 @@ export class PenAddTool implements Tool {
       // 後半セグメント = next で終わる C コマンド。
       // c1 (新アンカーの outgoing) は anchor から pointer の方向。
       // c2 (next アンカーの incoming) は元が C ならその値、それ以外は 2/3 点。
-      const secondC2: Point = origCmdType === 'C' && curSecond.type === 'C'
-        ? curSecond.c2
-        : { x: anchor.x + 2 * (next.x - anchor.x) / 3, y: anchor.y + 2 * (next.y - anchor.y) / 3 };
+      const secondC2: Point =
+        origCmdType === 'C' && curSecond.type === 'C'
+          ? curSecond.c2
+          : {
+              x: anchor.x + (2 * (next.x - anchor.x)) / 3,
+              y: anchor.y + (2 * (next.y - anchor.y)) / 3,
+            };
       updated[secondIdx] = {
         type: 'C',
         c1: { x: anchor.x + dx, y: anchor.y + dy },
@@ -196,12 +214,17 @@ export class PenAddTool implements Tool {
     }
     const snapshot = path.snapshot();
     const transform: PathTransform = {
-      pathMatrix:     snapshot.pathMatrix,
-      pathOffset:     snapshot.pathOffset,
+      pathMatrix: snapshot.pathMatrix,
+      pathOffset: snapshot.pathOffset,
       viewportMatrix: state.getViewportMatrix(),
     };
     const hit = findClosestSegment(
-      snapshot.path.commands, e.screenX, e.screenY, transform, PEN_HIT_THRESHOLD, PEN_SAMPLES,
+      snapshot.path.commands,
+      e.screenX,
+      e.screenY,
+      transform,
+      PEN_HIT_THRESHOLD,
+      PEN_SAMPLES,
     );
     state.setCursor(hit ? 'copy' : '');
   }
@@ -227,7 +250,13 @@ export class PenAddTool implements Tool {
     }
   }
 
-  onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _state: State): void { /* no-op */ }
-  onSelectionChanged(_state: State): void { /* no-op */ }
-  onCanvasMouseDown(_e: CanvasMouseDownInput, _state: State): void { /* no-op */ }
+  onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _state: State): void {
+    /* no-op */
+  }
+  onSelectionChanged(_state: State): void {
+    /* no-op */
+  }
+  onCanvasMouseDown(_e: CanvasMouseDownInput, _state: State): void {
+    /* no-op */
+  }
 }

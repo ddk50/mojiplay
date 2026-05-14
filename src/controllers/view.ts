@@ -7,9 +7,7 @@
 
 import type { HostShell, CloseGuardDecision } from '../usecases/host-shell-interface';
 import type { FileIOInteractor } from '../usecases/menu/file-io-interactor';
-import type {
-  ViewController, ViewControllerDeps,
-} from './view-interface';
+import type { ViewController, ViewControllerDeps } from './view-interface';
 import { updateWindowTitle } from '../renderer/window-title';
 
 export class ViewControllerImpl implements ViewController {

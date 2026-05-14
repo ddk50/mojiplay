@@ -37,15 +37,22 @@ async function setupWithPath(commands: ReadonlyArray<PathCommand>): Promise<{
   const fabricCanvas = new FakeFabricCanvas();
   const state = new State(fabricCanvas as never);
   const snapshot: DocumentSnapshot = {
-    format: 'mojiplay', version: 1,
+    format: 'mojiplay',
+    version: 1,
     canvas: {
-      objects: [{
-        type: 'path',
-        path: toFabricPath(commands),
-        data: { objectId: 'p1', type: 'path', outlined: true },
-        left: 0, top: 0, scaleX: 1, scaleY: 1, angle: 0,
-        pathOffset: { x: 0, y: 0 },
-      }],
+      objects: [
+        {
+          type: 'path',
+          path: toFabricPath(commands),
+          data: { objectId: 'p1', type: 'path', outlined: true },
+          left: 0,
+          top: 0,
+          scaleX: 1,
+          scaleY: 1,
+          angle: 0,
+          pathOffset: { x: 0, y: 0 },
+        },
+      ],
     },
   };
   await state.applySnapshot(snapshot);
@@ -149,8 +156,8 @@ describe('SelectCharTool: handle drag', () => {
 
     const c = commandsOf(state)[1];
     if (c.type !== 'C') throw new Error('expected C');
-    expect(c.c1).toEqual({ x: 20, y: 5 });    // moved
-    expect(c.c2).toEqual({ x: 100, y: 50 });  // unchanged
+    expect(c.c1).toEqual({ x: 20, y: 5 }); // moved
+    expect(c.c2).toEqual({ x: 100, y: 50 }); // unchanged
     expect(c.to).toEqual({ x: 100, y: 100 }); // unchanged
   });
 
@@ -221,12 +228,19 @@ describe('SelectCharTool: hover cursor', () => {
 describe('SelectCharTool: snap (object:moving)', () => {
   // snap test は path 不要 (tool.onObjectMoving は MovingTarget のみ操作する)。
   function targetAt(left: number, top: number) {
-    let l = left, t = top;
+    let l = left,
+      t = top;
     return {
-      getLeft: () => l, getTop: () => t,
-      setLeft: (v: number) => { l = v; },
-      setTop:  (v: number) => { t = v; },
-      currentLeft: () => l, currentTop: () => t,
+      getLeft: () => l,
+      getTop: () => t,
+      setLeft: (v: number) => {
+        l = v;
+      },
+      setTop: (v: number) => {
+        t = v;
+      },
+      currentLeft: () => l,
+      currentTop: () => t,
     };
   }
 
@@ -237,7 +251,7 @@ describe('SelectCharTool: snap (object:moving)', () => {
     const t = targetAt(34, 50); // 34 → nearest 32 (dist 2 < threshold 5)
     tool.onObjectMoving(t, { altKey: false }, state);
     expect(t.currentLeft()).toBe(32);
-    expect(t.currentTop()).toBe(48);  // 50 → 48 (dist 2)
+    expect(t.currentTop()).toBe(48); // 50 → 48 (dist 2)
   });
 
   test('閾値外なら snap しない', () => {
@@ -306,9 +320,9 @@ describe('SelectCharTool: deactivate', () => {
 describe('SelectCharTool: multi-anchor selection', () => {
   function makeTriangle(): PathCommand[] {
     return [
-      { type: 'M', to: { x: 0,   y: 0   } },  // anchor 0
-      { type: 'L', to: { x: 100, y: 0   } },  // anchor 1
-      { type: 'L', to: { x: 50,  y: 100 } },  // anchor 2
+      { type: 'M', to: { x: 0, y: 0 } }, // anchor 0
+      { type: 'L', to: { x: 100, y: 0 } }, // anchor 1
+      { type: 'L', to: { x: 50, y: 100 } }, // anchor 2
       { type: 'Z' },
     ];
   }
@@ -353,7 +367,7 @@ describe('SelectCharTool: multi-anchor selection', () => {
     tool.onPointerUp(pointer(0, 0), state);
     // Shift+同じアンカーで解除 → drag 状態にならない
     const result = tool.onPointerDown(pointer(0, 0, { shiftKey: true }), state);
-    expect(result).toBe('consumed');  // hit はしたが drag 起こさず
+    expect(result).toBe('consumed'); // hit はしたが drag 起こさず
     expect(tool.isDragging()).toBe(false);
   });
 

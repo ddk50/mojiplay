@@ -45,7 +45,7 @@ async function seedTexts(state: State, groupIds: ReadonlyArray<string | undefine
     format: 'mojiplay',
     version: 1,
     canvas: {
-      objects: groupIds.map(gid => ({
+      objects: groupIds.map((gid) => ({
         type: 'text',
         data: gid !== undefined ? { groupId: gid } : {},
       })),

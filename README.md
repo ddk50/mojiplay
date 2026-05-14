@@ -81,12 +81,12 @@ npm run pack
 
 ## 技術スタック
 
-| 用途 | ライブラリ |
-|------|-----------|
-| デスクトップフレームワーク | [Electron](https://www.electronjs.org/) v29 |
-| キャンバス操作 | [Fabric.js](http://fabricjs.com/) v5.3 |
-| フォントパス解析 | [fontkit](https://github.com/foliojs/fontkit) v2 |
-| テスト | [Jest](https://jestjs.io/) + [ts-jest](https://kulshekhar.github.io/ts-jest/) |
+| 用途                       | ライブラリ                                                                    |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| デスクトップフレームワーク | [Electron](https://www.electronjs.org/) v29                                   |
+| キャンバス操作             | [Fabric.js](http://fabricjs.com/) v5.3                                        |
+| フォントパス解析           | [fontkit](https://github.com/foliojs/fontkit) v2                              |
+| テスト                     | [Jest](https://jestjs.io/) + [ts-jest](https://kulshekhar.github.io/ts-jest/) |
 
 ## ライセンス
 

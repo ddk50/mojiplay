@@ -33,9 +33,9 @@ export type PathCommand =
 // ハンドル参照は「どのコマンドの、意味的にどの制御点か」で表現する。
 // kind 経由で型安全に該当 Point フィールドにアクセスできる。
 export type HandleRef =
-  | { readonly kind: 'C-c1'; readonly cmdIndex: number }  // C命令の c1 (= 直前アンカーの outgoing)
-  | { readonly kind: 'C-c2'; readonly cmdIndex: number }  // C命令の c2 (= 末尾アンカーの incoming)
-  | { readonly kind: 'Q-c';  readonly cmdIndex: number }; // Q命令の c
+  | { readonly kind: 'C-c1'; readonly cmdIndex: number } // C命令の c1 (= 直前アンカーの outgoing)
+  | { readonly kind: 'C-c2'; readonly cmdIndex: number } // C命令の c2 (= 末尾アンカーの incoming)
+  | { readonly kind: 'Q-c'; readonly cmdIndex: number }; // Q命令の c
 
 export interface PathAnchor {
   readonly cmdIndex: number;
@@ -51,4 +51,3 @@ export interface PathAnchor {
    */
   coincidentClosingCmdIndex: number | null;
 }
-

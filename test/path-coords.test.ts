@@ -5,8 +5,12 @@
 
 import type { Point } from '../src/core/path/types';
 import {
-  applyMatrix, applyMatrixToDelta, invertMatrix,
-  pathLocalToScreen, screenToPathLocal, worldDeltaToPathLocalDelta,
+  applyMatrix,
+  applyMatrixToDelta,
+  invertMatrix,
+  pathLocalToScreen,
+  screenToPathLocal,
+  worldDeltaToPathLocalDelta,
 } from '../src/core/path/coords';
 import type { Mat2x3, PathTransform } from '../src/core/path/coords';
 
@@ -78,8 +82,8 @@ describe('invertMatrix', () => {
 describe('pathLocalToScreen / screenToPathLocal', () => {
   test('identity 変換で local ↔ screen の往復ができる', () => {
     const t: PathTransform = {
-      pathMatrix:     IDENT,
-      pathOffset:     { x: 0, y: 0 },
+      pathMatrix: IDENT,
+      pathOffset: { x: 0, y: 0 },
       viewportMatrix: IDENT,
     };
     const local = { x: 50, y: 80 };
@@ -91,8 +95,8 @@ describe('pathLocalToScreen / screenToPathLocal', () => {
   test('pathOffset が screen 座標を平行移動する', () => {
     // local 100 with pathOffset 30 means world = 70 (then viewport identity)
     const t: PathTransform = {
-      pathMatrix:     IDENT,
-      pathOffset:     { x: 30, y: 40 },
+      pathMatrix: IDENT,
+      pathOffset: { x: 30, y: 40 },
       viewportMatrix: IDENT,
     };
     const screen = pathLocalToScreen({ x: 100, y: 100 }, t);
@@ -102,8 +106,8 @@ describe('pathLocalToScreen / screenToPathLocal', () => {
   test('viewportMatrix が screen 座標をスケール / 平行移動する', () => {
     // 2x zoom + (5, 10) pan
     const t: PathTransform = {
-      pathMatrix:     IDENT,
-      pathOffset:     { x: 0, y: 0 },
+      pathMatrix: IDENT,
+      pathOffset: { x: 0, y: 0 },
       viewportMatrix: [2, 0, 0, 2, 5, 10],
     };
     const screen = pathLocalToScreen({ x: 100, y: 100 }, t);
@@ -113,8 +117,8 @@ describe('pathLocalToScreen / screenToPathLocal', () => {
   test('pathMatrix の平行移動が原点を動かす', () => {
     // pathMatrix translates (local - pathOffset) by (200, 300)
     const t: PathTransform = {
-      pathMatrix:     [1, 0, 0, 1, 200, 300],
-      pathOffset:     { x: 0, y: 0 },
+      pathMatrix: [1, 0, 0, 1, 200, 300],
+      pathOffset: { x: 0, y: 0 },
       viewportMatrix: IDENT,
     };
     const screen = pathLocalToScreen({ x: 0, y: 0 }, t);
@@ -123,13 +127,13 @@ describe('pathLocalToScreen / screenToPathLocal', () => {
 
   test('任意の変換 stack でも往復できる', () => {
     const t: PathTransform = {
-      pathMatrix:     [1.4, 0.2, -0.1, 1.3, 50, 60],
-      pathOffset:     { x: 12, y: 17 },
+      pathMatrix: [1.4, 0.2, -0.1, 1.3, 50, 60],
+      pathOffset: { x: 12, y: 17 },
       viewportMatrix: [0.8, 0, 0, 0.8, 100, 200],
     };
     const local = { x: 70, y: -30 };
     const screen = pathLocalToScreen(local, t);
-    const back  = screenToPathLocal({ x: screen.sx, y: screen.sy }, t);
+    const back = screenToPathLocal({ x: screen.sx, y: screen.sy }, t);
     expectClose(back, local.x, local.y);
   });
 });

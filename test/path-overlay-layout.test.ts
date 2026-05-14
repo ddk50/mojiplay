@@ -8,7 +8,9 @@ import type { Mat2x3 } from '../src/core/path/coords';
 import { Path } from '../src/core/path/path';
 import type { PathSnapshot } from '../src/core/state-interface';
 import {
-  computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt,
+  computeOverlayLayout,
+  hitTestAnchorAt,
+  hitTestHandleAt,
 } from '../src/core/path/overlay-layout';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
@@ -42,12 +44,14 @@ describe('computeOverlayLayout', () => {
     const layout = computeOverlayLayout(snap(cmds), IDENT);
     expect(layout.anchors).toHaveLength(2);
     // anchor 0 の outgoing = c1 (cmdIndex 1)、anchor 1 の incoming = c2 (cmdIndex 1)
-    const out = layout.handles.find(h => h.anchorIndex === 0 && h.which === 'out');
-    const inc = layout.handles.find(h => h.anchorIndex === 1 && h.which === 'in');
+    const out = layout.handles.find((h) => h.anchorIndex === 0 && h.which === 'out');
+    const inc = layout.handles.find((h) => h.anchorIndex === 1 && h.which === 'in');
     expect(out).toBeDefined();
     expect(inc).toBeDefined();
-    expect(out!.sx).toBe(10); expect(out!.sy).toBe(0);
-    expect(inc!.sx).toBe(100); expect(inc!.sy).toBe(50);
+    expect(out!.sx).toBe(10);
+    expect(out!.sy).toBe(0);
+    expect(inc!.sx).toBe(100);
+    expect(inc!.sy).toBe(50);
   });
 
   test('viewport zoom が screen 座標をスケールする', () => {
@@ -66,7 +70,9 @@ describe('computeOverlayLayout', () => {
       { type: 'L', to: { x: 200, y: 200 } },
     ];
     const snapshot: PathSnapshot = {
-      path: new Path(cmds), pathMatrix: IDENT, pathOffset: { x: 50, y: 50 },
+      path: new Path(cmds),
+      pathMatrix: IDENT,
+      pathOffset: { x: 50, y: 50 },
     };
     const layout = computeOverlayLayout(snapshot, IDENT);
     expect(layout.anchors[0]).toEqual({ anchorIndex: 0, sx: 50, sy: 50 });
@@ -86,7 +92,7 @@ describe('hitTestAnchorAt', () => {
   });
 
   test('半径内でもヒットする', () => {
-    expect(hitTestAnchorAt(layout, 103, 102)).toBe(0);  // dist ~ 3.6 < 6
+    expect(hitTestAnchorAt(layout, 103, 102)).toBe(0); // dist ~ 3.6 < 6
   });
 
   test('半径外なら -1 を返す', () => {

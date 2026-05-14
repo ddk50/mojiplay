@@ -6,15 +6,19 @@
 
 import type { PointerInput } from '../usecases/tools/tool-interface';
 
-export function buildPointerInput(e: MouseEvent, canvas: fabric.Canvas, upperCanvas: HTMLCanvasElement): PointerInput {
+export function buildPointerInput(
+  e: MouseEvent,
+  canvas: fabric.Canvas,
+  upperCanvas: HTMLCanvasElement,
+): PointerInput {
   const rect = upperCanvas.getBoundingClientRect();
   const w = canvas.getPointer(e);
   return {
-    screenX:  e.clientX - rect.left,
-    screenY:  e.clientY - rect.top,
-    worldX:   w.x,
-    worldY:   w.y,
-    altKey:   e.altKey,
+    screenX: e.clientX - rect.left,
+    screenY: e.clientY - rect.top,
+    worldX: w.x,
+    worldY: w.y,
+    altKey: e.altKey,
     shiftKey: e.shiftKey,
   };
 }

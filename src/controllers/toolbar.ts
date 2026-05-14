@@ -15,12 +15,8 @@ import type { Tool } from '../usecases/tools/tool-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
 import type { HostShell } from '../usecases/host-shell-interface';
 import type { MenuActionRegistry } from '../usecases/menu/menu-action-registry-interface';
-import type {
-  ToolbarController, ToolbarControllerDeps,
-} from './toolbar-interface';
-import {
-  fontFamilySel, fontStyleSel, populateStyleList,
-} from '../renderer/font-enumeration';
+import type { ToolbarController, ToolbarControllerDeps } from './toolbar-interface';
+import { fontFamilySel, fontStyleSel, populateStyleList } from '../renderer/font-enumeration';
 import { currentFontStyle } from '../renderer/font-current';
 import { showToast } from '../renderer/toast';
 
@@ -34,21 +30,25 @@ export class ToolbarControllerImpl implements ToolbarController {
   private readonly modeButtons: Record<string, HTMLButtonElement>;
 
   // DOM 参照
-  private readonly fontSizeInput  = document.getElementById('font-size')  as HTMLInputElement;
+  private readonly fontSizeInput = document.getElementById('font-size') as HTMLInputElement;
   private readonly fontColorInput = document.getElementById('font-color') as HTMLInputElement;
-  private readonly rotationInput  = document.getElementById('rotation')   as HTMLInputElement;
-  private readonly snapEnabledInput   = document.getElementById('snap-enabled')   as HTMLInputElement;
-  private readonly snapPitchInput     = document.getElementById('snap-pitch')     as HTMLInputElement;
-  private readonly snapThresholdInput = document.getElementById('snap-threshold') as HTMLInputElement;
-  private readonly btnApplyRotation = document.getElementById('btn-apply-rotation') as HTMLButtonElement;
-  private readonly btnSelectAll     = document.getElementById('btn-select-all')    as HTMLButtonElement;
-  private readonly btnClear         = document.getElementById('btn-clear')         as HTMLButtonElement;
-  private readonly btnExport        = document.getElementById('btn-export')        as HTMLButtonElement;
-  private readonly btnOutline       = document.getElementById('btn-outline')       as HTMLButtonElement;
+  private readonly rotationInput = document.getElementById('rotation') as HTMLInputElement;
+  private readonly snapEnabledInput = document.getElementById('snap-enabled') as HTMLInputElement;
+  private readonly snapPitchInput = document.getElementById('snap-pitch') as HTMLInputElement;
+  private readonly snapThresholdInput = document.getElementById(
+    'snap-threshold',
+  ) as HTMLInputElement;
+  private readonly btnApplyRotation = document.getElementById(
+    'btn-apply-rotation',
+  ) as HTMLButtonElement;
+  private readonly btnSelectAll = document.getElementById('btn-select-all') as HTMLButtonElement;
+  private readonly btnClear = document.getElementById('btn-clear') as HTMLButtonElement;
+  private readonly btnExport = document.getElementById('btn-export') as HTMLButtonElement;
+  private readonly btnOutline = document.getElementById('btn-outline') as HTMLButtonElement;
 
   // snap config (select-char モード専用)
-  private snapEnabled:   boolean;
-  private snapPitch:     number;
+  private snapEnabled: boolean;
+  private snapPitch: number;
   private snapThreshold: number;
 
   constructor(deps: ToolbarControllerDeps) {
@@ -60,8 +60,8 @@ export class ToolbarControllerImpl implements ToolbarController {
     this.canvas = deps.canvas;
     this.modeButtons = deps.modeButtons;
 
-    this.snapEnabled   = this.snapEnabledInput.checked;
-    this.snapPitch     = Math.max(1, parseInt(this.snapPitchInput.value, 10)     || 8);
+    this.snapEnabled = this.snapEnabledInput.checked;
+    this.snapPitch = Math.max(1, parseInt(this.snapPitchInput.value, 10) || 8);
     this.snapThreshold = Math.max(1, parseInt(this.snapThresholdInput.value, 10) || 5);
     this.syncSnapConfigToTool();
   }
@@ -124,8 +124,8 @@ export class ToolbarControllerImpl implements ToolbarController {
     this.canvas.discardActiveObject();
     this.canvas.renderAll();
     const dataURL = this.canvas.toDataURL({
-      format:              'png',
-      multiplier:          2,
+      format: 'png',
+      multiplier: 2,
       enableRetinaScaling: true,
     });
     const r = await this.host.savePng(dataURL);
@@ -182,18 +182,18 @@ export class ToolbarControllerImpl implements ToolbarController {
   // ====================================================================
 
   attach(): void {
-    fontFamilySel.addEventListener('change',           this.onFontFamilyChange);
-    fontStyleSel.addEventListener('change',            this.onFontStyleChange);
-    this.fontSizeInput.addEventListener('change',      this.onFontSizeChange);
-    this.fontColorInput.addEventListener('input',      this.onFontColorChange);
-    this.btnApplyRotation.addEventListener('click',    this.onApplyRotation);
-    this.btnSelectAll.addEventListener('click',        this.onSelectAllClick);
-    this.btnClear.addEventListener('click',            this.onClearClick);
-    this.btnExport.addEventListener('click',           this.onExportClick);
-    this.btnOutline.addEventListener('click',          this.onOutlineClick);
-    this.snapEnabledInput.addEventListener('change',   this.onSnapEnabledChange);
-    this.snapPitchInput.addEventListener('input',      this.onSnapPitchChange);
-    this.snapThresholdInput.addEventListener('input',  this.onSnapThresholdChange);
+    fontFamilySel.addEventListener('change', this.onFontFamilyChange);
+    fontStyleSel.addEventListener('change', this.onFontStyleChange);
+    this.fontSizeInput.addEventListener('change', this.onFontSizeChange);
+    this.fontColorInput.addEventListener('input', this.onFontColorChange);
+    this.btnApplyRotation.addEventListener('click', this.onApplyRotation);
+    this.btnSelectAll.addEventListener('click', this.onSelectAllClick);
+    this.btnClear.addEventListener('click', this.onClearClick);
+    this.btnExport.addEventListener('click', this.onExportClick);
+    this.btnOutline.addEventListener('click', this.onOutlineClick);
+    this.snapEnabledInput.addEventListener('change', this.onSnapEnabledChange);
+    this.snapPitchInput.addEventListener('input', this.onSnapPitchChange);
+    this.snapThresholdInput.addEventListener('input', this.onSnapThresholdChange);
 
     for (const id of Object.keys(this.modeButtons)) {
       this.modeButtons[id].addEventListener('click', () => this.setMode(id as Mode));
@@ -202,18 +202,18 @@ export class ToolbarControllerImpl implements ToolbarController {
   }
 
   detach(): void {
-    fontFamilySel.removeEventListener('change',           this.onFontFamilyChange);
-    fontStyleSel.removeEventListener('change',            this.onFontStyleChange);
-    this.fontSizeInput.removeEventListener('change',      this.onFontSizeChange);
-    this.fontColorInput.removeEventListener('input',      this.onFontColorChange);
-    this.btnApplyRotation.removeEventListener('click',    this.onApplyRotation);
-    this.btnSelectAll.removeEventListener('click',        this.onSelectAllClick);
-    this.btnClear.removeEventListener('click',            this.onClearClick);
-    this.btnExport.removeEventListener('click',           this.onExportClick);
-    this.btnOutline.removeEventListener('click',          this.onOutlineClick);
-    this.snapEnabledInput.removeEventListener('change',   this.onSnapEnabledChange);
-    this.snapPitchInput.removeEventListener('input',      this.onSnapPitchChange);
-    this.snapThresholdInput.removeEventListener('input',  this.onSnapThresholdChange);
+    fontFamilySel.removeEventListener('change', this.onFontFamilyChange);
+    fontStyleSel.removeEventListener('change', this.onFontStyleChange);
+    this.fontSizeInput.removeEventListener('change', this.onFontSizeChange);
+    this.fontColorInput.removeEventListener('input', this.onFontColorChange);
+    this.btnApplyRotation.removeEventListener('click', this.onApplyRotation);
+    this.btnSelectAll.removeEventListener('click', this.onSelectAllClick);
+    this.btnClear.removeEventListener('click', this.onClearClick);
+    this.btnExport.removeEventListener('click', this.onExportClick);
+    this.btnOutline.removeEventListener('click', this.onOutlineClick);
+    this.snapEnabledInput.removeEventListener('change', this.onSnapEnabledChange);
+    this.snapPitchInput.removeEventListener('input', this.onSnapPitchChange);
+    this.snapThresholdInput.removeEventListener('input', this.onSnapThresholdChange);
     // mode button listeners は無名 closure なので detach 不要 (window.unload で破棄)。
   }
 
@@ -223,7 +223,9 @@ export class ToolbarControllerImpl implements ToolbarController {
 
   private syncSnapConfigToTool(): void {
     this.selectCharTool.setSnapConfig({
-      enabled: this.snapEnabled, pitch: this.snapPitch, threshold: this.snapThreshold,
+      enabled: this.snapEnabled,
+      pitch: this.snapPitch,
+      threshold: this.snapThreshold,
     });
   }
 }

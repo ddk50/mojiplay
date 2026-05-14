@@ -20,10 +20,18 @@ import type { FileIOInteractor } from '../src/usecases/menu/file-io-interactor';
 
 class FakeUI implements UIPort {
   toasts: Array<{ message: string; isError: boolean }> = [];
-  showToast(message: string, isError = false): void { this.toasts.push({ message, isError }); }
-  async confirmDiscard(_m: string): Promise<DiscardChoice> { return 'cancel'; }
-  setNativeDirty(_d: boolean): void { /* no-op */ }
-  async copyImageToClipboard(_url: string): Promise<void> { /* no-op */ }
+  showToast(message: string, isError = false): void {
+    this.toasts.push({ message, isError });
+  }
+  async confirmDiscard(_m: string): Promise<DiscardChoice> {
+    return 'cancel';
+  }
+  setNativeDirty(_d: boolean): void {
+    /* no-op */
+  }
+  async copyImageToClipboard(_url: string): Promise<void> {
+    /* no-op */
+  }
 }
 
 class FakeHost implements HostShell {
@@ -31,24 +39,50 @@ class FakeHost implements HostShell {
   fullscreenCalls = 0;
   devToolsCalls = 0;
   log = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
-  async savePng(_d: string): Promise<{ ok: true; filePath: string }> { return { ok: true, filePath: '' }; }
-  async copyImageToClipboard(_d: string): Promise<void> { /* no-op */ }
-  setZoom(d: 'in' | 'out' | 'reset'): void { this.zoomCalls.push(d); }
-  toggleFullscreen(): void { this.fullscreenCalls++; }
-  toggleDevTools(): void { this.devToolsCalls++; }
-  setNativeDirty(_d: boolean): void { /* no-op */ }
-  onPasteRequest(_cb: () => void): () => void { return () => {}; }
-  onCopyRequest(_cb: () => void): () => void { return () => {}; }
-  onCloseGuardRequest(_cb: () => Promise<'destroy' | 'cancel'>): () => void { return () => {}; }
+  async savePng(_d: string): Promise<{ ok: true; filePath: string }> {
+    return { ok: true, filePath: '' };
+  }
+  async copyImageToClipboard(_d: string): Promise<void> {
+    /* no-op */
+  }
+  setZoom(d: 'in' | 'out' | 'reset'): void {
+    this.zoomCalls.push(d);
+  }
+  toggleFullscreen(): void {
+    this.fullscreenCalls++;
+  }
+  toggleDevTools(): void {
+    this.devToolsCalls++;
+  }
+  setNativeDirty(_d: boolean): void {
+    /* no-op */
+  }
+  onPasteRequest(_cb: () => void): () => void {
+    return () => {};
+  }
+  onCopyRequest(_cb: () => void): () => void {
+    return () => {};
+  }
+  onCloseGuardRequest(_cb: () => Promise<'destroy' | 'cancel'>): () => void {
+    return () => {};
+  }
 }
 
 class FakeFileIO {
   openCalled = 0;
   saveCurrentCalled = 0;
   saveAsCalled = 0;
-  async openFile(): Promise<void> { this.openCalled++; }
-  async saveCurrent(): Promise<boolean> { this.saveCurrentCalled++; return true; }
-  async saveAs(): Promise<boolean> { this.saveAsCalled++; return true; }
+  async openFile(): Promise<void> {
+    this.openCalled++;
+  }
+  async saveCurrent(): Promise<boolean> {
+    this.saveCurrentCalled++;
+    return true;
+  }
+  async saveAs(): Promise<boolean> {
+    this.saveAsCalled++;
+    return true;
+  }
 }
 
 function setup(): {
@@ -59,8 +93,8 @@ function setup(): {
   fileIO: FakeFileIO;
 } {
   const state = new State(new FakeFabricCanvas() as never);
-  const ui    = new FakeUI();
-  const host  = new FakeHost();
+  const ui = new FakeUI();
+  const host = new FakeHost();
   const fileIO = new FakeFileIO();
   const registry = createMenuActionRegistry({
     state,
@@ -86,10 +120,11 @@ describe('MenuActionRegistry', () => {
   test("execute('select-all') が State.selectAllObjects を呼ぶ", async () => {
     const { registry, state } = setup();
     await state.applySnapshot({
-      format: 'mojiplay', version: 1,
-      canvas: { objects: [
-        { type: 'text', text: 'A', data: { objectId: 'id1', type: 'text' } },
-      ] } as unknown,
+      format: 'mojiplay',
+      version: 1,
+      canvas: {
+        objects: [{ type: 'text', text: 'A', data: { objectId: 'id1', type: 'text' } }],
+      } as unknown,
     });
     await registry.execute('select-all');
     expect(state.getActiveObjects()).toHaveLength(1);
@@ -97,10 +132,17 @@ describe('MenuActionRegistry', () => {
 
   test("execute('undo') / execute('redo') が State.undo / State.redo を呼ぶ", async () => {
     const { registry, state } = setup();
-    let undoCalled = 0, redoCalled = 0;
+    let undoCalled = 0,
+      redoCalled = 0;
     const orig = { undo: state.undo.bind(state), redo: state.redo.bind(state) };
-    state.undo = () => { undoCalled++; orig.undo(); };
-    state.redo = () => { redoCalled++; orig.redo(); };
+    state.undo = () => {
+      undoCalled++;
+      orig.undo();
+    };
+    state.redo = () => {
+      redoCalled++;
+      orig.redo();
+    };
 
     await registry.execute('undo');
     await registry.execute('redo');

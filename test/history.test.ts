@@ -19,7 +19,7 @@ function mkChanged(id: string, fromTag: string, toTag: string): Command {
     kind: 'objectChanged',
     objectId: id as ObjectId,
     before: mkSnap(id, fromTag),
-    after:  mkSnap(id, toTag),
+    after: mkSnap(id, toTag),
   };
 }
 
@@ -61,7 +61,9 @@ describe('History', () => {
     const c1 = mkChanged('o1', 'a', 'b');
     const c2 = mkChanged('o1', 'b', 'c');
     const c3 = mkChanged('o1', 'c', 'd');
-    s.push(c1); s.push(c2); s.push(c3);
+    s.push(c1);
+    s.push(c2);
+    s.push(c3);
     expect(s.undo()).toBe(c3);
     expect(s.undo()).toBe(c2);
     expect(s.canRedo()).toBe(true);
@@ -75,9 +77,10 @@ describe('History', () => {
     const c1 = mkChanged('o1', 'a', 'b');
     const c2 = mkChanged('o1', 'b', 'c');
     const c3 = mkChanged('o1', 'b', 'X');
-    s.push(c1); s.push(c2);
-    s.undo();  // c2 を pop、cursor は 0
-    s.push(c3);  // 新 push → c2 (redo 候補) は無効化
+    s.push(c1);
+    s.push(c2);
+    s.undo(); // c2 を pop、cursor は 0
+    s.push(c3); // 新 push → c2 (redo 候補) は無効化
     expect(s.canRedo()).toBe(false);
     expect(s.linearize()).toEqual([c1, c3]);
   });
@@ -99,7 +102,9 @@ describe('History', () => {
       const c2 = mkChanged('o1', 'b', 'c');
       const c3 = mkChanged('o1', 'c', 'd');
       const c4 = mkChanged('o1', 'd', 'e');
-      s.push(c1); s.push(c2); s.push(c3);
+      s.push(c1);
+      s.push(c2);
+      s.push(c3);
       s.push(c4);
       expect(s.linearize()).toEqual([c2, c3, c4]);
       // c1 は失われている (= undo で c4, c3, c2 までしか戻れない)
@@ -115,9 +120,12 @@ describe('History', () => {
       const c2 = mkChanged('o1', 'b', 'c');
       const c3 = mkChanged('o1', 'c', 'd');
       const c4 = mkChanged('o1', 'd', 'e');
-      s.push(c1); s.push(c2); s.push(c3); s.push(c4);
-      s.undo();  // c4 pop
-      s.undo();  // c3 pop
+      s.push(c1);
+      s.push(c2);
+      s.push(c3);
+      s.push(c4);
+      s.undo(); // c4 pop
+      s.undo(); // c3 pop
       expect(s.redo()).toBe(c3);
       expect(s.redo()).toBe(c4);
     });
@@ -133,7 +141,7 @@ describe('History', () => {
         mkChanged('o1', '4', '5'),
         mkChanged('o1', '5', '6'),
       ];
-      cs.forEach(c => s.push(c));
+      cs.forEach((c) => s.push(c));
       expect(s.linearize()).toEqual([cs[2], cs[3], cs[4]]);
     });
   });
@@ -145,9 +153,13 @@ describe('History', () => {
     const c3 = mkChanged('o1', 'c', 'd');
     const c4 = mkChanged('o1', 'd', 'e');
     const c5 = mkChanged('o1', 'd', 'X');
-    s.push(c1); s.push(c2); s.push(c3); s.push(c4);
+    s.push(c1);
+    s.push(c2);
+    s.push(c3);
+    s.push(c4);
     // 状態: linearize = [c2, c3, c4], cursor = 2
-    s.undo(); s.undo();
+    s.undo();
+    s.undo();
     // 状態: linearize = [c2, c3, c4], cursor = 0 (= c2 が apply 済み)
     s.push(c5);
     // redo 列 (c3, c4) はクリアされる、c5 が cursor=1 で新エントリに

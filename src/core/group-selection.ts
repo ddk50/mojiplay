@@ -19,7 +19,7 @@ export interface GroupExpansionResult<T> {
 
 export function computeGroupExpansion<T>(
   current: ReadonlyArray<T>,
-  all:     ReadonlyArray<T>,
+  all: ReadonlyArray<T>,
   getGroupId: (o: T) => string | undefined,
 ): GroupExpansionResult<T> {
   const gids = new Set<string>();
@@ -34,7 +34,7 @@ export function computeGroupExpansion<T>(
     return { expanded: current, alreadyExpanded: true };
   }
 
-  const expanded = all.filter(o => {
+  const expanded = all.filter((o) => {
     const gid = getGroupId(o);
     return gid !== undefined && gids.has(gid);
   });
@@ -42,8 +42,7 @@ export function computeGroupExpansion<T>(
   // 既に完全展開済みなら setActiveSelection を呼ばないために alreadyExpanded = true。
   // 順序は問わず、要素集合の一致だけ判定する。
   const alreadyExpanded =
-    current.length === expanded.length &&
-    current.every(o => expanded.indexOf(o) >= 0);
+    current.length === expanded.length && current.every((o) => expanded.indexOf(o) >= 0);
 
   return { expanded, alreadyExpanded };
 }

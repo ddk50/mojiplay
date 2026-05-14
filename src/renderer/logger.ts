@@ -9,11 +9,11 @@
  */
 export function fmtObj(obj: fabric.Object | null | undefined): string {
   if (!obj) return '<null>';
-  const d = (obj as any).data;
+  const d = obj.data;
   if (d?.type && d?.objectId) {
     return `${d.type}:${String(d.objectId).slice(0, 8)}`;
   }
-  return `<noid:${(obj as any).type ?? '?'}>`;
+  return `<noid:${obj.type ?? '?'}>`;
 }
 
 export const logger = {
@@ -30,9 +30,12 @@ export const logger = {
     void window.electronAPI?.log?.warn(msg);
   },
   error: (msg: string, err?: unknown) => {
-    const stack = err instanceof Error
-      ? `\n${err.stack ?? err.message}`
-      : (err != null ? `\n${String(err)}` : '');
+    const stack =
+      err instanceof Error
+        ? `\n${err.stack ?? err.message}`
+        : err != null
+          ? `\n${String(err)}`
+          : '';
     const full = msg + stack;
     console.error(full);
     void window.electronAPI?.log?.error(full);

@@ -16,10 +16,18 @@
 import type { Point, HandleRef } from '../../core/path/types';
 import { Path } from '../../core/path/path';
 import { worldDeltaToPathLocalDelta } from '../../core/path/coords';
-import { computeOverlayLayout, hitTestAnchorAt, hitTestHandleAt } from '../../core/path/overlay-layout';
+import {
+  computeOverlayLayout,
+  hitTestAnchorAt,
+  hitTestHandleAt,
+} from '../../core/path/overlay-layout';
 import type {
-  Tool, ToolDescriptor, PointerInput, PointerHandled,
-  MovingTarget, CanvasMouseDownInput,
+  Tool,
+  ToolDescriptor,
+  PointerInput,
+  PointerHandled,
+  MovingTarget,
+  CanvasMouseDownInput,
 } from './tool-interface';
 import type { State, PathHandle } from '../../core/state-interface';
 import type { ObjectSnapshot } from '../../core/history/types';
@@ -50,11 +58,11 @@ type SelectCharDragState =
 
 export class SelectCharTool implements Tool {
   readonly descriptor: ToolDescriptor = {
-    id:    'select-char',
+    id: 'select-char',
     label: '文字選択/カーニング (白矢印)',
     iconSvg:
       '<svg class="tool-icon outline-arrow" viewBox="0 0 14 18" xmlns="http://www.w3.org/2000/svg">' +
-        '<path d="M2,1 L2,14 L5,11 L7.5,16.5 L9.5,15.5 L7,10 L12,10 Z"/>' +
+      '<path d="M2,1 L2,14 L5,11 L7.5,16.5 L9.5,15.5 L7,10 L12,10 Z"/>' +
       '</svg>',
   };
 
@@ -98,10 +106,7 @@ export class SelectCharTool implements Tool {
 
     const before = path.captureForHistory();
     const snapshot = path.snapshot();
-    const localDelta = worldDeltaToPathLocalDelta(
-      { x: worldDx, y: worldDy },
-      snapshot.pathMatrix,
-    );
+    const localDelta = worldDeltaToPathLocalDelta({ x: worldDx, y: worldDy }, snapshot.pathMatrix);
 
     let updated = snapshot.path;
     for (const idx of this.selectedAnchors) {
@@ -122,7 +127,9 @@ export class SelectCharTool implements Tool {
     }
   }
 
-  onActivate(_state: State): void { /* no-op */ }
+  onActivate(_state: State): void {
+    /* no-op */
+  }
 
   onDeactivate(state: State): void {
     this.drag = null;
@@ -283,7 +290,7 @@ export class SelectCharTool implements Tool {
 
   onObjectMoving(target: MovingTarget, e: { altKey: boolean }, _state: State): void {
     if (!this.snap.enabled) return;
-    if (e.altKey) return;  // Illustrator 慣例: Alt 押下中は一時バイパス
+    if (e.altKey) return; // Illustrator 慣例: Alt 押下中は一時バイパス
 
     const pitch = this.snap.pitch;
     const threshold = this.snap.threshold;
@@ -297,6 +304,10 @@ export class SelectCharTool implements Tool {
     if (Math.abs(freeY - nearestY) < threshold) target.setTop(nearestY);
   }
 
-  onSelectionChanged(_state: State): void { /* no-op */ }
-  onCanvasMouseDown(_e: CanvasMouseDownInput, _state: State): void { /* no-op */ }
+  onSelectionChanged(_state: State): void {
+    /* no-op */
+  }
+  onCanvasMouseDown(_e: CanvasMouseDownInput, _state: State): void {
+    /* no-op */
+  }
 }

@@ -37,9 +37,9 @@ describe('ensureObjectId', () => {
   test('type 引数が違っても最初の type を保持する (immutable になる)', () => {
     const obj: { data?: IdentifiableData } = {};
     const id1 = ensureObjectId(obj, 'text');
-    const id2 = ensureObjectId(obj, 'path');  // 違う type で再呼び出し
+    const id2 = ensureObjectId(obj, 'path'); // 違う type で再呼び出し
     expect(id2).toBe(id1);
-    expect(obj.data?.type).toBe('text');  // 最初の text が保持されている
+    expect(obj.data?.type).toBe('text'); // 最初の text が保持されている
   });
 
   test('別 obj には別 ID を振る', () => {

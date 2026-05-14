@@ -23,7 +23,8 @@ function setupWithText(): { state: State; canvas: FakeFabricCanvas } {
 
 async function loadFixture(state: State, objects: Record<string, unknown>[]): Promise<void> {
   await state.applySnapshot({
-    format: 'mojiplay', version: 1,
+    format: 'mojiplay',
+    version: 1,
     canvas: { objects } as unknown,
   });
 }
@@ -32,7 +33,15 @@ describe('State.applyPropsToSelection', () => {
   test('選択中 object に property を適用し、history に push する', async () => {
     const { state, canvas } = setupWithText();
     await loadFixture(state, [
-      { type: 'text', text: 'A', left: 0, top: 0, fontSize: 72, fill: '#000', data: { objectId: 'id1', type: 'text' } },
+      {
+        type: 'text',
+        text: 'A',
+        left: 0,
+        top: 0,
+        fontSize: 72,
+        fill: '#000',
+        data: { objectId: 'id1', type: 'text' },
+      },
     ]);
     const obj = (canvas.getObjects() as any)[0];
     canvas.setActiveObject(obj);
@@ -103,7 +112,13 @@ describe('State.setMode / getCurrentMode', () => {
   test('select-group mode では全 object が selectable=true', async () => {
     const { state, canvas } = setupWithText();
     await loadFixture(state, [
-      { type: 'text', text: 'A', selectable: false, evented: false, data: { objectId: 'id1', type: 'text' } },
+      {
+        type: 'text',
+        text: 'A',
+        selectable: false,
+        evented: false,
+        data: { objectId: 'id1', type: 'text' },
+      },
     ]);
     state.setMode('select-group');
     const obj = (canvas.getObjects() as any)[0];
@@ -114,7 +129,13 @@ describe('State.setMode / getCurrentMode', () => {
   test('text mode では全 object が selectable=false', async () => {
     const { state, canvas } = setupWithText();
     await loadFixture(state, [
-      { type: 'text', text: 'A', selectable: true, evented: true, data: { objectId: 'id1', type: 'text' } },
+      {
+        type: 'text',
+        text: 'A',
+        selectable: true,
+        evented: true,
+        data: { objectId: 'id1', type: 'text' },
+      },
     ]);
     state.setMode('text');
     const obj = (canvas.getObjects() as any)[0];
@@ -135,7 +156,14 @@ describe('State.setMode / getCurrentMode', () => {
   test('pen-add モード切替では選択中パスを維持する (discardActiveObject しない)', async () => {
     const { state, canvas } = setupWithText();
     await loadFixture(state, [
-      { type: 'path', path: [['M', 0, 0], ['L', 10, 10]], data: { objectId: 'id1', type: 'path', outlined: true } },
+      {
+        type: 'path',
+        path: [
+          ['M', 0, 0],
+          ['L', 10, 10],
+        ],
+        data: { objectId: 'id1', type: 'path', outlined: true },
+      },
     ]);
     canvas.setActiveObject((canvas.getObjects() as any)[0]);
     state.setMode('pen-add');
@@ -163,16 +191,22 @@ describe('State.handleTextEditingExited (IText splitting)', () => {
 
     // ユーザが IText を編集して "AB" を入力した状態を simulate
     const it = new fabricNS.IText('AB', {
-      left: 0, top: 0,
-      fontFamily: 'Arial', fontSize: 72,
-      fontWeight: 400, fontStyle: 'normal', fill: '#000',
+      left: 0,
+      top: 0,
+      fontFamily: 'Arial',
+      fontSize: 72,
+      fontWeight: 400,
+      fontStyle: 'normal',
+      fill: '#000',
     });
     // production の initDimensions が populate するフィールドを test 側で事前にセット
     it._textLines = [['A', 'B']];
-    it.__charBounds = [[
-      { left: 0,  width: 50 },
-      { left: 50, width: 50 },
-    ]];
+    it.__charBounds = [
+      [
+        { left: 0, width: 50 },
+        { left: 50, width: 50 },
+      ],
+    ];
     canvas.add(it);
     canvas.setActiveObject(it);
 
@@ -202,7 +236,10 @@ describe('State.handleTextEditingExited (IText splitting)', () => {
     const fabricNS = (globalThis as any).fabric;
 
     const it = new fabricNS.IText('A', {
-      left: 0, top: 0, fontFamily: 'Arial', fontSize: 72,
+      left: 0,
+      top: 0,
+      fontFamily: 'Arial',
+      fontSize: 72,
     });
     it._textLines = [['A']];
     it.__charBounds = [[{ left: 0, width: 50 }]];
@@ -220,9 +257,13 @@ describe('State.handleTextEditingExited (IText splitting)', () => {
     const fabricNS = (globalThis as any).fabric;
     const it = new fabricNS.IText('   ', { left: 0, top: 0 });
     it._textLines = [[' ', ' ', ' ']];
-    it.__charBounds = [[
-      { left: 0, width: 10 }, { left: 10, width: 10 }, { left: 20, width: 10 },
-    ]];
+    it.__charBounds = [
+      [
+        { left: 0, width: 10 },
+        { left: 10, width: 10 },
+        { left: 20, width: 10 },
+      ],
+    ];
     canvas.add(it);
     canvas.fire('text:editing:exited', { target: it });
 

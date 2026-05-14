@@ -51,6 +51,6 @@ export function computeOutlinePathPosition(
   const baselineY = text.top + text.fontSize * mult * (1 - frac);
   return {
     left: text.left + bbox.minX,
-    top:  baselineY + bbox.minY,
+    top: baselineY + bbox.minY,
   };
 }

@@ -28,12 +28,18 @@ export class Path {
     for (let i = cmdIndex - 1; i >= 0; i--) {
       const c = this.commands[i];
       switch (c.type) {
-        case 'M': return c.to;
-        case 'L': return c.to;
-        case 'C': return c.to;
-        case 'Q': return c.to;
-        case 'Z': break; // Z は始点情報を持たない、さらに前を探す
-        default: c satisfies never;
+        case 'M':
+          return c.to;
+        case 'L':
+          return c.to;
+        case 'C':
+          return c.to;
+        case 'Q':
+          return c.to;
+        case 'Z':
+          break; // Z は始点情報を持たない、さらに前を探す
+        default:
+          c satisfies never;
       }
     }
     return null;
@@ -47,9 +53,12 @@ export class Path {
     const cmd = this.commands[ref.cmdIndex];
     if (!cmd) return null;
     switch (ref.kind) {
-      case 'C-c1': return cmd.type === 'C' ? cmd.c1 : null;
-      case 'C-c2': return cmd.type === 'C' ? cmd.c2 : null;
-      case 'Q-c':  return cmd.type === 'Q' ? cmd.c  : null;
+      case 'C-c1':
+        return cmd.type === 'C' ? cmd.c1 : null;
+      case 'C-c2':
+        return cmd.type === 'C' ? cmd.c2 : null;
+      case 'Q-c':
+        return cmd.type === 'Q' ? cmd.c : null;
     }
   }
 
@@ -141,7 +150,7 @@ export class Path {
     } else {
       // 非 M アンカーの削除: 次のコマンドを直線 L に置換
       const subEnd = range.end;
-      const hasNext = (idx + 1) < subEnd;
+      const hasNext = idx + 1 < subEnd;
       const nextAnchor = hasNext ? anchors.at(idx + 1)! : null;
       const nextCmdIndex = nextAnchor ? nextAnchor.cmdIndex : -1;
 
@@ -177,8 +186,8 @@ export class Path {
       case 'C': {
         const u = 1 - t;
         // De Casteljau level 1
-        const q0x = u * p0.x   + t * cmd.c1.x;
-        const q0y = u * p0.y   + t * cmd.c1.y;
+        const q0x = u * p0.x + t * cmd.c1.x;
+        const q0y = u * p0.y + t * cmd.c1.y;
         const q1x = u * cmd.c1.x + t * cmd.c2.x;
         const q1y = u * cmd.c1.y + t * cmd.c2.y;
         const q2x = u * cmd.c2.x + t * cmd.to.x;
@@ -192,20 +201,20 @@ export class Path {
         const sx = u * r0x + t * r1x;
         const sy = u * r0y + t * r1y;
 
-        first  = { type: 'C', c1: { x: q0x, y: q0y }, c2: { x: r0x, y: r0y }, to: { x: sx, y: sy } };
+        first = { type: 'C', c1: { x: q0x, y: q0y }, c2: { x: r0x, y: r0y }, to: { x: sx, y: sy } };
         second = { type: 'C', c1: { x: r1x, y: r1y }, c2: { x: q2x, y: q2y }, to: cmd.to };
         break;
       }
       case 'Q': {
         const u = 1 - t;
-        const q0x = u * p0.x   + t * cmd.c.x;
-        const q0y = u * p0.y   + t * cmd.c.y;
+        const q0x = u * p0.x + t * cmd.c.x;
+        const q0y = u * p0.y + t * cmd.c.y;
         const q1x = u * cmd.c.x + t * cmd.to.x;
         const q1y = u * cmd.c.y + t * cmd.to.y;
         const sx = u * q0x + t * q1x;
         const sy = u * q0y + t * q1y;
 
-        first  = { type: 'Q', c: { x: q0x, y: q0y }, to: { x: sx, y: sy } };
+        first = { type: 'Q', c: { x: q0x, y: q0y }, to: { x: sx, y: sy } };
         second = { type: 'Q', c: { x: q1x, y: q1y }, to: cmd.to };
         break;
       }
@@ -213,7 +222,7 @@ export class Path {
         const sx = p0.x + t * (cmd.to.x - p0.x);
         const sy = p0.y + t * (cmd.to.y - p0.y);
 
-        first  = { type: 'L', to: { x: sx, y: sy } };
+        first = { type: 'L', to: { x: sx, y: sy } };
         second = { type: 'L', to: cmd.to };
         break;
       }

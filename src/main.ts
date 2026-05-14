@@ -1,4 +1,13 @@
-import { app, BrowserWindow, ipcMain, dialog, session, Menu, clipboard, nativeImage } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  session,
+  Menu,
+  clipboard,
+  nativeImage,
+} from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import log from 'electron-log';
@@ -31,15 +40,16 @@ try {
   process.stderr.write(`[mojiplay] failed to create log dir ${LOG_DIR}: ${String(err)}\n`);
 }
 
-log.transports.file.level  = 'debug';
+log.transports.file.level = 'debug';
 log.transports.console.level = 'debug';
-log.transports.file.resolvePathFn = (vars) =>
-  path.join(LOG_DIR, vars.fileName ?? 'main.log');
+log.transports.file.resolvePathFn = (vars) => path.join(LOG_DIR, vars.fileName ?? 'main.log');
 
 // 起動時に最低 1 行は書き込んで、file transport を確実に初期化し、
 // かつ環境変数・パス情報を残すことで後から原因切り分け可能にする。
 log.info('[startup] mojiplay main process started');
-log.info(`[startup] isPackaged=${app.isPackaged}, execPath=${process.execPath}, cwd=${process.cwd()}`);
+log.info(
+  `[startup] isPackaged=${app.isPackaged}, execPath=${process.execPath}, cwd=${process.cwd()}`,
+);
 log.info(`[startup] PORTABLE_EXECUTABLE_DIR=${process.env.PORTABLE_EXECUTABLE_DIR ?? '(unset)'}`);
 log.info(`[startup] log dir resolved to: ${LOG_DIR}`);
 
@@ -52,8 +62,8 @@ function createWindow(): BrowserWindow {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
-    }
+      preload: path.join(__dirname, 'preload.js'),
+    },
   });
 
   win.once('ready-to-show', () => win.show());
@@ -85,7 +95,7 @@ ipcMain.handle('save-png', async (_event, base64Data: string): Promise<SaveResul
   const { canceled, filePath } = await dialog.showSaveDialog({
     title: 'Export as PNG',
     defaultPath: 'layout.png',
-    filters: [{ name: 'PNG Image', extensions: ['png'] }]
+    filters: [{ name: 'PNG Image', extensions: ['png'] }],
   });
 
   if (canceled || !filePath) {
@@ -103,7 +113,8 @@ ipcMain.handle('save-png', async (_event, base64Data: string): Promise<SaveResul
 
 // IPC handler: renderer → electron-log (ファイル + コンソール)
 ipcMain.handle('log', (_event, level: string, message: string) => {
-  (log as any)[level]?.(message);
+  const fn = (log as unknown as Record<string, ((msg: string) => void) | undefined>)[level];
+  fn?.(message);
 });
 
 // IPC handler: 透過 PNG dataURL → クリップボードに画像として書き込み
@@ -138,9 +149,15 @@ ipcMain.handle('toggle-fullscreen', () => {
 // Edit メニュー (undo/redo/paste): document.execCommand は deprecated なので
 // Electron の webContents メソッド経由に統一。内部呼び出しは同じだが
 // Web 標準の deprecation サイクルから外れる。
-ipcMain.handle('undo',  (event) => { event.sender.undo();  });
-ipcMain.handle('redo',  (event) => { event.sender.redo();  });
-ipcMain.handle('paste', (event) => { event.sender.paste(); });
+ipcMain.handle('undo', (event) => {
+  event.sender.undo();
+});
+ipcMain.handle('redo', (event) => {
+  event.sender.redo();
+});
+ipcMain.handle('paste', (event) => {
+  event.sender.paste();
+});
 
 // ── ドキュメント保存 / 読み込み ──
 
@@ -149,37 +166,44 @@ ipcMain.handle('paste', (event) => { event.sender.paste(); });
 // 半端な状態で破壊されるリスクがあるため禁止。POSIX rename(2) / Windows
 // MoveFileEx は同一ファイルシステム内で atomic = 旧ファイルか新ファイルの
 // いずれかしか観測されない。
-ipcMain.handle('save-mply', async (_event, json: string, currentPath: string | null): Promise<SaveResult> => {
-  let filePath = currentPath;
-  if (!filePath) {
-    const r = await dialog.showSaveDialog({
-      title:       '名前を付けて保存',
-      defaultPath: '名称未設定.mply',
-      filters:     [{ name: 'mojiplay', extensions: ['mply'] }],
-    });
-    if (r.canceled || !r.filePath) return { success: false, reason: 'canceled' };
-    filePath = r.filePath;
-  }
-  // tmp 名は process.pid + Date.now() で同時保存衝突を回避。
-  const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
-  try {
-    fs.writeFileSync(tmpPath, json, 'utf-8');
-    fs.renameSync(tmpPath, filePath);
-    log.info(`[save-mply] saved: ${filePath} (${json.length} bytes)`);
-    return { success: true, filePath };
-  } catch (err) {
-    // 失敗時は tmp を片付ける (rename 前なら tmp が残る、rename 後なら tmp は無い)。
-    try { fs.unlinkSync(tmpPath); } catch { /* tmp が無ければ無視 */ }
-    log.error(`[save-mply] failed: ${(err as Error).message}`);
-    return { success: false, reason: (err as Error).message };
-  }
-});
+ipcMain.handle(
+  'save-mply',
+  async (_event, json: string, currentPath: string | null): Promise<SaveResult> => {
+    let filePath = currentPath;
+    if (!filePath) {
+      const r = await dialog.showSaveDialog({
+        title: '名前を付けて保存',
+        defaultPath: '名称未設定.mply',
+        filters: [{ name: 'mojiplay', extensions: ['mply'] }],
+      });
+      if (r.canceled || !r.filePath) return { success: false, reason: 'canceled' };
+      filePath = r.filePath;
+    }
+    // tmp 名は process.pid + Date.now() で同時保存衝突を回避。
+    const tmpPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
+    try {
+      fs.writeFileSync(tmpPath, json, 'utf-8');
+      fs.renameSync(tmpPath, filePath);
+      log.info(`[save-mply] saved: ${filePath} (${json.length} bytes)`);
+      return { success: true, filePath };
+    } catch (err) {
+      // 失敗時は tmp を片付ける (rename 前なら tmp が残る、rename 後なら tmp は無い)。
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch {
+        /* tmp が無ければ無視 */
+      }
+      log.error(`[save-mply] failed: ${(err as Error).message}`);
+      return { success: false, reason: (err as Error).message };
+    }
+  },
+);
 
 ipcMain.handle('open-mply', async (): Promise<OpenResult> => {
   const r = await dialog.showOpenDialog({
-    title:      '開く',
+    title: '開く',
     properties: ['openFile'],
-    filters:    [{ name: 'mojiplay', extensions: ['mply'] }],
+    filters: [{ name: 'mojiplay', extensions: ['mply'] }],
   });
   if (r.canceled || !r.filePaths[0]) return { ok: false, reason: 'canceled' };
   const filePath = r.filePaths[0];
@@ -196,16 +220,14 @@ ipcMain.handle('open-mply', async (): Promise<OpenResult> => {
 ipcMain.handle('confirm-discard', async (_event, message: string): Promise<DiscardChoice> => {
   const win = BrowserWindow.getFocusedWindow();
   const opts = {
-    type:       'warning' as const,
-    buttons:    ['保存', '保存しない', 'キャンセル'],
-    defaultId:  0,
-    cancelId:   2,
-    title:      '確認',
+    type: 'warning' as const,
+    buttons: ['保存', '保存しない', 'キャンセル'],
+    defaultId: 0,
+    cancelId: 2,
+    title: '確認',
     message,
   };
-  const r = win
-    ? await dialog.showMessageBox(win, opts)
-    : await dialog.showMessageBox(opts);
+  const r = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
   return (['save', 'discard', 'cancel'] as const)[r.response] ?? 'cancel';
 });
 
@@ -222,8 +244,6 @@ ipcMain.handle('app-close-response', (event, decision: 'destroy' | 'cancel') => 
   if (win) win.close();
 });
 
-
-
 app.whenReady().then(() => {
   // Local Font Access API (window.queryLocalFonts) は local-fonts 権限を要求する。
   // Electron はデフォルトで拒否するため、request / check の両方を明示的に許可する。
@@ -238,7 +258,7 @@ app.whenReady().then(() => {
   // ネイティブメニューバーを非表示にし、HTML カスタムメニューに置き換える
   Menu.setApplicationMenu(null);
 
-  const win = createWindow();
+  createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

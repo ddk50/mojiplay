@@ -93,7 +93,9 @@ class FakeUI implements UIPort {
   setNativeDirty(dirty: boolean): void {
     this.dirtyValues.push(dirty);
   }
-  async copyImageToClipboard(_dataUrl: string): Promise<void> { /* no-op */ }
+  async copyImageToClipboard(_dataUrl: string): Promise<void> {
+    /* no-op */
+  }
 }
 
 function basename(p: string): string {
@@ -108,8 +110,14 @@ function basename(p: string): string {
 const DUMMY_COMMAND: Command = {
   kind: 'objectChanged',
   objectId: 'dummy' as ObjectId,
-  before: { type: 'text', data: { objectId: 'dummy' as ObjectId, type: 'text' } } as unknown as ObjectSnapshot,
-  after:  { type: 'text', data: { objectId: 'dummy' as ObjectId, type: 'text' } } as unknown as ObjectSnapshot,
+  before: {
+    type: 'text',
+    data: { objectId: 'dummy' as ObjectId, type: 'text' },
+  } as unknown as ObjectSnapshot,
+  after: {
+    type: 'text',
+    data: { objectId: 'dummy' as ObjectId, type: 'text' },
+  } as unknown as ObjectSnapshot,
 };
 
 function simulateMutation(state: State): void {
@@ -119,20 +127,27 @@ function simulateMutation(state: State): void {
 // 「content を入れ替える (= 初期 fixture の投入も、後続の編集でも)」を applySnapshot
 // で表現。fabric stub の loadFromJSON が type に応じて FakeFabricText/Path/IText を
 // 構築するため、objects 配列に shape 自由に入れて round-trip 検証できる。
-async function loadCanvasContent(state: State, objects: ReadonlyArray<Record<string, unknown>>): Promise<void> {
+async function loadCanvasContent(
+  state: State,
+  objects: ReadonlyArray<Record<string, unknown>>,
+): Promise<void> {
   await state.applySnapshot({
-    format: 'mojiplay', version: 1,
+    format: 'mojiplay',
+    version: 1,
     canvas: { objects },
   });
 }
 
 function makeController(): {
-  ctrl: FileIOInteractor; state: State; repo: FakeRepo; ui: FakeUI;
+  ctrl: FileIOInteractor;
+  state: State;
+  repo: FakeRepo;
+  ui: FakeUI;
 } {
   const state = new State(new FakeFabricCanvas() as never);
-  const repo  = new FakeRepo();
-  const ui    = new FakeUI();
-  const ctrl  = new FileIOInteractor(state, repo, ui, basename);
+  const repo = new FakeRepo();
+  const ui = new FakeUI();
+  const ctrl = new FileIOInteractor(state, repo, ui, basename);
   return { ctrl, state, repo, ui };
 }
 
@@ -161,7 +176,7 @@ describe('FileIOInteractor', () => {
       expect(ok).toBe(true);
       expect(repo.saveCalled).toBe(1);
       expect(ctrl.getDocStatus()).toEqual({ fileName: 'foo.mply', dirty: false });
-      expect(ui.toasts.some(t => !t.isError && t.message.includes('保存しました'))).toBe(true);
+      expect(ui.toasts.some((t) => !t.isError && t.message.includes('保存しました'))).toBe(true);
     });
 
     test('commit を先に呼ぶ (IText 編集中 commit 規約)', async () => {
@@ -173,7 +188,15 @@ describe('FileIOInteractor', () => {
 
       // active な i-text を seed (isEditing は手動で true にして編集中 simulate)
       await loadCanvasContent(state, [
-        { type: 'i-text', text: '', left: 0, top: 0, fontFamily: 'Arial', fontSize: 16, data: { objectId: 'a' } },
+        {
+          type: 'i-text',
+          text: '',
+          left: 0,
+          top: 0,
+          fontFamily: 'Arial',
+          fontSize: 16,
+          data: { objectId: 'a' },
+        },
       ]);
       const [h] = state.getAllObjects();
       state.setActiveSelection([h]);
@@ -190,13 +213,16 @@ describe('FileIOInteractor', () => {
       // fabric.js / IPC roundtrip の async 中にユーザが編集すると token が進む。
       // savedToken を await 前に capture することで、await 中の編集を dirty に残せる。
       const { ctrl, state, repo } = makeController();
-      simulateMutation(state);  // token=1
+      simulateMutation(state); // token=1
 
       let resolveSave: (v: SaveResult) => void = () => {};
-      repo.onSave = () => new Promise(res => { resolveSave = res; });
+      repo.onSave = () =>
+        new Promise((res) => {
+          resolveSave = res;
+        });
 
       const savePromise = ctrl.saveCurrent();
-      simulateMutation(state);  // await 中の編集 (token=2)
+      simulateMutation(state); // await 中の編集 (token=2)
       resolveSave({ ok: true, filePath: '/tmp/foo.mply' });
       await savePromise;
 
@@ -209,7 +235,10 @@ describe('FileIOInteractor', () => {
       simulateMutation(state);
 
       let resolveSave: (v: SaveResult) => void = () => {};
-      repo.onSave = () => new Promise(res => { resolveSave = res; });
+      repo.onSave = () =>
+        new Promise((res) => {
+          resolveSave = res;
+        });
 
       const p1 = ctrl.saveCurrent();
       const p2 = ctrl.saveCurrent();
@@ -238,7 +267,7 @@ describe('FileIOInteractor', () => {
       repo.saveResult = { ok: false, canceled: false, error: { message: 'disk full' } };
       const ok = await ctrl.saveCurrent();
       expect(ok).toBe(false);
-      expect(ui.toasts.some(t => t.isError && t.message.includes('disk full'))).toBe(true);
+      expect(ui.toasts.some((t) => t.isError && t.message.includes('disk full'))).toBe(true);
     });
   });
 
@@ -279,7 +308,7 @@ describe('FileIOInteractor', () => {
       await ctrl.openFile();
       expect(repo.saveCalled).toBe(0);
       expect(repo.loadCalled).toBe(1);
-      expect(state.getAllObjects()).toHaveLength(0);  // loadResult のデフォルト
+      expect(state.getAllObjects()).toHaveLength(0); // loadResult のデフォルト
       expect(ctrl.getDocStatus()).toEqual({ fileName: 'bar.mply', dirty: false });
     });
 
@@ -330,9 +359,15 @@ describe('FileIOInteractor', () => {
 
     test('load エラーは toast に出す', async () => {
       const { ctrl, repo, ui } = makeController();
-      repo.loadResult = { ok: false, canceled: false, error: { kind: 'invalid-json', message: 'unexpected token' } };
+      repo.loadResult = {
+        ok: false,
+        canceled: false,
+        error: { kind: 'invalid-json', message: 'unexpected token' },
+      };
       await ctrl.openFile();
-      expect(ui.toasts.some(t => t.isError && t.message.includes('不正なファイル形式'))).toBe(true);
+      expect(ui.toasts.some((t) => t.isError && t.message.includes('不正なファイル形式'))).toBe(
+        true,
+      );
     });
   });
 
@@ -349,7 +384,7 @@ describe('FileIOInteractor', () => {
     test('登録直後と mutation 時に通知し、unsub 後は通知しない', () => {
       const { ctrl, state } = makeController();
       const log: Array<{ fileName: string | null; dirty: boolean }> = [];
-      const unsub = ctrl.subscribeDocStatus(s => log.push({ ...s }));
+      const unsub = ctrl.subscribeDocStatus((s) => log.push({ ...s }));
       expect(log.length).toBe(1);
       expect(log[0]).toEqual({ fileName: null, dirty: false });
       simulateMutation(state);
@@ -376,8 +411,24 @@ describe('FileIOInteractor', () => {
   // を統合的に検証する。
   describe('save → load の round-trip', () => {
     const SAMPLE_OBJECTS: ReadonlyArray<Record<string, unknown>> = [
-      { type: 'i-text', text: 'hello', left: 10, top: 20, fontFamily: 'Arial', fontSize: 16, data: { objectId: 'a' } },
-      { type: 'i-text', text: 'world', left: 30, top: 40, fontFamily: 'Arial', fontSize: 16, data: { objectId: 'b' } },
+      {
+        type: 'i-text',
+        text: 'hello',
+        left: 10,
+        top: 20,
+        fontFamily: 'Arial',
+        fontSize: 16,
+        data: { objectId: 'a' },
+      },
+      {
+        type: 'i-text',
+        text: 'world',
+        left: 30,
+        top: 40,
+        fontFamily: 'Arial',
+        fontSize: 16,
+        data: { objectId: 'b' },
+      },
     ];
 
     test('別 instance で openFile しても保存時点と同一 snapshot に戻る (アプリ再起動相当)', async () => {
@@ -385,14 +436,14 @@ describe('FileIOInteractor', () => {
 
       // インスタンス A: 内容を入れて保存
       const stateA = new State(new FakeFabricCanvas() as never);
-      const ctrlA  = new FileIOInteractor(stateA, repo, new FakeUI(), basename);
+      const ctrlA = new FileIOInteractor(stateA, repo, new FakeUI(), basename);
       await loadCanvasContent(stateA, SAMPLE_OBJECTS);
       const savedSnapshot = stateA.toSnapshot();
       expect(await ctrlA.saveCurrent()).toBe(true);
 
       // インスタンス B (= 別 process / 再起動相当): 同じ repo から開く
       const stateB = new State(new FakeFabricCanvas() as never);
-      const ctrlB  = new FileIOInteractor(stateB, repo, new FakeUI(), basename);
+      const ctrlB = new FileIOInteractor(stateB, repo, new FakeUI(), basename);
       await ctrlB.openFile();
 
       // ロード後の State の snapshot が保存時点と完全一致
@@ -403,7 +454,15 @@ describe('FileIOInteractor', () => {
       const { ctrl, state, ui } = makeController();
 
       await loadCanvasContent(state, [
-        { type: 'i-text', text: 'original', left: 0, top: 0, fontFamily: 'Arial', fontSize: 16, data: { objectId: 'a' } },
+        {
+          type: 'i-text',
+          text: 'original',
+          left: 0,
+          top: 0,
+          fontFamily: 'Arial',
+          fontSize: 16,
+          data: { objectId: 'a' },
+        },
       ]);
       const savedSnapshot = state.toSnapshot();
       await ctrl.saveCurrent();
@@ -411,7 +470,15 @@ describe('FileIOInteractor', () => {
 
       // 保存後に別の content で上書き (= ユーザの編集相当)
       await loadCanvasContent(state, [
-        { type: 'i-text', text: 'modified', left: 0, top: 0, fontFamily: 'Arial', fontSize: 16, data: { objectId: 'b' } },
+        {
+          type: 'i-text',
+          text: 'modified',
+          left: 0,
+          top: 0,
+          fontFamily: 'Arial',
+          fontSize: 16,
+          data: { objectId: 'b' },
+        },
       ]);
       expect(ctrl.getDocStatus().dirty).toBe(true);
 
@@ -426,18 +493,26 @@ describe('FileIOInteractor', () => {
     test('複数回 save しても最新版が load される', async () => {
       const { ctrl, state, ui } = makeController();
 
-      await loadCanvasContent(state, [{ type: 'i-text', text: 'v1', left: 0, top: 0, data: { objectId: 'a' } }]);
+      await loadCanvasContent(state, [
+        { type: 'i-text', text: 'v1', left: 0, top: 0, data: { objectId: 'a' } },
+      ]);
       await ctrl.saveCurrent();
 
-      await loadCanvasContent(state, [{ type: 'i-text', text: 'v2', left: 0, top: 0, data: { objectId: 'b' } }]);
+      await loadCanvasContent(state, [
+        { type: 'i-text', text: 'v2', left: 0, top: 0, data: { objectId: 'b' } },
+      ]);
       await ctrl.saveCurrent();
 
-      await loadCanvasContent(state, [{ type: 'i-text', text: 'v3', left: 0, top: 0, data: { objectId: 'c' } }]);
+      await loadCanvasContent(state, [
+        { type: 'i-text', text: 'v3', left: 0, top: 0, data: { objectId: 'c' } },
+      ]);
       await ctrl.saveCurrent();
       const v3Snapshot = state.toSnapshot();
 
       // 適当に編集して discard で開き直す
-      await loadCanvasContent(state, [{ type: 'i-text', text: 'unsaved', left: 0, top: 0, data: { objectId: 'd' } }]);
+      await loadCanvasContent(state, [
+        { type: 'i-text', text: 'unsaved', left: 0, top: 0, data: { objectId: 'd' } },
+      ]);
       ui.discardAnswer = 'discard';
       await ctrl.openFile();
 

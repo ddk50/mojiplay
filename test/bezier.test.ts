@@ -14,9 +14,7 @@ describe('evalCubicAt', () => {
 
   test('制御点が直線上の時は t=0.5 で中点を返す', () => {
     // 制御点が始点-終点の直線上にある場合、曲線も直線
-    const r = evalCubicAt(
-      { x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 0 }, { x: 30, y: 0 }, 0.5,
-    );
+    const r = evalCubicAt({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 0 }, { x: 30, y: 0 }, 0.5);
     expect(r.x).toBeCloseTo(15);
     expect(r.y).toBeCloseTo(0);
   });

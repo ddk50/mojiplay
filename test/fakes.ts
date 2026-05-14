@@ -13,9 +13,11 @@ export function pointer(
   opts?: { altKey?: boolean; shiftKey?: boolean },
 ): PointerInput {
   return {
-    screenX: x, screenY: y,
-    worldX: x, worldY: y,
-    altKey:   opts?.altKey   ?? false,
+    screenX: x,
+    screenY: y,
+    worldX: x,
+    worldY: y,
+    altKey: opts?.altKey ?? false,
     shiftKey: opts?.shiftKey ?? false,
   };
 }

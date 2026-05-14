@@ -43,10 +43,15 @@
 class FakeFabricPath {
   readonly type = 'path';
   path: ReadonlyArray<ReadonlyArray<unknown>>;
-  left = 0; top = 0; scaleX = 1; scaleY = 1; angle = 0;
+  left = 0;
+  top = 0;
+  scaleX = 1;
+  scaleY = 1;
+  angle = 0;
   fill: string | undefined;
   pathOffset: { x: number; y: number } = { x: 0, y: 0 };
-  width = 0; height = 0;
+  width = 0;
+  height = 0;
   dirty = false;
   data: { [k: string]: unknown } = {};
 
@@ -54,30 +59,44 @@ class FakeFabricPath {
     this.path = Array.isArray(rawPath) ? rawPath.slice() : [];
     Object.assign(this, opts);
   }
-  set(props: Record<string, unknown>): this { Object.assign(this, props); return this; }
-  setCoords(): void { /* no-op */ }
-  calcTransformMatrix(): readonly number[] { return [1, 0, 0, 1, 0, 0]; }
+  set(props: Record<string, unknown>): this {
+    Object.assign(this, props);
+    return this;
+  }
+  setCoords(): void {
+    /* no-op */
+  }
+  calcTransformMatrix(): readonly number[] {
+    return [1, 0, 0, 1, 0, 0];
+  }
   toObject(_keys: ReadonlyArray<string> = []): Record<string, unknown> {
     return {
       type: this.type,
       path: deepCopyRawPath(this.path),
-      left: this.left, top: this.top,
-      scaleX: this.scaleX, scaleY: this.scaleY,
-      angle: this.angle, fill: this.fill,
+      left: this.left,
+      top: this.top,
+      scaleX: this.scaleX,
+      scaleY: this.scaleY,
+      angle: this.angle,
+      fill: this.fill,
       data: { ...this.data },
     };
   }
 }
 
 function deepCopyRawPath(p: ReadonlyArray<ReadonlyArray<unknown>>): unknown[][] {
-  return p.map(c => Array.isArray(c) ? c.slice() : [c]);
+  return p.map((c) => (Array.isArray(c) ? c.slice() : [c]));
 }
 
 // ── Text ──────────────────────────────────────────────────────────────────
 class FakeFabricText {
   readonly type: 'text' | 'i-text' = 'text';
   text: string;
-  left = 0; top = 0; scaleX = 1; scaleY = 1; angle = 0;
+  left = 0;
+  top = 0;
+  scaleX = 1;
+  scaleY = 1;
+  angle = 0;
   fill: string | undefined;
   fontFamily: string | undefined;
   fontSize: number | undefined;
@@ -89,16 +108,27 @@ class FakeFabricText {
     this.text = text;
     Object.assign(this, opts);
   }
-  set(props: Record<string, unknown>): this { Object.assign(this, props); return this; }
-  setCoords(): void { /* no-op */ }
+  set(props: Record<string, unknown>): this {
+    Object.assign(this, props);
+    return this;
+  }
+  setCoords(): void {
+    /* no-op */
+  }
   toObject(_keys: ReadonlyArray<string> = []): Record<string, unknown> {
     return {
-      type: this.type, text: this.text,
-      left: this.left, top: this.top,
-      scaleX: this.scaleX, scaleY: this.scaleY,
-      angle: this.angle, fill: this.fill,
-      fontFamily: this.fontFamily, fontSize: this.fontSize,
-      fontWeight: this.fontWeight, fontStyle: this.fontStyle,
+      type: this.type,
+      text: this.text,
+      left: this.left,
+      top: this.top,
+      scaleX: this.scaleX,
+      scaleY: this.scaleY,
+      angle: this.angle,
+      fill: this.fill,
+      fontFamily: this.fontFamily,
+      fontSize: this.fontSize,
+      fontWeight: this.fontWeight,
+      fontStyle: this.fontStyle,
       data: { ...this.data },
     };
   }
@@ -113,9 +143,15 @@ class FakeFabricIText extends FakeFabricText {
   __charBounds: Array<Array<{ left: number; width: number }>> = [];
   _textLines: string[][] = [];
   lineHeight = 1.16;
-  enterEditing(): void { this.isEditing = true; }
-  exitEditing(): void { this.isEditing = false; }
-  initDimensions(): void { /* no-op (test 側で事前 populate) */ }
+  enterEditing(): void {
+    this.isEditing = true;
+  }
+  exitEditing(): void {
+    this.isEditing = false;
+  }
+  initDimensions(): void {
+    /* no-op (test 側で事前 populate) */
+  }
 }
 
 // ── ActiveSelection ──────────────────────────────────────────────────────
@@ -126,7 +162,9 @@ class FakeActiveSelection {
   constructor(objs: ReadonlyArray<FabricObjectLike>, _opts: { canvas: FakeFabricCanvas }) {
     this._objects = objs.slice();
   }
-  getObjects(): FabricObjectLike[] { return this._objects.slice(); }
+  getObjects(): FabricObjectLike[] {
+    return this._objects.slice();
+  }
 }
 
 // ── Polyline.prototype._setPositionDimensions ────────────────────────────
@@ -145,7 +183,9 @@ const fakePolylinePrototype = {
 // ── Canvas ────────────────────────────────────────────────────────────────
 
 type FabricObjectLike =
-  | FakeFabricPath | FakeFabricText | FakeFabricIText
+  | FakeFabricPath
+  | FakeFabricText
+  | FakeFabricIText
   | { type: string; data?: { [k: string]: unknown }; [k: string]: unknown };
 
 type CanvasActive = FabricObjectLike | FakeActiveSelection | null;
@@ -165,16 +205,26 @@ export class FakeFabricCanvas {
   hoverCursor = 'move';
   backgroundColor: string | undefined = undefined;
 
-  add(o: FabricObjectLike): void { this._objects.push(o); }
+  add(o: FabricObjectLike): void {
+    this._objects.push(o);
+  }
   remove(o: FabricObjectLike): void {
-    this._objects = this._objects.filter(x => x !== o);
+    this._objects = this._objects.filter((x) => x !== o);
     if (this._active === o) this._active = null;
   }
-  getObjects(): FabricObjectLike[] { return this._objects.slice(); }
-  forEachObject(cb: (o: FabricObjectLike) => void): void { this._objects.forEach(cb); }
-  contains(o: FabricObjectLike): boolean { return this._objects.indexOf(o) >= 0; }
+  getObjects(): FabricObjectLike[] {
+    return this._objects.slice();
+  }
+  forEachObject(cb: (o: FabricObjectLike) => void): void {
+    this._objects.forEach(cb);
+  }
+  contains(o: FabricObjectLike): boolean {
+    return this._objects.indexOf(o) >= 0;
+  }
 
-  getActiveObject(): CanvasActive { return this._active; }
+  getActiveObject(): CanvasActive {
+    return this._active;
+  }
   getActiveObjects(): FabricObjectLike[] {
     if (this._active === null) return [];
     if (this._active instanceof FakeActiveSelection) return this._active.getObjects();
@@ -184,7 +234,9 @@ export class FakeFabricCanvas {
   setActiveObject(o: FabricObjectLike | FakeActiveSelection): void {
     const wasNull = this._active === null;
     this._active = o;
-    this._fire(wasNull ? 'selection:created' : 'selection:updated', { selected: this.getActiveObjects() });
+    this._fire(wasNull ? 'selection:created' : 'selection:updated', {
+      selected: this.getActiveObjects(),
+    });
   }
 
   discardActiveObject(): void {
@@ -215,22 +267,27 @@ export class FakeFabricCanvas {
   // state.toSnapshot 経由で readback するため。
   toJSON(_keys?: ReadonlyArray<string>): { objects: unknown[] } {
     return {
-      objects: this._objects.map(o =>
+      objects: this._objects.map((o) =>
         typeof (o as { toObject?: () => unknown }).toObject === 'function'
           ? (o as { toObject: () => unknown }).toObject()
-          : { ...o }
+          : { ...o },
       ),
     };
   }
 
   on(event: string, cb: (e: unknown) => void): void {
     let arr = this._listeners.get(event);
-    if (!arr) { arr = []; this._listeners.set(event, arr); }
+    if (!arr) {
+      arr = [];
+      this._listeners.set(event, arr);
+    }
     arr.push(cb);
   }
 
   // state.finalizeDrag が canvas.fire('object:modified', { target: p }) を呼ぶ。
-  fire(event: string, e: unknown): void { this._fire(event, e); }
+  fire(event: string, e: unknown): void {
+    this._fire(event, e);
+  }
 
   // 設計バグ (= tool / state event hook が無限再帰する) を test で観測しやすく
   // するため、event 発火が一定深さを超えたら例外を投げる。production fabric にこの
@@ -243,25 +300,38 @@ export class FakeFabricCanvas {
       this._fireDepth = 0;
       throw new Error(
         `fabric stub: '${event}' event dispatch depth exceeded ${this._maxFireDepth}` +
-        ` (likely infinite recursion in handler chain)`,
+          ` (likely infinite recursion in handler chain)`,
       );
     }
     try {
-      this._listeners.get(event)?.slice().forEach(cb => cb(e));
+      this._listeners
+        .get(event)
+        ?.slice()
+        .forEach((cb) => cb(e));
     } finally {
       this._fireDepth--;
     }
   }
 
   // State 経路で呼ばれるが test 結果に直接影響しない no-op 群
-  requestRenderAll(): void { /* no-op */ }
-  renderAll(): void { /* no-op */ }
-  getZoom(): number { return 1; }
+  requestRenderAll(): void {
+    /* no-op */
+  }
+  renderAll(): void {
+    /* no-op */
+  }
+  getZoom(): number {
+    return 1;
+  }
 }
 
 function reviveObject(o: { type: string; [k: string]: unknown }): FabricObjectLike {
   if (o.type === 'path') {
-    const { type: _t, path, ...opts } = o as { type: string; path?: unknown[][]; [k: string]: unknown };
+    const {
+      type: _t,
+      path,
+      ...opts
+    } = o as { type: string; path?: unknown[][]; [k: string]: unknown };
     return new FakeFabricPath((path ?? []) as unknown[][], opts as Record<string, unknown>);
   }
   if (o.type === 'i-text') {
@@ -288,10 +358,10 @@ function reviveObject(o: { type: string; [k: string]: unknown }): FabricObjectLi
 export function installFabricStub(): void {
   (globalThis as { fabric?: unknown }).fabric = {
     ActiveSelection: FakeActiveSelection,
-    Path:            FakeFabricPath,
-    Text:            FakeFabricText,
-    IText:           FakeFabricIText,
-    Polyline:        { prototype: fakePolylinePrototype },
+    Path: FakeFabricPath,
+    Text: FakeFabricText,
+    IText: FakeFabricIText,
+    Polyline: { prototype: fakePolylinePrototype },
   };
   if (typeof (globalThis as { window?: unknown }).window === 'undefined') {
     (globalThis as { window?: unknown }).window = {};

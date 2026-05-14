@@ -9,8 +9,12 @@
 // pointer 系イベントは全て no-op (DOM capture 段階では何もしない)。
 
 import type {
-  Tool, ToolDescriptor, PointerInput, PointerHandled,
-  MovingTarget, CanvasMouseDownInput,
+  Tool,
+  ToolDescriptor,
+  PointerInput,
+  PointerHandled,
+  MovingTarget,
+  CanvasMouseDownInput,
 } from './tool-interface';
 import type { State, TextCreateProps } from '../../core/state-interface';
 
@@ -18,23 +22,39 @@ type FontPropsProvider = () => TextCreateProps;
 
 export class TextTool implements Tool {
   readonly descriptor: ToolDescriptor = {
-    id:    'text',
+    id: 'text',
     label: '文字入力 (T)',
     iconSvg: '<span style="font-weight:700;font-size:12px;">T</span>',
   };
 
   constructor(private getFontProps: FontPropsProvider) {}
 
-  onActivate(_state: State): void { /* no-op */ }
-  onDeactivate(_state: State): void { /* no-op */ }
+  onActivate(_state: State): void {
+    /* no-op */
+  }
+  onDeactivate(_state: State): void {
+    /* no-op */
+  }
 
-  onPointerDown(_e: PointerInput, _state: State): PointerHandled { return 'pass'; }
-  onPointerMove(_e: PointerInput, _state: State): void { /* no-op */ }
-  onPointerUp(_e: PointerInput, _state: State): void { /* no-op */ }
-  isDragging(): boolean { return false; }
+  onPointerDown(_e: PointerInput, _state: State): PointerHandled {
+    return 'pass';
+  }
+  onPointerMove(_e: PointerInput, _state: State): void {
+    /* no-op */
+  }
+  onPointerUp(_e: PointerInput, _state: State): void {
+    /* no-op */
+  }
+  isDragging(): boolean {
+    return false;
+  }
 
-  onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _state: State): void { /* no-op */ }
-  onSelectionChanged(_state: State): void { /* no-op */ }
+  onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _state: State): void {
+    /* no-op */
+  }
+  onSelectionChanged(_state: State): void {
+    /* no-op */
+  }
 
   onCanvasMouseDown(e: CanvasMouseDownInput, state: State): void {
     if (e.hasTarget) return;

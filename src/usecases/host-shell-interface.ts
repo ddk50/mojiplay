@@ -21,8 +21,8 @@ export type CloseGuardDecision = 'destroy' | 'cancel';
 
 export interface HostShellLog {
   debug(msg: string): void;
-  info(msg: string):  void;
-  warn(msg: string):  void;
+  info(msg: string): void;
+  warn(msg: string): void;
   error(msg: string, err?: unknown): void;
 }
 

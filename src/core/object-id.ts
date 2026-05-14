@@ -41,13 +41,26 @@ export type ObjectType = 'text' | 'path';
 
 export interface IdentifiableData {
   objectId?: ObjectId;
-  type?:     ObjectType;
+  type?: ObjectType;
 }
 
-export function ensureObjectId(
-  obj: { data?: IdentifiableData },
-  type: ObjectType,
-): ObjectId {
+/**
+ * mojiplay が fabric.Object.data に載せる user data の shape。
+ * 識別子 (IdentifiableData) + 文字グループ / outline タグ等の custom field。
+ * すべて optional (経路ごとに必要なフィールドだけ詰める)。
+ */
+export interface MojiplayObjectData extends IdentifiableData {
+  /** 同一 IText から生成された文字 fabric.Text を束ねる識別子 (文字モデル参照)。 */
+  groupId?: string;
+  /** IText 内の文字インデックス。 */
+  charIndex?: number;
+  /** 元 IText の text 全体 (debug / 復元用)。 */
+  sourceText?: string;
+  /** アウトライン化済 path かどうか (fabric.Path のうちアウトライン由来のもの)。 */
+  outlined?: boolean;
+}
+
+export function ensureObjectId(obj: { data?: IdentifiableData }, type: ObjectType): ObjectId {
   const data = obj.data ?? (obj.data = {} as IdentifiableData);
   if (!data.objectId) {
     data.objectId = newUlid() as ObjectId;

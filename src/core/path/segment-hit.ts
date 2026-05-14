@@ -16,13 +16,14 @@ import { pathLocalToScreen } from './coords';
 
 export interface SegmentHit {
   readonly cmdIndex: number;
-  readonly t:        number;
-  readonly dist:     number;
+  readonly t: number;
+  readonly dist: number;
 }
 
 export function findClosestSegment(
   cmds: ReadonlyArray<PathCommand>,
-  screenX: number, screenY: number,
+  screenX: number,
+  screenY: number,
   pathTransform: PathTransform,
   threshold: number,
   samples: number,
@@ -33,8 +34,13 @@ export function findClosestSegment(
   for (let i = 0; i < cmds.length; i++) {
     const cmd = cmds[i];
 
-    if (cmd.type === 'M') { cur = cmd.to; continue; }
-    if (cmd.type === 'Z') { continue; }
+    if (cmd.type === 'M') {
+      cur = cmd.to;
+      continue;
+    }
+    if (cmd.type === 'Z') {
+      continue;
+    }
 
     for (let s = 0; s <= samples; s++) {
       const t = s / samples;
@@ -52,7 +58,7 @@ export function findClosestSegment(
       const scr = pathLocalToScreen(p, pathTransform);
       const dx = scr.sx - screenX;
       const dy = scr.sy - screenY;
-      const d  = Math.sqrt(dx * dx + dy * dy);
+      const d = Math.sqrt(dx * dx + dy * dy);
       if (d < threshold && (!best || d < best.dist)) {
         best = { cmdIndex: i, t, dist: d };
       }

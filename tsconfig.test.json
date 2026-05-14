@@ -12,8 +12,5 @@
     "types": ["node", "jest", "fabric"],
     "allowUmdGlobalAccess": true
   },
-  "include": [
-    "test/**/*.ts",
-    "src/globals/**/*.d.ts"
-  ]
+  "include": ["test/**/*.ts", "src/globals/**/*.d.ts"]
 }

@@ -18,7 +18,9 @@ import { logger as sharedLogger } from './logger';
 export class ElectronHostShell implements HostShell {
   readonly log: HostShellLog = sharedLogger;
 
-  async savePng(dataUrl: string): Promise<{ ok: true; filePath: string } | { ok: false; reason: string }> {
+  async savePng(
+    dataUrl: string,
+  ): Promise<{ ok: true; filePath: string } | { ok: false; reason: string }> {
     if (!window.electronAPI?.savePng) {
       return { ok: false, reason: 'electronAPI.savePng が未配線' };
     }
@@ -36,8 +38,8 @@ export class ElectronHostShell implements HostShell {
 
   setZoom(delta: 'in' | 'out' | 'reset'): void {
     if (!window.electronAPI) return;
-    if (delta === 'in')         void window.electronAPI.zoomIn();
-    else if (delta === 'out')   void window.electronAPI.zoomOut();
+    if (delta === 'in') void window.electronAPI.zoomIn();
+    else if (delta === 'out') void window.electronAPI.zoomOut();
     else if (delta === 'reset') void window.electronAPI.zoomReset();
   }
 
@@ -53,33 +55,45 @@ export class ElectronHostShell implements HostShell {
     void window.electronAPI?.setDirty?.(dirty);
   }
 
-  onPasteRequest(cb: () => void): () => void {
+  onPasteRequest(_cb: () => void): () => void {
     // Electron native menu の Edit > Paste は webContents.paste を呼ぶ IPC で処理されるが、
     // renderer 側 paste 要求も同じ entrypoint にしておくと Web 化時にも揃えられる。
     // 現状は HostShell.paste() を呼ぶ呼び元 (= MenuController) からの一方向で済むため、
     // 入力購読は no-op (= 将来 IPC で paste 要求が来るようになったら配線を追加)。
-    return () => { /* no-op */ };
+    return () => {
+      /* no-op */
+    };
   }
 
   onCopyRequest(cb: () => void): () => void {
     // main process の Edit > Copy IPC ('menu-copy') を購読。
-    if (!window.electronAPI?.onMenuCopy) return () => { /* no-op */ };
+    if (!window.electronAPI?.onMenuCopy)
+      return () => {
+        /* no-op */
+      };
     window.electronAPI.onMenuCopy(cb);
     // 注: preload の onMenuCopy は ipcRenderer.on を呼ぶだけで removeListener API が
     // 露出していない。複数 attach すると重複するが、現状 1 controller が 1 回だけ
     // attach する設計なので問題は出ない。Web 化時は HostShell の interface に合わせて
     // 真の unsubscribe を実装する。
-    return () => { /* unsubscribe は preload 側に未実装のため no-op */ };
+    return () => {
+      /* unsubscribe は preload 側に未実装のため no-op */
+    };
   }
 
   onCloseGuardRequest(cb: () => Promise<CloseGuardDecision>): () => void {
-    if (!window.electronAPI?.onAppCloseRequest) return () => { /* no-op */ };
+    if (!window.electronAPI?.onAppCloseRequest)
+      return () => {
+        /* no-op */
+      };
     window.electronAPI.onAppCloseRequest(() => {
       void (async () => {
         const decision = await cb();
         void window.electronAPI?.respondAppClose(decision);
       })();
     });
-    return () => { /* unsubscribe は preload 側に未実装のため no-op */ };
+    return () => {
+      /* unsubscribe は preload 側に未実装のため no-op */
+    };
   }
 }

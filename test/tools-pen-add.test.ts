@@ -27,15 +27,22 @@ async function setupWithPath(commands: ReadonlyArray<PathCommand>): Promise<{
   const fabricCanvas = new FakeFabricCanvas();
   const state = new State(fabricCanvas as never);
   const snapshot: DocumentSnapshot = {
-    format: 'mojiplay', version: 1,
+    format: 'mojiplay',
+    version: 1,
     canvas: {
-      objects: [{
-        type: 'path',
-        path: toFabricPath(commands),
-        data: { objectId: 'p1', type: 'path', outlined: true },
-        left: 0, top: 0, scaleX: 1, scaleY: 1, angle: 0,
-        pathOffset: { x: 0, y: 0 },
-      }],
+      objects: [
+        {
+          type: 'path',
+          path: toFabricPath(commands),
+          data: { objectId: 'p1', type: 'path', outlined: true },
+          left: 0,
+          top: 0,
+          scaleX: 1,
+          scaleY: 1,
+          angle: 0,
+          pathOffset: { x: 0, y: 0 },
+        },
+      ],
     },
   };
   await state.applySnapshot(snapshot);
@@ -94,8 +101,8 @@ describe('PenAddTool: split + drag', () => {
     ]);
     const tool = new PenAddTool();
 
-    tool.onPointerDown(pointer(50, 0), state);   // 新アンカー = (50, 0)
-    tool.onPointerMove(pointer(50, 30), state);  // 下方向に 30 ドラッグ
+    tool.onPointerDown(pointer(50, 0), state); // 新アンカー = (50, 0)
+    tool.onPointerMove(pointer(50, 30), state); // 下方向に 30 ドラッグ
 
     // 前半 cmdIndex 1: c2 = anchor - d = (50, 0) - (0, 30) = (50, -30)
     // 後半 cmdIndex 2: c1 = anchor + d = (50, 0) + (0, 30) = (50, 30)
@@ -104,7 +111,7 @@ describe('PenAddTool: split + drag', () => {
     const second = cmds[2];
     expect(first.type).toBe('C');
     expect(second.type).toBe('C');
-    if (first.type === 'C')  expect(first.c2).toEqual({ x: 50, y: -30 });
+    if (first.type === 'C') expect(first.c2).toEqual({ x: 50, y: -30 });
     if (second.type === 'C') expect(second.c1).toEqual({ x: 50, y: 30 });
   });
 
@@ -119,7 +126,7 @@ describe('PenAddTool: split + drag', () => {
 
     // C カーブの頂点 (50, -37.5) = B(0.5) を直撃
     tool.onPointerDown(pointer(50, -37.5), state);
-    tool.onPointerMove(pointer(50, -37.5), state);  // ドラッグ無し → dx=dy=0
+    tool.onPointerMove(pointer(50, -37.5), state); // ドラッグ無し → dx=dy=0
 
     const cmds = commandsOf(state);
     const first = cmds[1];
@@ -127,7 +134,7 @@ describe('PenAddTool: split + drag', () => {
     expect(first.type).toBe('C');
     expect(second.type).toBe('C');
     if (first.type === 'C') {
-      expect(first.c1.x).toBeCloseTo(0,   3);
+      expect(first.c1.x).toBeCloseTo(0, 3);
       expect(first.c1.y).toBeCloseTo(-25, 3);
     }
     if (second.type === 'C') {

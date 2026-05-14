@@ -12,32 +12,52 @@
 
 import { computeGroupExpansion } from '../../core/group-selection';
 import type {
-  Tool, ToolDescriptor, PointerInput, PointerHandled,
-  MovingTarget, CanvasMouseDownInput,
+  Tool,
+  ToolDescriptor,
+  PointerInput,
+  PointerHandled,
+  MovingTarget,
+  CanvasMouseDownInput,
 } from './tool-interface';
 import type { State, ObjectHandle } from '../../core/state-interface';
 
 export class SelectGroupTool implements Tool {
   readonly descriptor: ToolDescriptor = {
-    id:    'select-group',
+    id: 'select-group',
     label: 'グループ選択/移動 (黒矢印)',
     iconSvg:
       '<svg class="tool-icon" viewBox="0 0 14 18" xmlns="http://www.w3.org/2000/svg">' +
-        '<path d="M2,1 L2,14 L5,11 L7.5,16.5 L9.5,15.5 L7,10 L12,10 Z"/>' +
+      '<path d="M2,1 L2,14 L5,11 L7.5,16.5 L9.5,15.5 L7,10 L12,10 Z"/>' +
       '</svg>',
   };
 
-  onActivate(_state: State): void { /* no-op */ }
-  onDeactivate(_state: State): void { /* no-op */ }
+  onActivate(_state: State): void {
+    /* no-op */
+  }
+  onDeactivate(_state: State): void {
+    /* no-op */
+  }
 
-  onPointerDown(_e: PointerInput, _state: State): PointerHandled { return 'pass'; }
-  onPointerMove(_e: PointerInput, _state: State): void { /* no-op */ }
-  onPointerUp(_e: PointerInput, _state: State): void { /* no-op */ }
+  onPointerDown(_e: PointerInput, _state: State): PointerHandled {
+    return 'pass';
+  }
+  onPointerMove(_e: PointerInput, _state: State): void {
+    /* no-op */
+  }
+  onPointerUp(_e: PointerInput, _state: State): void {
+    /* no-op */
+  }
 
-  isDragging(): boolean { return false; }
+  isDragging(): boolean {
+    return false;
+  }
 
-  onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _state: State): void { /* no-op */ }
-  onCanvasMouseDown(_e: CanvasMouseDownInput, _state: State): void { /* no-op */ }
+  onObjectMoving(_t: MovingTarget, _e: { altKey: boolean }, _state: State): void {
+    /* no-op */
+  }
+  onCanvasMouseDown(_e: CanvasMouseDownInput, _state: State): void {
+    /* no-op */
+  }
 
   onSelectionChanged(state: State): void {
     const current = state.getActiveObjects();

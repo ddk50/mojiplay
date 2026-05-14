@@ -32,10 +32,7 @@ export interface ExportResult {
   height: number;
 }
 
-export function exportObjectToPngDataUrl(
-  obj: ExportableObject,
-  multiplier: number,
-): ExportResult {
+export function exportObjectToPngDataUrl(obj: ExportableObject, multiplier: number): ExportResult {
   if (typeof multiplier !== 'number' || multiplier <= 0 || !isFinite(multiplier)) {
     throw new Error(`invalid multiplier: ${multiplier}`);
   }

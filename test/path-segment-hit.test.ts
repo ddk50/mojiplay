@@ -9,8 +9,8 @@ import { findClosestSegment } from '../src/core/path/segment-hit';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 const T: PathTransform = {
-  pathMatrix:     IDENT,
-  pathOffset:     { x: 0, y: 0 },
+  pathMatrix: IDENT,
+  pathOffset: { x: 0, y: 0 },
   viewportMatrix: IDENT,
 };
 
@@ -52,7 +52,7 @@ describe('findClosestSegment', () => {
   test('複数セグメント候補から距離最近のものを選ぶ', () => {
     const cmds: PathCommand[] = [
       { type: 'M', to: { x: 0, y: 0 } },
-      { type: 'L', to: { x: 100, y: 0 } },   // cmdIndex 1
+      { type: 'L', to: { x: 100, y: 0 } }, // cmdIndex 1
       { type: 'L', to: { x: 100, y: 100 } }, // cmdIndex 2
     ];
     const hit = findClosestSegment(cmds, 100, 50, T, 8, 50);
@@ -81,11 +81,11 @@ describe('findClosestSegment', () => {
     ];
     // 2 倍ズーム: local (50, 0) → screen (100, 0)、local (25, 0) → screen (50, 0)
     const T2: PathTransform = { ...T, viewportMatrix: [2, 0, 0, 2, 0, 0] };
-    const mid    = findClosestSegment(cmds, 100, 0, T2, 8, 50);
-    const quarter = findClosestSegment(cmds,  50, 0, T2, 8, 50);
+    const mid = findClosestSegment(cmds, 100, 0, T2, 8, 50);
+    const quarter = findClosestSegment(cmds, 50, 0, T2, 8, 50);
     expect(mid).not.toBeNull();
     expect(quarter).not.toBeNull();
-    expect(mid!.t).toBeCloseTo(0.5,  1);
+    expect(mid!.t).toBeCloseTo(0.5, 1);
     expect(quarter!.t).toBeCloseTo(0.25, 1);
 
     // ズーム範囲外 (screen 250 = local 125、線分外) はミス

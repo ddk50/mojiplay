@@ -14,16 +14,19 @@ import type { Point, PathAnchor, PathCommand } from './types';
 const COINCIDENT_EPSILON = 1e-6;
 
 function pointsEqual(a: Point, b: Point): boolean {
-  return Math.abs(a.x - b.x) < COINCIDENT_EPSILON &&
-         Math.abs(a.y - b.y) < COINCIDENT_EPSILON;
+  return Math.abs(a.x - b.x) < COINCIDENT_EPSILON && Math.abs(a.y - b.y) < COINCIDENT_EPSILON;
 }
 
 export class Anchors {
   constructor(readonly items: ReadonlyArray<PathAnchor>) {}
 
-  get length(): number { return this.items.length; }
+  get length(): number {
+    return this.items.length;
+  }
 
-  at(idx: number): PathAnchor | undefined { return this.items[idx]; }
+  at(idx: number): PathAnchor | undefined {
+    return this.items[idx];
+  }
 
   [Symbol.iterator](): IterableIterator<PathAnchor> {
     return this.items[Symbol.iterator]();
@@ -128,8 +131,11 @@ export class Anchors {
           if (subpathStartIdx >= 0 && subpathStartIdx < anchors.length) {
             const startAnchor = anchors[subpathStartIdx];
             const lastCmd = i > 0 ? commands[i - 1] : null;
-            if (lastCmd && (lastCmd.type === 'C' || lastCmd.type === 'Q') &&
-                pointsEqual(lastCmd.to, startAnchor.point)) {
+            if (
+              lastCmd &&
+              (lastCmd.type === 'C' || lastCmd.type === 'Q') &&
+              pointsEqual(lastCmd.to, startAnchor.point)
+            ) {
               // ケース (A)
               if (lastCmd.type === 'C') {
                 startAnchor.incomingHandle = { kind: 'C-c2', cmdIndex: i - 1 };
@@ -137,8 +143,7 @@ export class Anchors {
                 startAnchor.incomingHandle = { kind: 'Q-c', cmdIndex: i - 1 };
               }
               const lastAnchorIdx = anchors.length - 1;
-              if (lastAnchorIdx > subpathStartIdx &&
-                  anchors[lastAnchorIdx].cmdIndex === i - 1) {
+              if (lastAnchorIdx > subpathStartIdx && anchors[lastAnchorIdx].cmdIndex === i - 1) {
                 anchors.pop();
                 startAnchor.coincidentClosingCmdIndex = i - 1;
               }

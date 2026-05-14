@@ -7,7 +7,7 @@
 import type { TextCreateProps } from '../core/state-interface';
 import { fontFamilySel, fontStyleSel } from './font-enumeration';
 
-const fontSizeInput  = document.getElementById('font-size')  as HTMLInputElement;
+const fontSizeInput = document.getElementById('font-size') as HTMLInputElement;
 const fontColorInput = document.getElementById('font-color') as HTMLInputElement;
 
 export function currentFontStyle(): { fontWeight: number; fontStyle: 'normal' | 'italic' } {
@@ -21,9 +21,9 @@ export function currentTextProps(): TextCreateProps {
   const { fontWeight, fontStyle } = currentFontStyle();
   return {
     fontFamily: fontFamilySel.value,
-    fontSize:   parseInt(fontSizeInput.value, 10) || 72,
+    fontSize: parseInt(fontSizeInput.value, 10) || 72,
     fontWeight,
     fontStyle,
-    fill:       fontColorInput.value,
+    fill: fontColorInput.value,
   };
 }

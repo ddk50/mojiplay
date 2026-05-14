@@ -9,9 +9,7 @@
 // (fileIO.saveCurrent 等) を呼ぶ thin wrapper として実装する。
 
 import type { MenuAction } from './menu-action-interface';
-import type {
-  MenuActionRegistry, MenuActionRegistryDeps,
-} from './menu-action-registry-interface';
+import type { MenuActionRegistry, MenuActionRegistryDeps } from './menu-action-registry-interface';
 
 import { selectAll } from './select-all';
 import { deleteSelection } from './delete-selection';
@@ -24,30 +22,35 @@ export function createMenuActionRegistry(deps: MenuActionRegistryDeps): MenuActi
 
   const actions: MenuAction[] = [
     // ── Edit ──
-    { id: 'copy',         execute: () => doCopy(state, ui) },
-    { id: 'undo',         execute: () => state.undo() },
-    { id: 'redo',         execute: () => state.redo() },
-    { id: 'paste',        execute: () => { /* HostShell 経由で webContents.paste を呼ぶ将来の拡張用 hook。
-                                              現状は Electron native menu 側で完結 */ } },
-    { id: 'delete',       execute: () => deleteSelection(state) },
-    { id: 'duplicate',    execute: () => duplicateSelection(state) },
-    { id: 'select-all',   execute: () => selectAll(state) },
-    { id: 'outline',      execute: () => outlineSelection(state, ui) },
+    { id: 'copy', execute: () => doCopy(state, ui) },
+    { id: 'undo', execute: () => state.undo() },
+    { id: 'redo', execute: () => state.redo() },
+    {
+      id: 'paste',
+      execute: () => {
+        /* HostShell 経由で webContents.paste を呼ぶ将来の拡張用 hook。
+                                              現状は Electron native menu 側で完結 */
+      },
+    },
+    { id: 'delete', execute: () => deleteSelection(state) },
+    { id: 'duplicate', execute: () => duplicateSelection(state) },
+    { id: 'select-all', execute: () => selectAll(state) },
+    { id: 'outline', execute: () => outlineSelection(state, ui) },
 
     // ── View ──
-    { id: 'devtools',     execute: () => host.toggleDevTools() },
-    { id: 'zoom-in',      execute: () => host.setZoom('in') },
-    { id: 'zoom-out',     execute: () => host.setZoom('out') },
-    { id: 'zoom-reset',   execute: () => host.setZoom('reset') },
-    { id: 'fullscreen',   execute: () => host.toggleFullscreen() },
+    { id: 'devtools', execute: () => host.toggleDevTools() },
+    { id: 'zoom-in', execute: () => host.setZoom('in') },
+    { id: 'zoom-out', execute: () => host.setZoom('out') },
+    { id: 'zoom-reset', execute: () => host.setZoom('reset') },
+    { id: 'fullscreen', execute: () => host.toggleFullscreen() },
 
     // ── File ──
-    { id: 'file-open',    execute: () => fileIO.openFile() },
-    { id: 'file-save',    execute: () => fileIO.saveCurrent() },
+    { id: 'file-open', execute: () => fileIO.openFile() },
+    { id: 'file-save', execute: () => fileIO.saveCurrent() },
     { id: 'file-save-as', execute: () => fileIO.saveAs() },
   ];
 
-  const map = new Map<string, MenuAction>(actions.map(a => [a.id, a]));
+  const map = new Map<string, MenuAction>(actions.map((a) => [a.id, a]));
 
   return {
     execute(id: string): void | Promise<void> {

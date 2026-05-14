@@ -18,7 +18,11 @@ import { TextTool } from '../src/usecases/tools/text-tool';
 import type { TextCreateProps } from '../src/core/state-interface';
 
 const PROPS: TextCreateProps = {
-  fontFamily: 'Arial', fontSize: 72, fontWeight: 400, fontStyle: 'normal', fill: '#000000',
+  fontFamily: 'Arial',
+  fontSize: 72,
+  fontWeight: 400,
+  fontStyle: 'normal',
+  fill: '#000000',
 };
 
 function setup() {

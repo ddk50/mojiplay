@@ -49,16 +49,16 @@ const canvas = new fabric.Canvas('main-canvas', {
   preserveObjectStacking: true,
   selection: true,
   // 範囲選択 (ドラッグマーキー) の見た目: 薄いブルー塗り + ブルー点線
-  selectionColor:       'rgba(0, 102, 255, 0.08)',
+  selectionColor: 'rgba(0, 102, 255, 0.08)',
   selectionBorderColor: '#0066ff',
-  selectionLineWidth:   1,
-  selectionDashArray:   [5, 3],
+  selectionLineWidth: 1,
+  selectionDashArray: [5, 3],
 });
 
 const state = new State(canvas, { historyMax: 100 });
-const host  = new ElectronHostShell();
-const ui    = new ElectronUIPort();
-const repo  = new FileSystemDocumentRepository();
+const host = new ElectronHostShell();
+const ui = new ElectronUIPort();
+const repo = new FileSystemDocumentRepository();
 
 // renderer (browser context) では Node.js の path module を使えないので basename は inline。
 function basename(p: string): string {
@@ -71,17 +71,17 @@ const fileIO = new FileIOInteractor(state, repo, ui, basename);
 // ── 2. Tool インスタンスと buildToolbar ────────────────────────────────────
 
 const selectGroupTool = new SelectGroupTool();
-const selectCharTool  = new SelectCharTool();
-const textTool        = new TextTool(currentTextProps);
-const penAddTool      = new PenAddTool();
-const penRemoveTool   = new PenRemoveTool();
+const selectCharTool = new SelectCharTool();
+const textTool = new TextTool(currentTextProps);
+const penAddTool = new PenAddTool();
+const penRemoveTool = new PenRemoveTool();
 
 const tools: Record<Mode, Tool> = {
   'select-group': selectGroupTool,
-  'select-char':  selectCharTool,
-  'text':         textTool,
-  'pen-add':      penAddTool,
-  'pen-remove':   penRemoveTool,
+  'select-char': selectCharTool,
+  text: textTool,
+  'pen-add': penAddTool,
+  'pen-remove': penRemoveTool,
 };
 
 const toolButtonsContainer = document.getElementById('tool-buttons');
@@ -92,7 +92,9 @@ const modeButtons = buildToolbar(
   // ToolbarController が attach 時に setMode を上書きで配線するため、ここの onSelect は
   // 初期 placeholder。ToolbarController のコンストラクタが呼ばれる前にユーザが
   // クリックする状況は無い (= 同期 init flow)。
-  () => { /* no-op (overridden in ToolbarController.attach) */ },
+  () => {
+    /* no-op (overridden in ToolbarController.attach) */
+  },
 );
 
 // ── 3. MenuActionRegistry ─────────────────────────────────────────────────
@@ -105,15 +107,27 @@ const menuActions: MenuActionRegistry = createMenuActionRegistry({ state, ui, fi
 
 const viewController: ViewController = new ViewControllerImpl({ host, fileIO, canvas, container });
 const canvasInputController: CanvasInputController = new CanvasInputControllerImpl({
-  state, tools, selectCharTool, canvas,
+  state,
+  tools,
+  selectCharTool,
+  canvas,
   onZoomChanged: () => viewController.refreshTitle(),
 });
 const keyboardController: KeyboardController = new KeyboardControllerImpl({
-  state, selectCharTool, menuActions, canvas,
+  state,
+  selectCharTool,
+  menuActions,
+  canvas,
 });
 const menuController: MenuController = new MenuControllerImpl({ menuActions, host, canvas });
 const toolbarController: ToolbarController = new ToolbarControllerImpl({
-  state, tools, selectCharTool, host, menuActions, canvas, modeButtons,
+  state,
+  tools,
+  selectCharTool,
+  host,
+  menuActions,
+  canvas,
+  modeButtons,
 });
 
 // 構造的型付けで .attach / .detach を持つことを推論させる (= 共有 interface 不要)。
@@ -125,7 +139,7 @@ const controllers = [
   toolbarController,
 ] as const;
 
-controllers.forEach(c => c.attach());
+controllers.forEach((c) => c.attach());
 
 // ── 5. unload で detach ───────────────────────────────────────────────────
 

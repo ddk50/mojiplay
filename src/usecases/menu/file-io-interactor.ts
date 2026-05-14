@@ -55,13 +55,13 @@ export class FileIOInteractor {
     this.statusListeners.push(cb);
     cb(this.getDocStatus());
     return () => {
-      this.statusListeners = this.statusListeners.filter(c => c !== cb);
+      this.statusListeners = this.statusListeners.filter((c) => c !== cb);
     };
   }
 
   private notifyStatus(): void {
     const s = this.getDocStatus();
-    this.statusListeners.forEach(cb => cb(s));
+    this.statusListeners.forEach((cb) => cb(s));
     this.ui.setNativeDirty(s.dirty);
   }
 
@@ -89,8 +89,7 @@ export class FileIOInteractor {
 
       // [block B 同期]
       if (!result.ok) {
-        if (!result.canceled)
-          this.ui.showToast('保存失敗: ' + result.error.message, true);
+        if (!result.canceled) this.ui.showToast('保存失敗: ' + result.error.message, true);
         return false;
       }
       this.currentPath = result.filePath;
@@ -150,10 +149,14 @@ export class FileIOInteractor {
 // switch 完全網羅で kind が増えたらコンパイルエラーになる (= assertNever 的効果)。
 function formatLoadError(e: LoadError): string {
   switch (e.kind) {
-    case 'invalid-json':        return '不正なファイル形式: ' + e.message;
-    case 'format-mismatch':     return 'mojiplay ファイルではありません';
-    case 'unsupported-version': return 'サポートされていないバージョン: ' + String(e.version);
-    case 'io':                  return '読み込みエラー: ' + e.message;
+    case 'invalid-json':
+      return '不正なファイル形式: ' + e.message;
+    case 'format-mismatch':
+      return 'mojiplay ファイルではありません';
+    case 'unsupported-version':
+      return 'サポートされていないバージョン: ' + String(e.version);
+    case 'io':
+      return '読み込みエラー: ' + e.message;
     default: {
       const _: never = e;
       return _;

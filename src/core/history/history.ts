@@ -16,7 +16,7 @@
 import type { Command, History as HistoryContract } from './types';
 
 export interface HistoryOptions {
-  max?: number;  // 履歴上限 (default: 100)
+  max?: number; // 履歴上限 (default: 100)
 }
 
 export class History implements HistoryContract {
@@ -69,8 +69,12 @@ export class History implements HistoryContract {
     return this.at(this.cursor);
   }
 
-  canUndo(): boolean { return this.cursor >= 0; }
-  canRedo(): boolean { return this.cursor + 1 < this.size; }
+  canUndo(): boolean {
+    return this.cursor >= 0;
+  }
+  canRedo(): boolean {
+    return this.cursor + 1 < this.size;
+  }
 
   clear(): void {
     this.buf.fill(undefined);

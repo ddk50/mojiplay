@@ -45,8 +45,8 @@ export function computeOverlayLayout(
   viewportMatrix: Mat2x3,
 ): OverlayScreenLayout {
   const t: PathTransform = {
-    pathMatrix:     snapshot.pathMatrix,
-    pathOffset:     snapshot.pathOffset,
+    pathMatrix: snapshot.pathMatrix,
+    pathOffset: snapshot.pathOffset,
     viewportMatrix: viewportMatrix,
   };
   const path = snapshot.path;
@@ -79,7 +79,8 @@ export function computeOverlayLayout(
 
 export function hitTestAnchorAt(
   layout: OverlayScreenLayout,
-  screenX: number, screenY: number,
+  screenX: number,
+  screenY: number,
   radius: number = ANCHOR_HIT_RADIUS,
 ): number {
   let bestIdx = -1;
@@ -98,7 +99,8 @@ export function hitTestAnchorAt(
 
 export function hitTestHandleAt(
   layout: OverlayScreenLayout,
-  screenX: number, screenY: number,
+  screenX: number,
+  screenY: number,
   radius: number = HANDLE_HIT_RADIUS,
 ): HandleScreenPos | null {
   let best: HandleScreenPos | null = null;

@@ -7,20 +7,21 @@
 //   - Command は self-contained (before / after を Command が持つ)
 //   - ObjectSnapshot は fabric.Object.toObject(['data']) 出力の薄いラッパー
 
-import type { ObjectId, ObjectType } from '../object-id';
+import type { ObjectId, ObjectType, MojiplayObjectData } from '../object-id';
 
 // fabric.Object.toObject(['data']) の出力をそのまま使う。
 // 型 / data / left / top / scaleX / scaleY / angle / fill / path / text 等を含むが、
 // TS 的には Record<string, unknown> として扱い、data フィールドだけ shape を保証する。
+// data は MojiplayObjectData (optional だらけ) を ID 確定で narrow したもの。
 export type ObjectSnapshot = Record<string, unknown> & {
-  data: { objectId: ObjectId; type: ObjectType };
+  data: MojiplayObjectData & { objectId: ObjectId; type: ObjectType };
 };
 
 export type Command =
   | { kind: 'objectChanged'; objectId: ObjectId; before: ObjectSnapshot; after: ObjectSnapshot }
-  | { kind: 'objectCreated'; objectId: ObjectId; after:  ObjectSnapshot }
+  | { kind: 'objectCreated'; objectId: ObjectId; after: ObjectSnapshot }
   | { kind: 'objectDeleted'; objectId: ObjectId; before: ObjectSnapshot }
-  | { kind: 'compound';      commands: ReadonlyArray<Command> };
+  | { kind: 'compound'; commands: ReadonlyArray<Command> };
 
 /**
  * コマンド履歴 (= 編集 cursor 付き有界列)。
@@ -30,8 +31,8 @@ export type Command =
  */
 export interface History {
   push(cmd: Command): void;
-  undo(): Command | null;          // cursor を 1 戻して revert 対象を返す
-  redo(): Command | null;          // cursor を 1 進めて apply 対象を返す
+  undo(): Command | null; // cursor を 1 戻して revert 対象を返す
+  redo(): Command | null; // cursor を 1 進めて apply 対象を返す
   canUndo(): boolean;
   canRedo(): boolean;
   clear(): void;

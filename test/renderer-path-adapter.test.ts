@@ -4,17 +4,24 @@
 // core/path/anchors.ts が扱うオブジェクト ADT の相互変換をテスト。
 
 import type { PathCommand } from '../src/core/path/types';
-import {
-  fromFabricPath, toFabricPath,
-} from '../src/renderer/path-adapter';
+import { fromFabricPath, toFabricPath } from '../src/renderer/path-adapter';
 import type { FabricPathCommand } from '../src/renderer/path-adapter';
 
 const M = (x: number, y: number): PathCommand => ({ type: 'M', to: { x, y } });
 const L = (x: number, y: number): PathCommand => ({ type: 'L', to: { x, y } });
-const C = (c1x: number, c1y: number, c2x: number, c2y: number, x: number, y: number): PathCommand =>
-  ({ type: 'C', c1: { x: c1x, y: c1y }, c2: { x: c2x, y: c2y }, to: { x, y } });
-const Q = (cx: number, cy: number, x: number, y: number): PathCommand =>
-  ({ type: 'Q', c: { x: cx, y: cy }, to: { x, y } });
+const C = (
+  c1x: number,
+  c1y: number,
+  c2x: number,
+  c2y: number,
+  x: number,
+  y: number,
+): PathCommand => ({ type: 'C', c1: { x: c1x, y: c1y }, c2: { x: c2x, y: c2y }, to: { x, y } });
+const Q = (cx: number, cy: number, x: number, y: number): PathCommand => ({
+  type: 'Q',
+  c: { x: cx, y: cy },
+  to: { x, y },
+});
 const Z = (): PathCommand => ({ type: 'Z' });
 
 describe('fromFabricPath / toFabricPath', () => {

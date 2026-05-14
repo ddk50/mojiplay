@@ -16,17 +16,17 @@ export interface DocumentSnapshot {
 }
 
 export type LoadError =
-  | { kind: 'invalid-json';        message: string }
-  | { kind: 'format-mismatch';     got: unknown }
+  | { kind: 'invalid-json'; message: string }
+  | { kind: 'format-mismatch'; got: unknown }
   | { kind: 'unsupported-version'; version: unknown }
-  | { kind: 'io';                  message: string };
+  | { kind: 'io'; message: string };
 
 export type LoadResult =
-  | { ok: true;  snapshot: DocumentSnapshot; filePath: string }
+  | { ok: true; snapshot: DocumentSnapshot; filePath: string }
   | { ok: false; canceled: true }
   | { ok: false; canceled: false; error: LoadError };
 
 export type SaveResult =
-  | { ok: true;  filePath: string }
+  | { ok: true; filePath: string }
   | { ok: false; canceled: true }
   | { ok: false; canceled: false; error: { message: string } };

@@ -40,7 +40,7 @@ export function fromFabricPath(raw: ReadonlyArray<ReadonlyArray<unknown>>): Path
       case 'Q':
         out.push({
           type: 'Q',
-          c:  { x: r[1] as number, y: r[2] as number },
+          c: { x: r[1] as number, y: r[2] as number },
           to: { x: r[3] as number, y: r[4] as number },
         });
         break;
@@ -59,12 +59,23 @@ export function toFabricPath(path: ReadonlyArray<PathCommand>): FabricPathComman
   for (let i = 0; i < path.length; i++) {
     const c = path[i];
     switch (c.type) {
-      case 'M': out.push(['M', c.to.x, c.to.y]); break;
-      case 'L': out.push(['L', c.to.x, c.to.y]); break;
-      case 'C': out.push(['C', c.c1.x, c.c1.y, c.c2.x, c.c2.y, c.to.x, c.to.y]); break;
-      case 'Q': out.push(['Q', c.c.x, c.c.y, c.to.x, c.to.y]); break;
-      case 'Z': out.push(['Z']); break;
-      default: c satisfies never;
+      case 'M':
+        out.push(['M', c.to.x, c.to.y]);
+        break;
+      case 'L':
+        out.push(['L', c.to.x, c.to.y]);
+        break;
+      case 'C':
+        out.push(['C', c.c1.x, c.c1.y, c.c2.x, c.c2.y, c.to.x, c.to.y]);
+        break;
+      case 'Q':
+        out.push(['Q', c.c.x, c.c.y, c.to.x, c.to.y]);
+        break;
+      case 'Z':
+        out.push(['Z']);
+        break;
+      default:
+        c satisfies never;
     }
   }
   return out;

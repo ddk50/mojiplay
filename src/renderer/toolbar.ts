@@ -16,9 +16,7 @@ function assertValidDescriptors(tools: ReadonlyArray<Tool>): void {
   for (const t of tools) {
     const d = t.descriptor;
     if (!d.id || !d.label || !d.iconSvg) {
-      throw new Error(
-        `tool descriptor has empty field(s): ${JSON.stringify(d)}`,
-      );
+      throw new Error(`tool descriptor has empty field(s): ${JSON.stringify(d)}`);
     }
     if (seen.has(d.id)) {
       throw new Error(`duplicate tool descriptor id: ${d.id}`);

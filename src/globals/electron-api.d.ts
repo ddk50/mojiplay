@@ -1,10 +1,6 @@
-type SaveResult =
-  | { success: true; filePath: string }
-  | { success: false; reason: string };
+type SaveResult = { success: true; filePath: string } | { success: false; reason: string };
 
-type OpenResult =
-  | { ok: true; filePath: string; content: string }
-  | { ok: false; reason: string };
+type OpenResult = { ok: true; filePath: string; content: string } | { ok: false; reason: string };
 
 type DiscardChoice = 'save' | 'discard' | 'cancel';
 
@@ -36,8 +32,8 @@ interface Window {
 
     log?: {
       debug(msg: string): Promise<void>;
-      info(msg: string):  Promise<void>;
-      warn(msg: string):  Promise<void>;
+      info(msg: string): Promise<void>;
+      warn(msg: string): Promise<void>;
       error(msg: string): Promise<void>;
     };
   };

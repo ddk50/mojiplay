@@ -33,6 +33,12 @@ jobs:
       - name: Build (typecheck + bundle)
         run: npm run build
 
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Format check (Prettier)
+        run: npm run format:check
+
       # ts-jest が test ファイルを on-the-fly でコンパイルしながら実行するので、
       # ここでテスト用 .ts の型エラーも検出される。
       - name: Test

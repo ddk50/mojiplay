@@ -42,13 +42,18 @@ export function applyMatrixToDelta(d: Point, m: Mat2x3): Point {
 }
 
 export function invertMatrix(m: Mat2x3): Mat2x3 {
-  const a = m[0], b = m[1], c = m[2], d = m[3], tx = m[4], ty = m[5];
+  const a = m[0],
+    b = m[1],
+    c = m[2],
+    d = m[3],
+    tx = m[4],
+    ty = m[5];
   const det = a * d - b * c;
   if (det === 0) throw new Error('matrix is singular');
-  const ia =  d / det;
+  const ia = d / det;
   const ib = -b / det;
   const ic = -c / det;
-  const id =  a / det;
+  const id = a / det;
   return [ia, ib, ic, id, -(ia * tx + ic * ty), -(ib * tx + id * ty)];
 }
 

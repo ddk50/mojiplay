@@ -56,24 +56,26 @@ src/
 └── globals/              # ambient .d.ts (Window 拡張)
 ```
 
-| dir | CA 用語 | 方向 | fabric/DOM/Electron |
-|---|---|---|---|
-| `core/` | Entities | (内側) | 不知 |
-| `usecases/` | Use Case (Interactor + Port) | (内側) | 不知 |
-| `repository/` | Interface Adapter (Gateway) | 永続化 | core のみ依存 |
-| `controllers/` | Interface Adapter (Input) | **外 → 内** | DOM/fabric 直接 OK |
-| `renderer/` | Presenter + Frameworks 接触面 | **内 → 外 + 最外** | 全レイヤ可 |
-| `main.ts` / `preload.ts` | Frameworks & Drivers | 最外 | Electron main / IPC |
+| dir                      | CA 用語                       | 方向               | fabric/DOM/Electron |
+| ------------------------ | ----------------------------- | ------------------ | ------------------- |
+| `core/`                  | Entities                      | (内側)             | 不知                |
+| `usecases/`              | Use Case (Interactor + Port)  | (内側)             | 不知                |
+| `repository/`            | Interface Adapter (Gateway)   | 永続化             | core のみ依存       |
+| `controllers/`           | Interface Adapter (Input)     | **外 → 内**        | DOM/fabric 直接 OK  |
+| `renderer/`              | Presenter + Frameworks 接触面 | **内 → 外 + 最外** | 全レイヤ可          |
+| `main.ts` / `preload.ts` | Frameworks & Drivers          | 最外               | Electron main / IPC |
 
 **依存方向**: 内側 → 外側を禁止。Controller (外→内) と Presenter (内→外) は方向が逆な別概念。Presenter は実装上 fabric / DOM と癒着しがちで、現状は `renderer/` に同居。
 
 **ファイル命名規約**:
+
 - interface 定義のみ → `*-interface.ts` (例: `state-interface.ts`, `canvas-input-interface.ts`)
 - 実装 (class / factory) → ベース名 (例: `state.ts`, `canvas-input.ts`)
 - interface ファイルに class / factory を混ぜない (test double が object literal で interface を満たすため。class 型は private field の nominal typing で satisfies 不可)
 - ディレクトリ名で role が自明なら suffix 省略 (例: `controllers/canvas-input.ts` であって `canvas-input-controller.ts` ではない)
 
 **シンボル命名**:
+
 - Tool = `*Tool` (例: `SelectCharTool`)
 - Stateful menu Use Case = `*Interactor` (例: `FileIOInteractor`)
 - Stateless menu Use Case = free function or `MenuAction` wrapper (例: `selectAll(state)`)
@@ -83,6 +85,7 @@ src/
 ## ビルド構成 (tsc + esbuild)
 
 `npm run build` の 3 段階:
+
 1. `tsc -p tsconfig.json` → main + preload を `dist/{main,preload}.js` (CommonJS, Node API)
 2. `tsc -p tsconfig.renderer.json` (noEmit) → core/usecases/repository/controllers/renderer の typecheck
 3. `node esbuild.renderer.mjs` → renderer 全体を `dist/renderer/bundle.js` (IIFE)
@@ -94,19 +97,20 @@ src/
 ## アーキテクチャ
 
 **Electron 3 プロセス**:
+
 - `src/main.ts` — BrowserWindow (`contextIsolation: on`, `nodeIntegration: off`)。IPC: `save-png` / `copy-image` / `log` / view 系 / `save-mply` (atomic write) / `open-mply` / `confirm-discard` / `app-close-request`。ネイティブメニューは `Menu.setApplicationMenu(null)` で無効化 (HTML メニューバー使用)
 - `src/preload.ts` — `contextBridge` で `window.electronAPI` 公開
 - `src/renderer/app.ts` — DI 容器 (~135 行)。fabric.Canvas / State / HostShell / UIPort / Repository / FileIOInteractor / Tool 群 / MenuActionRegistry / 5 Controllers を構築して `attach()` するだけ
 
 ### 5 Controllers (`controllers/`)
 
-| Controller | 受ける入力 | dispatch 先 |
-|---|---|---|
-| `CanvasInputController` | DOM mousedown/move (capture) + fabric mouse:*/selection:*/object:moving/rotating/after:render | Tool (PointerInput 中立化), Alt+wheel zoom, anchor overlay, toolbar 同期 |
-| `KeyboardController` | document keydown (capture + bubble) | MenuAction (undo/redo/copy/save/open/duplicate/outline/devtools), Tool command (矢印キー), Enter で IText commit |
-| `MenuController` | HTML メニューバー click + `host.onCopyRequest` | MenuAction |
-| `ToolbarController` | toolbar input (font/size/color/rotation/snap) + ボタン + mode buttons | `state.applyPropsToSelection` / `state.clearAll` / `host.savePng` / MenuAction / `state.setMode` + tool.onActivate/onDeactivate |
-| `ViewController` | window resize / `host.onCloseGuardRequest` / `fileIO.subscribeDocStatus` | canvas resize / title bar / close guard |
+| Controller              | 受ける入力                                                                                    | dispatch 先                                                                                                                     |
+| ----------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `CanvasInputController` | DOM mousedown/move (capture) + fabric mouse:_/selection:_/object:moving/rotating/after:render | Tool (PointerInput 中立化), Alt+wheel zoom, anchor overlay, toolbar 同期                                                        |
+| `KeyboardController`    | document keydown (capture + bubble)                                                           | MenuAction (undo/redo/copy/save/open/duplicate/outline/devtools), Tool command (矢印キー), Enter で IText commit                |
+| `MenuController`        | HTML メニューバー click + `host.onCopyRequest`                                                | MenuAction                                                                                                                      |
+| `ToolbarController`     | toolbar input (font/size/color/rotation/snap) + ボタン + mode buttons                         | `state.applyPropsToSelection` / `state.clearAll` / `host.savePng` / MenuAction / `state.setMode` + tool.onActivate/onDeactivate |
+| `ViewController`        | window resize / `host.onCloseGuardRequest` / `fileIO.subscribeDocStatus`                      | canvas resize / title bar / close guard                                                                                         |
 
 **Controller の contract**: 各 Controller は `xxx-interface.ts` + `xxx.ts` の 2 ファイル組。interface 側で public `on*` ハンドラ + `attach`/`detach` を宣言、Impl 側で `class XxxControllerImpl implements XxxController` を export。consumer (app.ts) は interface 側に依存、test double は object literal で interface を満たす。`attach()` / `detach()` は self-wiring の convenience。app.ts の `unload` で全 Controller の `detach()` を呼ぶ。
 
@@ -138,6 +142,7 @@ src/
 ## State / Viewport 分離モデル (= Undo/Redo + 永続化の基盤)
 
 mojiplay の状態は 2 層:
+
 - **State (ドキュメント層)** = 全 object の `commands` / `left,top,scaleX,scaleY,angle` / `fill` / `fontFamily` 等。**履歴 / 永続化対象**
 - **Camera 層** = viewport (`canvas.viewportTransform`) / selection / tool mode / IText 編集中 state。**履歴 / 永続化対象外** (ephemeral)
 
@@ -150,9 +155,9 @@ undo/redo は `ObjectSnapshot` (= `fabric.Object.toObject(['data'])` 出力) を
 ```ts
 type Command =
   | { kind: 'objectChanged'; objectId: ObjectId; before: ObjectSnapshot; after: ObjectSnapshot }
-  | { kind: 'objectCreated'; objectId: ObjectId; after:  ObjectSnapshot }
+  | { kind: 'objectCreated'; objectId: ObjectId; after: ObjectSnapshot }
   | { kind: 'objectDeleted'; objectId: ObjectId; before: ObjectSnapshot }
-  | { kind: 'compound';      commands: ReadonlyArray<Command> };
+  | { kind: 'compound'; commands: ReadonlyArray<Command> };
 ```
 
 履歴対象 = state を変える全操作 (アンカー / ハンドル編集、object 移動 / 拡縮 / 回転、toolbar property 変更、文字確定、アウトライン化、削除、複製)。履歴対象外 = camera 層。
@@ -172,16 +177,16 @@ type Command =
 
 ### Tool / Use Case の責任分担
 
-| 操作 | 起点 | history push |
-|---|---|---|
-| アンカー / ハンドル drag | `select-char-tool` | `pointerUp` で tool 自身が push |
-| アンカー追加 / 削除 | `pen-add-tool` / `pen-remove-tool` | tool 自身が push |
-| object 移動 / scale / rotate | fabric の自然挙動 | `State.handleObjectModified` で `e.action` 判別して push |
-| toolbar property 変更 | `ToolbarController` → `state.applyPropsToSelection` | State 内で before/after capture + push |
-| 文字確定 | IText editing exit → `State.handleTextEditingExited` | N×`objectCreated` を compound |
-| アウトライン / 削除 / 複製 | `usecases/menu/*` | State 高レベル method 内で compound push |
-| 全選択 / Copy | `usecases/menu/select-all` / `copy-selection-as-png` | history 対象外 |
-| 保存 / 開く | `usecases/menu/file-io-interactor` | open 時に `state.applySnapshot` 内で `clearHistory` |
+| 操作                         | 起点                                                 | history push                                             |
+| ---------------------------- | ---------------------------------------------------- | -------------------------------------------------------- |
+| アンカー / ハンドル drag     | `select-char-tool`                                   | `pointerUp` で tool 自身が push                          |
+| アンカー追加 / 削除          | `pen-add-tool` / `pen-remove-tool`                   | tool 自身が push                                         |
+| object 移動 / scale / rotate | fabric の自然挙動                                    | `State.handleObjectModified` で `e.action` 判別して push |
+| toolbar property 変更        | `ToolbarController` → `state.applyPropsToSelection`  | State 内で before/after capture + push                   |
+| 文字確定                     | IText editing exit → `State.handleTextEditingExited` | N×`objectCreated` を compound                            |
+| アウトライン / 削除 / 複製   | `usecases/menu/*`                                    | State 高レベル method 内で compound push                 |
+| 全選択 / Copy                | `usecases/menu/select-all` / `copy-selection-as-png` | history 対象外                                           |
+| 保存 / 開く                  | `usecases/menu/file-io-interactor`                   | open 時に `state.applySnapshot` 内で `clearHistory`      |
 
 すべて `state.pushCommand` 経由の単一経路。
 
@@ -203,6 +208,7 @@ type Command =
 ## 永続化 (.mply)
 
 拡張子 `.mply`、形式:
+
 ```jsonc
 { "format": "mojiplay", "version": 1, "canvas": /* canvas.toJSON(['data']) */ }
 ```
@@ -212,20 +218,24 @@ type Command =
 ### 落とし穴
 
 **1. `savedToken` capture timing**: IPC `await` の **前** に capture (snapshot と同 sync block で固定):
+
 ```ts
-const tokenAtSnapshot = state.getHistoryToken();  // ← sync 内で固定
-const snapshot        = state.toSnapshot();
+const tokenAtSnapshot = state.getHistoryToken(); // ← sync 内で固定
+const snapshot = state.toSnapshot();
 const result = await repo.save(snapshot, currentPath);
 if (!result.ok) return false;
-this.savedToken = tokenAtSnapshot;  // ← 再取得しない
+this.savedToken = tokenAtSnapshot; // ← 再取得しない
 ```
+
 await 中の編集を dirty として残すため。
 
 **2. atomic write**: `save-mply` IPC handler は **必ず tmp + rename**:
+
 ```ts
 fs.writeFileSync(tmpPath, json, 'utf-8');
 fs.renameSync(tmpPath, filePath);
 ```
+
 直接 `writeFileSync(filePath, ...)` だと書き込み中のクラッシュ等で旧ファイルが破壊される。POSIX `rename(2)` / Windows `MoveFileEx` は atomic。
 
 **3. close guard**: `win.on('close')` は同期で `e.preventDefault()` が必要なため 2 段階フロー: main 側 `isDirty` 保持 → close 時 renderer に IPC `app-close-request` → renderer 決断 (`destroy` / `cancel`) を `respondAppClose` で返す。
@@ -240,9 +250,10 @@ Jest + ts-jest、`test/` 配下。
 
 ### テスト戦略
 
-**Pure data (core/ + Interface Adapter)** は fabric / DOM 抜きで unit test (path/*, object-id, history, outline-position, path-adapter, copy-export)。
+**Pure data (core/ + Interface Adapter)** は fabric / DOM 抜きで unit test (path/\*, object-id, history, outline-position, path-adapter, copy-export)。
 
 **Tool / Interactor / State business method** は **real `class State` + fabric の最小 stub** で test:
+
 - `test/fabric-stub.ts` — fabric の最小 stub (Canvas / Path / Text / IText / ActiveSelection)。`installFabricStub()` で `globalThis.fabric` & `window` stub を install
 - 各テストは `new State(new FakeFabricCanvas() as never)` で real State を構築、fixture 投入は `state.applySnapshot()` 経由
 - assertion は **State の public API のみ** 経由 (`getActivePath().snapshot()` / `linearizeHistory()` / `toSnapshot()` 等)。stub の internal field は peek しない
@@ -274,6 +285,7 @@ Jest + ts-jest、`test/` 配下。
 ### pure helper を core に動かすかの判定
 
 「全 pure 関数は core にあるべき」ではない。renderer / tools 内の pure helper を core/ に動かす実利は以下 3 点で判定:
+
 1. 多層から import されているか (= dependency 圧)
 2. 単独でテスト書きたい domain knowledge か (= 罠 / 仕様の塊)
 3. コードベース読んだ時「これ core じゃね?」と迷うか (= 認知負荷)
@@ -289,6 +301,7 @@ Jest + ts-jest、`test/` 配下。
 ### Selection 抽象化への配慮 (将来の方向)
 
 camera 層の selection は現状 fabric の生 active object に散らばっている。将来 `Selection` (kind: `'objects' | 'anchors' | 'handles' | 'none'`、ID ベース) として一級概念に整理予定。**複数アンカー同時選択** を本格的にやる手前が自然な着手タイミング。それまでは:
+
 - 新しい選択経路を追加するなら **State 経由を徹底**、fabric API 直叩きを増やさない
 - Command は ID ベース維持 (`fabric.Object` 参照ではなく `ObjectId`)
 - undo/redo は selection を能動的に切り替えない (camera 層は履歴対象外)
@@ -308,5 +321,6 @@ camera 層の selection は現状 fabric の生 active object に散らばって
 mojiplay の Trello Wiki カードは **https://trello.com/c/lQu6eVB3** (これ 1 つだけ)。「Trello 更新して」「Wiki 書き直して」等の依頼を受けたら、必ずこのカードを編集すること。
 
 **注意**:
+
 - `mcp__claude_ai_Trello_Discussion_Log__list_recent_discussions` で `mojiplay:` で始まる他のカードが見つかっても **Wiki と勘違いしない**こと。それらは過去議論ログ (snapshot)。Wiki 用の更新は上記 1 つの正カードに集約
 - Trello MCP には card archive / delete API は無い。誤って書き換え / 新規作成した場合は **ユーザに Trello UI 上で archive を依頼する**しかない
