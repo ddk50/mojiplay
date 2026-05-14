@@ -5,7 +5,7 @@
 //   - usecases/ の中に置くと「Repository は Use Case の一部」と読める階層になり、概念の sibling 性が崩れる
 //   - renderer/ (= Presenter) の中に置くと Gateway を Presenter 階層に混ぜることになる
 //
-// 同 dir 内に interface と concrete impl を併置 (file-system-document-repository.ts)。
+// 同 dir 内に interface と concrete impl を併置 (file-system-document.ts)。
 // 命名で interface (= port) と adapter を区別。
 
 import type { DocumentSnapshot, LoadResult, SaveResult } from '../core/document/snapshot';

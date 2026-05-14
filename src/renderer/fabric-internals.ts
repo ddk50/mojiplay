@@ -1,37 +1,68 @@
 // fabric の undocumented internal フィールド / メソッドへのアクセスを集約する単一窓口。
 //
-// 背景: fabric 5.3.x は contextTop / upperCanvasEl / __charBounds / pathOffset /
-// _setPositionDimensions 等を公式に export していない。これらに依存しないと
-// アンカー編集 / アウトライン化 / IText 分割 / overlay 描画ができないが、call site で
-// `(x as any)` を散らかしたり、global 名前空間に declaration merging で「公開 API の
-// ように見せる嘘の型」を生やしたりすると、fabric 側の minor version bump で rename
-// された時に runtime まで検出できない。
+// ── なぜ存在するか (= 設計思想ミスマッチ) ────────────────────────────────
 //
-// 方針:
+// fabric は「raster ライクな object editor」として設計されている: object を 1 個ずつ
+// 配置 / 移動 / 回転 / スケールし、内部状態 (path commands, text の文字配列, etc) は
+// constructor で固める = post-construction に変えない、という前提に立っている。
+//
+// 一方 mojiplay は fabric を「vector editor + per-char text editor」として使う。これは
+// 以下 3 点で fabric の前提から外れており、その都度 fabric の internal に依存する形で
+// しか実装できない (= 公式 API には穴が無い):
+//
+//   1. per-char text manipulation
+//      fabric は IText を 1 単位として扱う (= 1 個の object に 1 文字列)。mojiplay は
+//      IText 編集後に 1 文字 = 1 fabric.Text に分解して個別に移動 / 回転 / 削除する。
+//      この per-char 座標を得るのに fabric 内部の `__charBounds` / `_textLines` を
+//      借用する (公式には「IText 内部の文字列レイアウト」を取り出す API は無い)。
+//
+//   2. fabric.Path の commands post-mutation
+//      fabric.Path は「constructor で commands を固めて以後 render するだけ」が想定。
+//      mojiplay はアンカー編集で commands を mutate し、bbox を再算出させる。fabric の
+//      「正しい」やり方は `new fabric.Path(commands)` で作り直すことだが、これだと
+//      object identity が変わる (= ObjectId キャッシュ / canonical handle が壊れる)。
+//      identity を保ったまま再算出するため `_setPositionDimensions` / `pathOffset` /
+//      `dirty` flag を借用する。
+//
+//   3. DOM event の capture phase 横取り
+//      fabric は `upperCanvasEl` で DOM event を受け、内部処理してから object に
+//      bubble する。mojiplay はアンカー hit test を fabric より先にやりたい (= fabric
+//      の通常の object dragging を抑止して、白矢印モードでアンカーだけ拾う)。capture
+//      phase で event を listen するため `upperCanvasEl` を直接掴む必要がある。
+//
+// 同様に overlay 描画 (`contextTop`) も「fabric の上に自前の ephemeral 描画を重ねる」
+// 用途で、fabric の selection bracket と同じレイヤを再利用しているだけ (代替は自前
+// canvas overlay の transform / DPI / event passthrough 同期、コスト大)。
+//
+// ── これは「直す」べきか? ────────────────────────────────────────────────
+//
+// 構造的なものなので、wrapper 整理の refactor では消えない。本当に消すには:
+//   - fabric を捨てて自前 canvas system を書く (= 数千行)、または
+//   - vector 編集部分を SVG + DOM に分離 (fabric は文字 / bitmap 表示だけに使う)
+// のどちらかが必要。現状はそれを取らず、internal access を **この 1 ファイルに集約** で
+// 妥協している。fabric が internal を rename / 削除したら修正範囲はここで完結する。
+//
+// ── 方針 ─────────────────────────────────────────────────────────────────
+//
 //   - 各 internal の型は **このファイル内でだけ** local 宣言する (global merging しない)。
 //   - cast (`as unknown as ...`) は helper 内部に閉じ込め、call site は typed wrapper
 //     しか触らない。
-//   - fabric が internal を rename / 削除したら、修正範囲はこのファイル 1 つで完結する。
-//   - fabric.Object.data は mojiplay 固有の user data なので、ここではなく
-//     src/globals/fabric-augment.d.ts で素直に augment し続ける (= 嘘ではない拡張)。
+//   - fabric が docs で記載してる public API (Object.data / IText.isEditing /
+//     Canvas.getRetinaScaling) は src/globals/fabric-augment.d.ts に書く (= 嘘ではない拡張)。
+//   - per-instance override されない fabric source の literal 定数 (Text の
+//     _fontSizeMult / _fontSizeFraction = 1.13 / 0.222) は src/core/outline-position.ts
+//     に hardcode してある (= internal access せず literal で持つ。回帰は test で守る)。
 
 interface CanvasInternal {
   readonly contextTop?: CanvasRenderingContext2D;
   readonly upperCanvasEl: HTMLCanvasElement;
-  getRetinaScaling?(): number;
 }
 
 interface ITextInternal {
-  isEditing?: boolean;
   hiddenTextarea?: HTMLTextAreaElement;
   _textLines?: ReadonlyArray<ReadonlyArray<string>>;
   __charBounds?: ReadonlyArray<ReadonlyArray<{ left: number; width: number }>>;
   initDimensions(): void;
-}
-
-interface TextInternal {
-  _fontSizeMult?: number;
-  _fontSizeFraction?: number;
 }
 
 interface PathInternal {
@@ -56,22 +87,7 @@ export function getContextTop(c: fabric.Canvas): CanvasRenderingContext2D | unde
   return (c as unknown as CanvasInternal).contextTop;
 }
 
-/** retina スケール (= window.devicePixelRatio 相当)。contextTop に直接描画するときに
- *  setTransform で掛ける必要がある。 */
-export function getRetinaScaling(c: fabric.Canvas): number {
-  return (
-    (c as unknown as CanvasInternal).getRetinaScaling?.() ??
-    (typeof window !== 'undefined' ? window.devicePixelRatio : undefined) ??
-    1
-  );
-}
-
 // ── IText ─────────────────────────────────────────────────────────────────
-
-/** IText が編集中か。null/undefined / 非 IText obj に対しても安全に false を返す。 */
-export function isITextEditing(obj: fabric.Object | null | undefined): boolean {
-  return !!(obj as ITextInternal | null | undefined)?.isEditing;
-}
 
 /** 編集モード時の hidden <textarea> にフォーカス。enterEditing 直後に呼ぶ。 */
 export function focusITextTextarea(it: fabric.IText): void {
@@ -93,18 +109,6 @@ export function getITextCharBounds(
   it: fabric.IText,
 ): ReadonlyArray<ReadonlyArray<{ left: number; width: number }>> {
   return (it as unknown as ITextInternal).__charBounds ?? [];
-}
-
-// ── Text ──────────────────────────────────────────────────────────────────
-
-/** fabric.Text の baseline 計算に使う font size 補正定数 (5.3 default: 1.13)。 */
-export function getFontSizeMult(t: fabric.Text): number | undefined {
-  return (t as unknown as TextInternal)._fontSizeMult;
-}
-
-/** 同上 fraction (5.3 default: 0.222)。 */
-export function getFontSizeFraction(t: fabric.Text): number | undefined {
-  return (t as unknown as TextInternal)._fontSizeFraction;
 }
 
 // ── Path ──────────────────────────────────────────────────────────────────

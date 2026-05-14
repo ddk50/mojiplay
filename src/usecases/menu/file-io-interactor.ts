@@ -15,7 +15,7 @@
 
 import type { State } from '../../core/state-interface';
 import type { LoadError } from '../../core/document/snapshot';
-import type { DocumentRepository } from '../../repository/document-repository-interface';
+import type { DocumentRepository } from '../../repository/document-interface';
 import type { UIPort } from '../ui-port-interface';
 
 export interface DocStatus {

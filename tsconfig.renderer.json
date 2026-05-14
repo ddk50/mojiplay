@@ -13,6 +13,7 @@
     "rootDir": "src"
   },
   "include": [
+    "src/renderer.ts",
     "src/core/**/*.ts",
     "src/usecases/**/*.ts",
     "src/repository/**/*.ts",

@@ -18,7 +18,6 @@
 
 ```
 src/
-├── main.ts / preload.ts  # Electron main/preload (Frameworks & Drivers)
 ├── core/                 # Entities (pure types / value objects)
 │   ├── path/             # Path / Anchors / bezier / coords / overlay-layout / segment-hit
 │   ├── history/          # Command ADT + History (ring buffer)
@@ -30,16 +29,15 @@ src/
 │   │   ├── tool-interface.ts   # Tool / PointerInput 等
 │   │   └── *-tool.ts           # 各 Tool 実装
 │   ├── menu/             # Menu/keyboard-triggered
-│   │   ├── menu-action-interface.ts          # MenuAction
-│   │   ├── menu-action-registry-interface.ts # MenuActionRegistry
-│   │   ├── menu-action-registry.ts           # createMenuActionRegistry factory
+│   │   ├── menu-action-interface.ts          # MenuAction (port)
+│   │   ├── menu-action-registry-interface.ts # MenuActionRegistry (port)
 │   │   ├── file-io-interactor.ts             # Save/Open orchestration
 │   │   └── select-all.ts, ... (各 free function)
 │   ├── ui-port-interface.ts    # UIPort: toast / dialog / 画像 clipboard
 │   └── host-shell-interface.ts # HostShell: PNG 保存 / zoom / fullscreen / paste/copy/close IPC / log
 ├── repository/           # Driven adapter (Gateway): port + concrete を sibling 配置
-│   ├── document-repository-interface.ts
-│   └── file-system-document-repository.ts
+│   ├── document-interface.ts
+│   └── file-system-document.ts
 ├── controllers/          # Interface Adapter (Input、外→内): DOM/fabric event を Use Case に dispatch
 │   │                     # ファイル名は -controller suffix 省略 (ディレクトリ名で自明)
 │   ├── canvas-input-interface.ts / canvas-input.ts  # pointer/wheel/selection/object event → Tool
@@ -47,23 +45,27 @@ src/
 │   ├── menu-interface.ts        / menu.ts           # HTML メニューバー + host.onCopyRequest
 │   ├── toolbar-interface.ts     / toolbar.ts        # toolbar input/button + mode 切替
 │   └── view-interface.ts        / view.ts           # window resize / close guard / title bar
-├── renderer/             # Presenter + Frameworks 接触面
+├── renderer/             # Presenter + Frameworks 接触面 (renderer 内の concrete impls)
 │   ├── state.ts          # State concrete (fabric.Canvas を encapsulate + business method)
 │   ├── ui-port-impl.ts   # ElectronUIPort
 │   ├── electron-host-shell.ts  # ElectronHostShell (window.electronAPI 集約)
-│   ├── app.ts            # DI 容器 (~135 行: 依存解決と controllers.attach のみ)
-│   └── ...               # logger, toast, copy-export, outline-conversion, anchor-overlay 等
-└── globals/              # ambient .d.ts (Window 拡張)
+│   ├── font-provider-fontkit.ts  # FontkitFontProvider (FontProvider port impl)
+│   └── ...               # logger, toast, copy-export, anchor-overlay, switch-mode (camera) 等
+├── main.ts                  # Frameworks & Drivers: Electron main process Composition Root
+├── preload.ts               # Frameworks & Drivers: Electron preload (contextBridge)
+├── renderer.ts              # Frameworks & Drivers: Electron renderer Composition Root (DI 容器)
+├── menu-action-registry.ts  # Composition Wiring: id → use case dispatch table factory
+└── globals/                 # ambient .d.ts (Window 拡張)
 ```
 
-| dir                      | CA 用語                       | 方向               | fabric/DOM/Electron |
-| ------------------------ | ----------------------------- | ------------------ | ------------------- |
-| `core/`                  | Entities                      | (内側)             | 不知                |
-| `usecases/`              | Use Case (Interactor + Port)  | (内側)             | 不知                |
-| `repository/`            | Interface Adapter (Gateway)   | 永続化             | core のみ依存       |
-| `controllers/`           | Interface Adapter (Input)     | **外 → 内**        | DOM/fabric 直接 OK  |
-| `renderer/`              | Presenter + Frameworks 接触面 | **内 → 外 + 最外** | 全レイヤ可          |
-| `main.ts` / `preload.ts` | Frameworks & Drivers          | 最外               | Electron main / IPC |
+| dir / file                               | CA 用語                                 | 方向        | fabric/DOM/Electron  |
+| ---------------------------------------- | --------------------------------------- | ----------- | -------------------- |
+| `core/`                                  | Entities                                | (内側)      | 不知                 |
+| `usecases/`                              | Use Case (Interactor + Port)            | (内側)      | 不知                 |
+| `repository/`                            | Interface Adapter (Gateway)             | 永続化      | core のみ依存        |
+| `controllers/`                           | Interface Adapter (Input)               | **外 → 内** | DOM/fabric 直接 OK   |
+| `renderer/`                              | Presenter + Frameworks 接触面           | **内 → 外** | 全レイヤ可           |
+| `main.ts` / `preload.ts` / `renderer.ts` | Frameworks & Drivers (Composition Root) | 最外        | 全レイヤ可 (DI のみ) |
 
 **依存方向**: 内側 → 外側を禁止。Controller (外→内) と Presenter (内→外) は方向が逆な別概念。Presenter は実装上 fabric / DOM と癒着しがちで、現状は `renderer/` に同居。
 
@@ -87,20 +89,20 @@ src/
 `npm run build` の 3 段階:
 
 1. `tsc -p tsconfig.json` → main + preload を `dist/{main,preload}.js` (CommonJS, Node API)
-2. `tsc -p tsconfig.renderer.json` (noEmit) → core/usecases/repository/controllers/renderer の typecheck
-3. `node esbuild.renderer.mjs` → renderer 全体を `dist/renderer/bundle.js` (IIFE)
+2. `tsc -p tsconfig.renderer.json` (noEmit) → src/renderer.ts + core/usecases/repository/controllers/renderer の typecheck
+3. `node esbuild.renderer.mjs` → src/renderer.ts を entry に renderer 全体を `dist/renderer/bundle.js` (IIFE)
 
 `renderer/index.html` は 3 つの `<script>` のみ: `vendor/fabric.min.js` / `vendor/fontkit.js` / `dist/renderer/bundle.js`。fabric / fontkit は UMD グローバルとして runtime 解決、`allowUmdGlobalAccess: true` で `import` 文無しで参照可能。
 
-新規 ts ファイル追加時は `tsconfig.renderer.json` の include グロブ (`src/{core,usecases,repository,controllers,renderer}/**/*.ts`) に該当することを確認するだけ。`src/globals/electron-api.d.ts` は両 tsconfig 共有で `window.electronAPI` を定義。
+新規 ts ファイル追加時は `tsconfig.renderer.json` の include グロブ (`src/renderer.ts` + `src/{core,usecases,repository,controllers,renderer}/**/*.ts`) に該当することを確認するだけ。`src/globals/electron-api.d.ts` は両 tsconfig 共有で `window.electronAPI` を定義。
 
 ## アーキテクチャ
 
 **Electron 3 プロセス**:
 
-- `src/main.ts` — BrowserWindow (`contextIsolation: on`, `nodeIntegration: off`)。IPC: `save-png` / `copy-image` / `log` / view 系 / `save-mply` (atomic write) / `open-mply` / `confirm-discard` / `app-close-request`。ネイティブメニューは `Menu.setApplicationMenu(null)` で無効化 (HTML メニューバー使用)
-- `src/preload.ts` — `contextBridge` で `window.electronAPI` 公開
-- `src/renderer/app.ts` — DI 容器 (~135 行)。fabric.Canvas / State / HostShell / UIPort / Repository / FileIOInteractor / Tool 群 / MenuActionRegistry / 5 Controllers を構築して `attach()` するだけ
+- `src/main.ts` — main process Composition Root。BrowserWindow (`contextIsolation: on`, `nodeIntegration: off`)。IPC: `save-png` / `copy-image` / `log` / view 系 / `save-mply` (atomic write) / `open-mply` / `confirm-discard` / `app-close-request`。ネイティブメニューは `Menu.setApplicationMenu(null)` で無効化 (HTML メニューバー使用)
+- `src/preload.ts` — preload Composition Root。`contextBridge` で `window.electronAPI` 公開
+- `src/renderer.ts` — renderer process Composition Root (~150 行、CA の最外層 = Frameworks & Drivers)。fabric.Canvas / State / HostShell / UIPort / FontProvider / Repository / FileIOInteractor / Tool 群 / MenuActionRegistry / 5 Controllers を構築して `attach()` するだけ。Presenter ではないので `renderer/` 配下ではなく top-level に置く
 
 ### 5 Controllers (`controllers/`)
 
@@ -271,7 +273,8 @@ Jest + ts-jest、`test/` 配下。
 - **`usecases/`**: アプリ固有 orchestration。state または external dep があれば class + DI (例: `FileIOInteractor`)、stateless なら free function (例: `selectAll(state)`)。Output Port (環境差分のある副作用 IF) は `usecases/` 直下 (`ui-port-interface.ts`, `host-shell-interface.ts`)
 - **`repository/`**: 永続化 port + concrete を併置
 - **`controllers/`**: Input Adapter。fabric/DOM 直接 OK だが business logic は書かず State / Use Case に dispatch。`xxx-interface.ts` + `xxx.ts` の 2 ファイル組
-- **`renderer/`**: 副作用あり (DOM/fabric/Electron)。State concrete、Output Port concrete、Presenter helper、entry (app.ts = DI 容器)
+- **`renderer/`**: 副作用あり (DOM/fabric/Electron)。State concrete、Output Port concrete、Presenter helper、camera 層 op (switch-mode / zoom-canvas-by-wheel)
+- **`src/main.ts` / `preload.ts` / `renderer.ts`**: Composition Root (各 process の entry + DI のみ、business logic 持たず)
 - **`globals/`**: 外部世界の ambient `.d.ts` のみ
 
 ### 既存の癒着を新規に増やさない

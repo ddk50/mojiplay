@@ -1,8 +1,14 @@
-// renderer エントリーポイント (DI 容器)。
+// renderer process の Composition Root (= CA の最外層、Frameworks & Drivers)。
 //
-// CA Interface Adapter (Controller / Presenter / Gateway) を物理ディレクトリで
-// sibling 分離し、ここは「依存解決と attach の wiring」だけを担う薄い容器。
-// business logic は state.ts (renderer/) と各 controllers/ に分散している。
+// Electron 3 process それぞれの Composition Root が top-level に並ぶ:
+//   - src/main.ts     ← main process の entry + wiring
+//   - src/preload.ts  ← preload process の entry + IPC bridge
+//   - src/renderer.ts ← renderer process の entry + DI 容器 (本ファイル)
+//
+// CA 上は「全 layer に依存する composition の場」で、Presenter / Controller の
+// concrete を構築して接続するだけ。business logic は持たない (= state.ts / 各
+// controller / use case 側)。Presenter ではないので renderer/ ディレクトリには
+// 入らない (renderer/ は presenter + framework 接触面のみ)。
 //
 // 起動シーケンス:
 //   1. fabric.Canvas / State / HostShell / UIPort / Repository / FileIOInteractor 構築
@@ -11,34 +17,35 @@
 //   4. 5 個の Controller を構築して attach
 //   5. window.unload で全 Controller を detach (event listener leak 防止)
 
-import type { Tool } from '../usecases/tools/tool-interface';
-import type { Mode } from '../core/state-interface';
-import { SelectCharTool } from '../usecases/tools/select-char-tool';
-import { SelectGroupTool } from '../usecases/tools/select-group-tool';
-import { TextTool } from '../usecases/tools/text-tool';
-import { PenAddTool } from '../usecases/tools/pen-add-tool';
-import { PenRemoveTool } from '../usecases/tools/pen-remove-tool';
+import type { Tool } from './usecases/tools/tool-interface';
+import type { Mode } from './core/state-interface';
+import { SelectCharTool } from './usecases/tools/select-char-tool';
+import { SelectGroupTool } from './usecases/tools/select-group-tool';
+import { TextTool } from './usecases/tools/text-tool';
+import { PenAddTool } from './usecases/tools/pen-add-tool';
+import { PenRemoveTool } from './usecases/tools/pen-remove-tool';
 
-import { State } from './state';
-import { ElectronUIPort } from './ui-port-impl';
-import { ElectronHostShell } from './electron-host-shell';
-import { FileIOInteractor } from '../usecases/menu/file-io-interactor';
-import { FileSystemDocumentRepository } from '../repository/file-system-document-repository';
-import { createMenuActionRegistry } from '../usecases/menu/menu-action-registry';
-import type { MenuActionRegistry } from '../usecases/menu/menu-action-registry-interface';
-import { buildToolbar } from './toolbar';
-import { currentTextProps } from './font-current';
+import { State } from './renderer/state';
+import { FontkitFontProvider } from './renderer/font-provider-fontkit';
+import { ElectronUIPort } from './renderer/ui-port-impl';
+import { ElectronHostShell } from './renderer/electron-host-shell';
+import { FileIOInteractor } from './usecases/menu/file-io-interactor';
+import { FileSystemDocumentRepository } from './repository/file-system-document';
+import { createMenuActionRegistry } from './menu-action-registry';
+import type { MenuActionRegistry } from './usecases/menu/menu-action-registry-interface';
+import { buildToolbar } from './renderer/toolbar';
+import { currentTextProps } from './renderer/font-current';
 
-import type { CanvasInputController } from '../controllers/canvas-input-interface';
-import type { KeyboardController } from '../controllers/keyboard-interface';
-import type { MenuController } from '../controllers/menu-interface';
-import type { ViewController } from '../controllers/view-interface';
-import type { ToolbarController } from '../controllers/toolbar-interface';
-import { CanvasInputControllerImpl } from '../controllers/canvas-input';
-import { KeyboardControllerImpl } from '../controllers/keyboard';
-import { MenuControllerImpl } from '../controllers/menu';
-import { ViewControllerImpl } from '../controllers/view';
-import { ToolbarControllerImpl } from '../controllers/toolbar';
+import type { CanvasInputController } from './controllers/canvas-input-interface';
+import type { KeyboardController } from './controllers/keyboard-interface';
+import type { MenuController } from './controllers/menu-interface';
+import type { ViewController } from './controllers/view-interface';
+import type { ToolbarController } from './controllers/toolbar-interface';
+import { CanvasInputControllerImpl } from './controllers/canvas-input';
+import { KeyboardControllerImpl } from './controllers/keyboard';
+import { MenuControllerImpl } from './controllers/menu';
+import { ViewControllerImpl } from './controllers/view';
+import { ToolbarControllerImpl } from './controllers/toolbar';
 
 // ── 1. fabric / State / Host / UI / Repo / FileIO ──────────────────────────
 
@@ -55,7 +62,8 @@ const canvas = new fabric.Canvas('main-canvas', {
   selectionDashArray: [5, 3],
 });
 
-const state = new State(canvas, { historyMax: 100 });
+const fontProvider = new FontkitFontProvider();
+const state = new State(canvas, fontProvider, { historyMax: 100 });
 const host = new ElectronHostShell();
 const ui = new ElectronUIPort();
 const repo = new FileSystemDocumentRepository();
@@ -124,9 +132,7 @@ const toolbarController: ToolbarController = new ToolbarControllerImpl({
   state,
   tools,
   selectCharTool,
-  host,
   menuActions,
-  canvas,
   modeButtons,
 });
 

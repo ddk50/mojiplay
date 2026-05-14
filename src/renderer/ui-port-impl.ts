@@ -18,6 +18,12 @@ export class ElectronUIPort implements UIPort {
     return await window.electronAPI.confirmDiscard(message);
   }
 
+  async confirmYesNo(message: string): Promise<boolean> {
+    // 破壊的操作の確認は browser native confirm() で十分 (OS native dialog 経由にする
+    // motivation が無い)。将来 IPC 化したくなったら electronAPI.confirmYesNo を足す。
+    return Promise.resolve(window.confirm(message));
+  }
+
   setNativeDirty(dirty: boolean): void {
     void window.electronAPI?.setDirty?.(dirty);
   }

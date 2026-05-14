@@ -23,9 +23,7 @@ import { buildPointerInput } from '../renderer/canvas-coords';
 import { drawAnchorOverlay } from '../renderer/anchor-overlay';
 import { syncToolbarToSelection, setRotationInput } from '../renderer/toolbar-sync';
 import { getUpperCanvasEl } from '../renderer/fabric-internals';
-
-const MIN_ZOOM = 0.1;
-const MAX_ZOOM = 20;
+import { zoomCanvasByWheel } from '../renderer/zoom-canvas-by-wheel';
 
 export class CanvasInputControllerImpl implements CanvasInputController {
   private readonly state: State;
@@ -100,13 +98,12 @@ export class CanvasInputControllerImpl implements CanvasInputController {
   readonly onCanvasMouseWheel = (e: fabric.IEvent): void => {
     const evt = e.e as WheelEvent;
     if (!evt.altKey) return;
-
-    let zoom = this.canvas.getZoom();
-    zoom *= Math.pow(0.999, evt.deltaY);
-    zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
-
-    this.canvas.zoomToPoint({ x: evt.offsetX, y: evt.offsetY }, zoom);
-    this.onZoomChanged();
+    zoomCanvasByWheel(
+      this.state,
+      evt.deltaY,
+      { x: evt.offsetX, y: evt.offsetY },
+      this.onZoomChanged,
+    );
     evt.preventDefault();
     evt.stopPropagation();
   };

@@ -217,6 +217,14 @@ export interface State {
    */
   getZoom(): number;
 
+  /**
+   * focal point を中心に zoom を設定する (= canvas.zoomToPoint 相当)。camera 層の
+   * 操作なので history には乗らない。
+   * @param zoom 新しい zoom 倍率 (clamp は呼び側で済ませる前提)
+   * @param focal screen 座標 (canvas DOM の origin 基準) の zoom 中心
+   */
+  zoomToPoint(zoom: number, focal: { x: number; y: number }): void;
+
   /** 選択中の object をすべて削除。history に compound objectDeleted を push。 */
   removeActiveObjects(): void;
 
@@ -251,6 +259,13 @@ export interface State {
   exportActiveAsPngDataUrl(
     multiplier: number,
   ): { dataUrl: string; width: number; height: number } | null;
+
+  /**
+   * canvas 全体を PNG dataURL に export する。selection は事前に解除する
+   * (selection bracket が PNG に焼き込まれないように)。
+   * @param multiplier 解像度倍率 (= 通常 2)
+   */
+  exportCanvasAsPngDataUrl(multiplier: number): string;
 
   // ── debug ──
 

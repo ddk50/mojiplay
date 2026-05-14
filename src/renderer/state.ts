@@ -34,7 +34,12 @@ import { Path } from '../core/path/path';
 import { fromFabricPath, toFabricPath } from './path-adapter';
 import { logger, fmtObj } from './logger';
 import { generateGroupId } from './group-id';
-import { outlineTextToPath } from './outline-conversion';
+import {
+  outlineTextToPath,
+  type OutlineTextProps,
+  type OutlinedPathSpec,
+} from '../usecases/outline-text-to-path';
+import type { FontProvider } from '../usecases/font-provider-interface';
 import { exportObjectToPngDataUrl } from './copy-export';
 import {
   getUpperCanvasEl,
@@ -67,6 +72,7 @@ export class State implements StateContract {
   private readonly canvas: fabric.Canvas;
   private readonly history: History;
   private readonly upperCanvas: HTMLCanvasElement;
+  private readonly fontProvider: FontProvider;
 
   // ObjectHandle canonical 化キャッシュ。
   // SelectGroupTool は alreadyExpanded 判定で identity (===) を使うため、
@@ -91,10 +97,11 @@ export class State implements StateContract {
   // Controller 側の Tool dispatch / button class 切替は依然 Controller の責務。
   private currentMode: Mode = 'select-group';
 
-  constructor(canvas: fabric.Canvas, options: CreateStateOptions = {}) {
+  constructor(canvas: fabric.Canvas, fontProvider: FontProvider, options: CreateStateOptions = {}) {
     this.canvas = canvas;
     this.history = new History({ max: options.historyMax ?? 100 });
     this.upperCanvas = getUpperCanvasEl(canvas);
+    this.fontProvider = fontProvider;
 
     // fabric event hook (mouse:down で before snapshot capture、object:modified で
     // fabric-driven な transform を Command 化して history に push、
@@ -324,6 +331,10 @@ export class State implements StateContract {
     return this.canvas.getZoom() || 1;
   }
 
+  zoomToPoint(zoom: number, focal: { x: number; y: number }): void {
+    this.canvas.zoomToPoint(focal, zoom);
+  }
+
   removeActiveObjects(): void {
     const selected = this.canvas.getActiveObjects();
     if (!selected.length) return;
@@ -471,7 +482,11 @@ export class State implements StateContract {
     this.canvas.discardActiveObject();
 
     const conversions = await Promise.all(
-      targets.map(async (ft) => ({ ft, path: await outlineTextToPath(ft) })),
+      targets.map(async (ft) => {
+        const props = extractOutlineTextProps(ft);
+        const spec = await outlineTextToPath(props, this.fontProvider);
+        return { ft, path: spec ? this.constructFabricPathFromSpec(spec) : null };
+      }),
     );
 
     const succeeded = conversions.filter((x) => x.path) as Array<{
@@ -525,6 +540,37 @@ export class State implements StateContract {
     return { succeeded: succeeded.length, failedChars, failedFamilies };
   }
 
+  /** OutlinedPathSpec から fabric.Path を構築 + ObjectId 発行 + debug log。
+   *  outlineTextToPath use case が返す pure data spec を、framework 側 (fabric.Path
+   *  + ensureObjectId) に橋渡しするのが State の責務。 */
+  private constructFabricPathFromSpec(spec: OutlinedPathSpec): fabric.Path {
+    const p = new fabric.Path(spec.pathData, {
+      left: spec.left,
+      top: spec.top,
+      fill: spec.fill,
+      angle: spec.angle,
+      scaleX: spec.scaleX,
+      scaleY: spec.scaleY,
+      selectable: spec.selectable,
+      evented: spec.evented,
+      hasControls: false,
+      hasBorders: true,
+    } as fabric.IPathOptions);
+    p.data = { ...spec.data };
+    ensureObjectId(p, 'path');
+
+    // デバッグ: fabric が実際に保持している値をダンプ。
+    const po = getPathOffset(p);
+    const rect = p.getBoundingRect(true, true);
+    logger.debug(
+      `[outline] fabric.Path post-init: p.left=${p.left} p.top=${p.top}` +
+        ` p.width=${p.width} p.height=${p.height}` +
+        ` pathOffset=(${po?.x},${po?.y})` +
+        ` boundingRect=(${rect.left.toFixed(2)},${rect.top.toFixed(2)},${rect.width.toFixed(2)},${rect.height.toFixed(2)})`,
+    );
+    return p;
+  }
+
   exportActiveAsPngDataUrl(
     multiplier: number,
   ): { dataUrl: string; width: number; height: number } | null {
@@ -532,6 +578,16 @@ export class State implements StateContract {
     if (!active) return null;
     logger.debug(`[copy] export active=${fmtObj(active)} multiplier=${multiplier}`);
     return exportObjectToPngDataUrl(active, multiplier);
+  }
+
+  exportCanvasAsPngDataUrl(multiplier: number): string {
+    this.canvas.discardActiveObject();
+    this.canvas.renderAll();
+    return this.canvas.toDataURL({
+      format: 'png',
+      multiplier,
+      enableRetinaScaling: true,
+    });
   }
 
   // ===== 高レベル handler 用ヘルパ =====
@@ -912,5 +968,26 @@ export class State implements StateContract {
         ` startX=${startX} startY=${startY}` +
         ` vt=[${vt?.map((n) => n.toFixed(3)).join(',')}] zoom=${this.canvas.getZoom()}`,
     );
+  };
+}
+
+// fabric.Text → outlineTextToPath use case が要求する pure data props への抽出。
+// renderer/ に住む (= fabric を知る) ことで、use case 側を fabric 不知に保てる。
+function extractOutlineTextProps(ft: fabric.Text): OutlineTextProps {
+  return {
+    text: ft.text || '',
+    left: ft.left ?? 0,
+    top: ft.top ?? 0,
+    fontFamily: ft.fontFamily || 'Arial',
+    fontWeight: ft.fontWeight,
+    fontStyle: ft.fontStyle,
+    fontSize: (ft.fontSize as number) || 72,
+    fill: ft.fill as string | undefined,
+    angle: ft.angle ?? 0,
+    scaleX: (ft.scaleX as number) ?? 1,
+    scaleY: (ft.scaleY as number) ?? 1,
+    selectable: ft.selectable,
+    evented: ft.evented,
+    data: ft.data,
   };
 }

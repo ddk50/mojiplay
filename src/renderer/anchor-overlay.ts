@@ -7,13 +7,13 @@
 // 設計判断:
 //   - state + selectCharTool への参照を closure で保持。CanvasInputController が
 //     hook (after:render) する。
-//   - DPI スケーリング: contextTop は retina 対応のため getRetinaScaling を掛ける
-//     必要あり (詳細は CLAUDE.md「DPI スケーリング」)。
+//   - DPI スケーリング: contextTop は retina 対応のため canvas.getRetinaScaling() を
+//     掛ける必要あり (詳細は CLAUDE.md「DPI スケーリング」)。
 
 import type { State } from '../core/state-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
 import { computeOverlayLayout } from '../core/path/overlay-layout';
-import { getContextTop, getRetinaScaling } from './fabric-internals';
+import { getContextTop } from './fabric-internals';
 
 const ANCHOR_MARKER_PX = 7;
 const ANCHOR_FILL = '#ffffff';
@@ -50,7 +50,7 @@ export function drawAnchorOverlay(
   const hCache = layout.handles;
 
   ctx.save();
-  const retina = getRetinaScaling(canvas);
+  const retina = canvas.getRetinaScaling();
   ctx.setTransform(retina, 0, 0, retina, 0, 0);
 
   // Pass 1: ハンドル線 (最背面)

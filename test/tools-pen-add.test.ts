@@ -5,10 +5,6 @@
 // で観測する。FakePathHandle の internal counter (finalizeCount 等) には依存しない。
 // hover カーソルだけは fake DOM stand-in (canvas.upperCanvasEl.style.cursor) で観測。
 
-jest.mock('../src/renderer/outline-conversion', () => ({
-  outlineTextToPath: jest.fn(async () => null),
-}));
-
 import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 
 installFabricStub();
@@ -18,14 +14,14 @@ import type { DocumentSnapshot } from '../src/core/document/snapshot';
 import { State } from '../src/renderer/state';
 import { PenAddTool } from '../src/usecases/tools/pen-add-tool';
 import { toFabricPath } from '../src/renderer/path-adapter';
-import { pointer } from './fakes';
+import { pointer, NullFontProvider } from './fakes';
 
 async function setupWithPath(commands: ReadonlyArray<PathCommand>): Promise<{
   state: State;
   fabricCanvas: FakeFabricCanvas;
 }> {
   const fabricCanvas = new FakeFabricCanvas();
-  const state = new State(fabricCanvas as never);
+  const state = new State(fabricCanvas as never, new NullFontProvider());
   const snapshot: DocumentSnapshot = {
     format: 'mojiplay',
     version: 1,

@@ -1,21 +1,30 @@
-// MenuActionRegistry: id → MenuAction の dispatch table。
+// MenuActionRegistry: id → MenuAction の dispatch table を構築する factory。
 //
-// app.ts の旧 handleMenuAction は switch 文だったが、Registry にすると Controller 側
-// (KeyboardController / MenuController) が `registry.execute(id)` の 1 行で済む。
-// 新しいメニュー追加も registry の factory 1 か所に追加するだけになる。
+// 中身は「ID 文字列 → 既存 use case 関数 + DI された依存」の wiring (= no logic)。
+// CA 上は Composition Root (= renderer.ts) の sibling。Controller (event → ID) と
+// Use Case (ID 後の orchestration) の間を繋ぐ "shared dispatch table" で、それ自体
+// は Use Case でも Controller でもない。
 //
-// 構築は createMenuActionRegistry({ state, ui, fileIO, host }) factory で行う。
-// 各 MenuAction は対応する free function (selectAll / doCopy 等) や Interactor method
-// (fileIO.saveCurrent 等) を呼ぶ thin wrapper として実装する。
+// interface (MenuAction / MenuActionRegistry) は `usecases/menu/` に port として
+// 残してある (= Controller 側は contract のみに依存)。本ファイルは concrete factory
+// なので Composition Root と並べた top-level 配置。
+//
+// 各 MenuAction は対応する free function (selectAll / doCopy 等) や Interactor
+// method (fileIO.saveCurrent 等) を呼ぶ thin wrapper として実装する。
 
-import type { MenuAction } from './menu-action-interface';
-import type { MenuActionRegistry, MenuActionRegistryDeps } from './menu-action-registry-interface';
+import type { MenuAction } from './usecases/menu/menu-action-interface';
+import type {
+  MenuActionRegistry,
+  MenuActionRegistryDeps,
+} from './usecases/menu/menu-action-registry-interface';
 
-import { selectAll } from './select-all';
-import { deleteSelection } from './delete-selection';
-import { duplicateSelection } from './duplicate-selection';
-import { doCopy } from './copy-selection-as-png';
-import { outlineSelection } from './outline-selection';
+import { selectAll } from './usecases/menu/select-all';
+import { deleteSelection } from './usecases/menu/delete-selection';
+import { duplicateSelection } from './usecases/menu/duplicate-selection';
+import { doCopy } from './usecases/menu/copy-selection-as-png';
+import { outlineSelection } from './usecases/menu/outline-selection';
+import { exportCanvasAsPng } from './usecases/menu/export-canvas-as-png';
+import { clearAllWithConfirm } from './usecases/menu/clear-all';
 
 export function createMenuActionRegistry(deps: MenuActionRegistryDeps): MenuActionRegistry {
   const { state, ui, fileIO, host } = deps;
@@ -48,6 +57,8 @@ export function createMenuActionRegistry(deps: MenuActionRegistryDeps): MenuActi
     { id: 'file-open', execute: () => fileIO.openFile() },
     { id: 'file-save', execute: () => fileIO.saveCurrent() },
     { id: 'file-save-as', execute: () => fileIO.saveAs() },
+    { id: 'export-canvas-png', execute: () => exportCanvasAsPng(state, host, ui) },
+    { id: 'clear-all', execute: () => clearAllWithConfirm(state, ui) },
   ];
 
   const map = new Map<string, MenuAction>(actions.map((a) => [a.id, a]));
