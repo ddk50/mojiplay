@@ -29,9 +29,8 @@ src/
 │   │   ├── tool-interface.ts   # Tool / PointerInput 等
 │   │   └── *-tool.ts           # 各 Tool 実装
 │   ├── menu/             # Menu/keyboard-triggered
-│   │   ├── menu-action-interface.ts          # MenuAction
-│   │   ├── menu-action-registry-interface.ts # MenuActionRegistry
-│   │   ├── menu-action-registry.ts           # createMenuActionRegistry factory
+│   │   ├── menu-action-interface.ts          # MenuAction (port)
+│   │   ├── menu-action-registry-interface.ts # MenuActionRegistry (port)
 │   │   ├── file-io-interactor.ts             # Save/Open orchestration
 │   │   └── select-all.ts, ... (各 free function)
 │   ├── ui-port-interface.ts    # UIPort: toast / dialog / 画像 clipboard
@@ -52,10 +51,11 @@ src/
 │   ├── electron-host-shell.ts  # ElectronHostShell (window.electronAPI 集約)
 │   ├── font-provider-fontkit.ts  # FontkitFontProvider (FontProvider port impl)
 │   └── ...               # logger, toast, copy-export, anchor-overlay, switch-mode (camera) 等
-├── main.ts               # Frameworks & Drivers: Electron main process Composition Root
-├── preload.ts            # Frameworks & Drivers: Electron preload (contextBridge)
-├── renderer.ts           # Frameworks & Drivers: Electron renderer Composition Root (DI 容器)
-└── globals/              # ambient .d.ts (Window 拡張)
+├── main.ts                  # Frameworks & Drivers: Electron main process Composition Root
+├── preload.ts               # Frameworks & Drivers: Electron preload (contextBridge)
+├── renderer.ts              # Frameworks & Drivers: Electron renderer Composition Root (DI 容器)
+├── menu-action-registry.ts  # Composition Wiring: id → use case dispatch table factory
+└── globals/                 # ambient .d.ts (Window 拡張)
 ```
 
 | dir / file                               | CA 用語                                 | 方向        | fabric/DOM/Electron  |

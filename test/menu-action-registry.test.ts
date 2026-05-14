@@ -9,7 +9,7 @@ installFabricStub();
 
 import { State } from '../src/renderer/state';
 import { NullFontProvider } from './fakes';
-import { createMenuActionRegistry } from '../src/usecases/menu/menu-action-registry';
+import { createMenuActionRegistry } from '../src/menu-action-registry';
 import type { MenuActionRegistry } from '../src/usecases/menu/menu-action-registry-interface';
 import type { UIPort, DiscardChoice } from '../src/usecases/ui-port-interface';
 import type { HostShell } from '../src/usecases/host-shell-interface';

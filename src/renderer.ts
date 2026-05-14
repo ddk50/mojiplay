@@ -31,7 +31,7 @@ import { ElectronUIPort } from './renderer/ui-port-impl';
 import { ElectronHostShell } from './renderer/electron-host-shell';
 import { FileIOInteractor } from './usecases/menu/file-io-interactor';
 import { FileSystemDocumentRepository } from './repository/file-system-document';
-import { createMenuActionRegistry } from './usecases/menu/menu-action-registry';
+import { createMenuActionRegistry } from './menu-action-registry';
 import type { MenuActionRegistry } from './usecases/menu/menu-action-registry-interface';
 import { buildToolbar } from './renderer/toolbar';
 import { currentTextProps } from './renderer/font-current';
