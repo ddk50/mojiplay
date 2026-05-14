@@ -5,16 +5,13 @@
 //   - zoomCanvasByWheel は real State + fabric stub で integration test (zoomToPoint
 //     が呼ばれる + onZoomChanged callback が発火する)
 
-jest.mock('../src/renderer/outline-conversion', () => ({
-  outlineTextToPath: jest.fn(async () => null),
-}));
-
 import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 
 installFabricStub();
 
-import { computeZoomFromWheel, zoomCanvasByWheel } from '../src/usecases/menu/zoom-canvas-by-wheel';
+import { computeZoomFromWheel, zoomCanvasByWheel } from '../src/renderer/zoom-canvas-by-wheel';
 import { State } from '../src/renderer/state';
+import { NullFontProvider } from './fakes';
 
 describe('computeZoomFromWheel (pure)', () => {
   test('deltaY=0 で zoom が変わらない', () => {
@@ -48,7 +45,7 @@ describe('computeZoomFromWheel (pure)', () => {
 describe('zoomCanvasByWheel (orchestration)', () => {
   function setup(): { state: State; canvas: FakeFabricCanvas; zoomChangedCount: number } {
     const canvas = new FakeFabricCanvas();
-    const state = new State(canvas as never);
+    const state = new State(canvas as never, new NullFontProvider());
     return { state, canvas, zoomChangedCount: 0 };
   }
 

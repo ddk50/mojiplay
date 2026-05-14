@@ -5,15 +5,12 @@
 // 「createTextAt が呼ばれたか」を peek するのではなく、「呼ばれた結果として canvas に
 // IText が生成されているか」「位置とフォントが反映されているか」を見る。
 
-jest.mock('../src/renderer/outline-conversion', () => ({
-  outlineTextToPath: jest.fn(async () => null),
-}));
-
 import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 
 installFabricStub();
 
 import { State } from '../src/renderer/state';
+import { NullFontProvider } from './fakes';
 import { TextTool } from '../src/usecases/tools/text-tool';
 import type { TextCreateProps } from '../src/core/state-interface';
 
@@ -26,7 +23,7 @@ const PROPS: TextCreateProps = {
 };
 
 function setup() {
-  const state = new State(new FakeFabricCanvas() as never);
+  const state = new State(new FakeFabricCanvas() as never, new NullFontProvider());
   return { state };
 }
 

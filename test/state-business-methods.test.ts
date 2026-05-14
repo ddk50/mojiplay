@@ -4,20 +4,17 @@
 // 検証方針: real `class State` (renderer/state.ts) に fabric stub を渡し、
 // state の public API (toSnapshot / linearizeHistory / getCurrentMode 等) で結果を観測する。
 
-jest.mock('../src/renderer/outline-conversion', () => ({
-  outlineTextToPath: jest.fn(async () => null),
-}));
-
 import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 
 installFabricStub();
 
 import { State } from '../src/renderer/state';
+import { NullFontProvider } from './fakes';
 import type { Mode } from '../src/core/state-interface';
 
 function setupWithText(): { state: State; canvas: FakeFabricCanvas } {
   const canvas = new FakeFabricCanvas();
-  const state = new State(canvas as never);
+  const state = new State(canvas as never, new NullFontProvider());
   return { state, canvas };
 }
 

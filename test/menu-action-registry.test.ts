@@ -4,14 +4,11 @@
 // MenuAction は thin wrapper なので、execute() 経由で対応する dependency の method が
 // 呼ばれることを確認すれば十分。
 
-jest.mock('../src/renderer/outline-conversion', () => ({
-  outlineTextToPath: jest.fn(async () => null),
-}));
-
 import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 installFabricStub();
 
 import { State } from '../src/renderer/state';
+import { NullFontProvider } from './fakes';
 import { createMenuActionRegistry } from '../src/usecases/menu/menu-action-registry';
 import type { MenuActionRegistry } from '../src/usecases/menu/menu-action-registry-interface';
 import type { UIPort, DiscardChoice } from '../src/usecases/ui-port-interface';
@@ -98,7 +95,7 @@ function setup(): {
   host: FakeHost;
   fileIO: FakeFileIO;
 } {
-  const state = new State(new FakeFabricCanvas() as never);
+  const state = new State(new FakeFabricCanvas() as never, new NullFontProvider());
   const ui = new FakeUI();
   const host = new FakeHost();
   const fileIO = new FakeFileIO();

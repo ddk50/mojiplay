@@ -15,7 +15,7 @@ import type { Tool } from '../usecases/tools/tool-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
 import type { MenuActionRegistry } from '../usecases/menu/menu-action-registry-interface';
 import type { ToolbarController, ToolbarControllerDeps } from './toolbar-interface';
-import { switchMode } from '../usecases/menu/switch-mode';
+import { switchMode } from '../renderer/switch-mode';
 import { fontFamilySel, fontStyleSel, populateStyleList } from '../renderer/font-enumeration';
 import { currentFontStyle } from '../renderer/font-current';
 

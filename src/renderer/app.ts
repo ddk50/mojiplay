@@ -20,6 +20,7 @@ import { PenAddTool } from '../usecases/tools/pen-add-tool';
 import { PenRemoveTool } from '../usecases/tools/pen-remove-tool';
 
 import { State } from './state';
+import { FontkitFontProvider } from './font-provider-fontkit';
 import { ElectronUIPort } from './ui-port-impl';
 import { ElectronHostShell } from './electron-host-shell';
 import { FileIOInteractor } from '../usecases/menu/file-io-interactor';
@@ -55,7 +56,8 @@ const canvas = new fabric.Canvas('main-canvas', {
   selectionDashArray: [5, 3],
 });
 
-const state = new State(canvas, { historyMax: 100 });
+const fontProvider = new FontkitFontProvider();
+const state = new State(canvas, fontProvider, { historyMax: 100 });
 const host = new ElectronHostShell();
 const ui = new ElectronUIPort();
 const repo = new FileSystemDocumentRepository();

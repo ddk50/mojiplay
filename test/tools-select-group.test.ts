@@ -23,15 +23,13 @@
 // State は outline-conversion 経由で font-enumeration を import し、後者は top-level で
 // document.getElementById を呼ぶため testEnvironment: 'node' で爆発する。SelectGroup
 // path では outline-conversion を一切触らないので module ごと stub する。
-jest.mock('../src/renderer/outline-conversion', () => ({
-  outlineTextToPath: jest.fn(async () => null),
-}));
 
 import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 
 installFabricStub();
 
 import { State } from '../src/renderer/state';
+import { NullFontProvider } from './fakes';
 import { SelectGroupTool } from '../src/usecases/tools/select-group-tool';
 import type { DocumentSnapshot } from '../src/core/document/snapshot';
 
@@ -55,7 +53,7 @@ async function seedTexts(state: State, groupIds: ReadonlyArray<string | undefine
 }
 
 function setup() {
-  const state = new State(new FakeFabricCanvas() as never);
+  const state = new State(new FakeFabricCanvas() as never, new NullFontProvider());
   const tool = new SelectGroupTool();
   return { state, tool };
 }
@@ -139,7 +137,7 @@ describe('SelectGroupTool', () => {
 
   test('selection event 再発火下でも 1 ステップで再帰が止まる', async () => {
     const fabricCanvas = new FakeFabricCanvas();
-    const state = new State(fabricCanvas as never);
+    const state = new State(fabricCanvas as never, new NullFontProvider());
     const tool = new SelectGroupTool();
 
     await seedTexts(state, ['g1', 'g1', 'g1']);

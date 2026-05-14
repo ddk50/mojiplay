@@ -13,10 +13,6 @@
 //   - applySnapshot 後に dirty にならない (load 後 baseline 化)
 //   - save → load の round-trip (real State.toSnapshot/applySnapshot 経由)
 
-jest.mock('../src/renderer/outline-conversion', () => ({
-  outlineTextToPath: jest.fn(async () => null),
-}));
-
 import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 
 installFabricStub();
@@ -28,6 +24,7 @@ import type { UIPort, DiscardChoice } from '../src/usecases/ui-port-interface';
 import type { Command, ObjectSnapshot } from '../src/core/history/types';
 import type { ObjectId } from '../src/core/object-id';
 import { State } from '../src/renderer/state';
+import { NullFontProvider } from './fakes';
 
 // ── 外部 boundary の test double ─────────────────────────────────────────
 //
@@ -148,7 +145,7 @@ function makeController(): {
   repo: FakeRepo;
   ui: FakeUI;
 } {
-  const state = new State(new FakeFabricCanvas() as never);
+  const state = new State(new FakeFabricCanvas() as never, new NullFontProvider());
   const repo = new FakeRepo();
   const ui = new FakeUI();
   const ctrl = new FileIOInteractor(state, repo, ui, basename);
@@ -439,14 +436,14 @@ describe('FileIOInteractor', () => {
       const repo = new FakeRepo();
 
       // インスタンス A: 内容を入れて保存
-      const stateA = new State(new FakeFabricCanvas() as never);
+      const stateA = new State(new FakeFabricCanvas() as never, new NullFontProvider());
       const ctrlA = new FileIOInteractor(stateA, repo, new FakeUI(), basename);
       await loadCanvasContent(stateA, SAMPLE_OBJECTS);
       const savedSnapshot = stateA.toSnapshot();
       expect(await ctrlA.saveCurrent()).toBe(true);
 
       // インスタンス B (= 別 process / 再起動相当): 同じ repo から開く
-      const stateB = new State(new FakeFabricCanvas() as never);
+      const stateB = new State(new FakeFabricCanvas() as never, new NullFontProvider());
       const ctrlB = new FileIOInteractor(stateB, repo, new FakeUI(), basename);
       await ctrlB.openFile();
 
@@ -551,13 +548,13 @@ describe('FileIOInteractor', () => {
 
       test('outlined path のみの canvas が同一 snapshot で復元される', async () => {
         const repo = new FakeRepo();
-        const stateA = new State(new FakeFabricCanvas() as never);
+        const stateA = new State(new FakeFabricCanvas() as never, new NullFontProvider());
         const ctrlA = new FileIOInteractor(stateA, repo, new FakeUI(), basename);
         await loadCanvasContent(stateA, SAMPLE_PATH_OBJECTS);
         const savedSnapshot = stateA.toSnapshot();
         expect(await ctrlA.saveCurrent()).toBe(true);
 
-        const stateB = new State(new FakeFabricCanvas() as never);
+        const stateB = new State(new FakeFabricCanvas() as never, new NullFontProvider());
         const ctrlB = new FileIOInteractor(stateB, repo, new FakeUI(), basename);
         await ctrlB.openFile();
 
@@ -566,12 +563,12 @@ describe('FileIOInteractor', () => {
 
       test('open 後も data.outlined と data.groupId が保持される (アンカー編集可能性 / 単語性の維持)', async () => {
         const repo = new FakeRepo();
-        const stateA = new State(new FakeFabricCanvas() as never);
+        const stateA = new State(new FakeFabricCanvas() as never, new NullFontProvider());
         const ctrlA = new FileIOInteractor(stateA, repo, new FakeUI(), basename);
         await loadCanvasContent(stateA, SAMPLE_PATH_OBJECTS);
         await ctrlA.saveCurrent();
 
-        const stateB = new State(new FakeFabricCanvas() as never);
+        const stateB = new State(new FakeFabricCanvas() as never, new NullFontProvider());
         const ctrlB = new FileIOInteractor(stateB, repo, new FakeUI(), basename);
         await ctrlB.openFile();
 
@@ -593,12 +590,12 @@ describe('FileIOInteractor', () => {
 
       test('path commands 配列 (M/C/L/Z) が損失なく復元される', async () => {
         const repo = new FakeRepo();
-        const stateA = new State(new FakeFabricCanvas() as never);
+        const stateA = new State(new FakeFabricCanvas() as never, new NullFontProvider());
         const ctrlA = new FileIOInteractor(stateA, repo, new FakeUI(), basename);
         await loadCanvasContent(stateA, [SAMPLE_PATH_OBJECTS[0]]);
         await ctrlA.saveCurrent();
 
-        const stateB = new State(new FakeFabricCanvas() as never);
+        const stateB = new State(new FakeFabricCanvas() as never, new NullFontProvider());
         const ctrlB = new FileIOInteractor(stateB, repo, new FakeUI(), basename);
         await ctrlB.openFile();
 
@@ -615,7 +612,7 @@ describe('FileIOInteractor', () => {
 
       test('text と outlined path が混在する canvas も同一 snapshot で復元される', async () => {
         const repo = new FakeRepo();
-        const stateA = new State(new FakeFabricCanvas() as never);
+        const stateA = new State(new FakeFabricCanvas() as never, new NullFontProvider());
         const ctrlA = new FileIOInteractor(stateA, repo, new FakeUI(), basename);
         await loadCanvasContent(stateA, [
           {
@@ -632,7 +629,7 @@ describe('FileIOInteractor', () => {
         const savedSnapshot = stateA.toSnapshot();
         await ctrlA.saveCurrent();
 
-        const stateB = new State(new FakeFabricCanvas() as never);
+        const stateB = new State(new FakeFabricCanvas() as never, new NullFontProvider());
         const ctrlB = new FileIOInteractor(stateB, repo, new FakeUI(), basename);
         await ctrlB.openFile();
 

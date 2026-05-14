@@ -6,10 +6,6 @@
 //     test。tool の moveSelectedAnchorsBy が正しい delta で呼ばれるか / no-selection
 //     時に no-op + false return するかを観測する
 
-jest.mock('../src/renderer/outline-conversion', () => ({
-  outlineTextToPath: jest.fn(async () => null),
-}));
-
 import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 
 installFabricStub();
@@ -21,6 +17,7 @@ import {
   type ArrowDirection,
 } from '../src/usecases/menu/move-selected-anchors-by-arrow';
 import { State } from '../src/renderer/state';
+import { NullFontProvider } from './fakes';
 import type { SelectCharTool } from '../src/usecases/tools/select-char-tool';
 
 describe('arrowKeyToDirection (pure)', () => {
@@ -63,7 +60,7 @@ class FakeSelectCharTool {
 describe('moveSelectedAnchorsByArrow (orchestration)', () => {
   function setup(selectedCount: number): { state: State; tool: FakeSelectCharTool } {
     const canvas = new FakeFabricCanvas();
-    const state = new State(canvas as never);
+    const state = new State(canvas as never, new NullFontProvider());
     const tool = new FakeSelectCharTool();
     tool.selectedCount = selectedCount;
     return { state, tool };

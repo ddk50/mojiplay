@@ -23,7 +23,7 @@ import { buildPointerInput } from '../renderer/canvas-coords';
 import { drawAnchorOverlay } from '../renderer/anchor-overlay';
 import { syncToolbarToSelection, setRotationInput } from '../renderer/toolbar-sync';
 import { getUpperCanvasEl } from '../renderer/fabric-internals';
-import { zoomCanvasByWheel } from '../usecases/menu/zoom-canvas-by-wheel';
+import { zoomCanvasByWheel } from '../renderer/zoom-canvas-by-wheel';
 
 export class CanvasInputControllerImpl implements CanvasInputController {
   private readonly state: State;
