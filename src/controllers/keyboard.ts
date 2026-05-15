@@ -14,7 +14,7 @@
 
 import type { State } from '../core/state-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
-import type { MenuActionRegistry } from '../usecases/menu/menu-action-registry-interface';
+import type { MenuActions } from '../menu-action-registry';
 import type { KeyboardController, KeyboardControllerDeps } from './keyboard-interface';
 import {
   arrowKeyToDirection,
@@ -26,7 +26,7 @@ import { matchKeyBinding, type BindingContext } from '../usecases/menu/key-bindi
 export class KeyboardControllerImpl implements KeyboardController {
   private readonly state: State;
   private readonly selectCharTool: SelectCharTool;
-  private readonly menuActions: MenuActionRegistry;
+  private readonly menuActions: MenuActions;
   private readonly canvas: fabric.Canvas;
 
   constructor(deps: KeyboardControllerDeps) {
@@ -114,7 +114,7 @@ export class KeyboardControllerImpl implements KeyboardController {
     if (!binding) return false;
     if (binding.preventDefault !== false) e.preventDefault();
     if (phase === 'capture') e.stopPropagation();
-    void this.menuActions.execute(binding.action);
+    void this.menuActions[binding.action]();
     return true;
   }
 

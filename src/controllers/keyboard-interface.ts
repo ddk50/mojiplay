@@ -5,12 +5,12 @@
 
 import type { State } from '../core/state-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
-import type { MenuActionRegistry } from '../usecases/menu/menu-action-registry-interface';
+import type { MenuActions } from '../menu-action-registry';
 
 export interface KeyboardControllerDeps {
   state: State;
   selectCharTool: SelectCharTool;
-  menuActions: MenuActionRegistry;
+  menuActions: MenuActions;
   canvas: fabric.Canvas;
 }
 

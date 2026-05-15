@@ -6,7 +6,7 @@
 // dirty 通知) にもアクセスするが、ボタン側の購読は他 Controller に委譲。
 
 import type { HostShell, CloseGuardDecision } from '../usecases/host-shell-interface';
-import type { FileIOInteractor } from '../usecases/menu/file-io-interactor';
+import type { FileIOInteractor } from '../usecases/menu/file-io-interactor-interface';
 import type { ViewController, ViewControllerDeps } from './view-interface';
 import { updateWindowTitle } from '../renderer/window-title';
 

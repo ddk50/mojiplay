@@ -4,6 +4,11 @@
 // マッピングを宣言的なテーブルに置換。controller は match を 1 行 dispatch するだけ
 // になり、binding table 自体は fabric / DOM 不知の pure data なので単体 test 容易。
 //
+// `action: MenuActionId` で type-checked: typo は compile error、IDE jump-to-def で
+// menu-action-registry.ts の対応 key へ飛べる、rename symbol で全 use site 追従。
+
+import type { MenuActionId } from '../../menu-action-registry';
+//
 // 例外: 矢印キー (アンカー移動) は parameterized (direction + magnitude) で 1 つの
 // menu action に閉じない & precondition (mode + selection) が複雑なので table に
 // 乗せず controller に inline 残す (move-selected-anchors-by-arrow.ts use case 経由)。
@@ -31,8 +36,8 @@ interface BindingMatch {
 export interface KeyBinding {
   readonly match: BindingMatch;
   readonly phase: 'capture' | 'bubble';
-  /** menuActions.execute に渡す action ID。 */
-  readonly action: string;
+  /** menu actions object の key (= menu-action-registry.ts の MenuActionId)。 */
+  readonly action: MenuActionId;
   /**
    * 発火時に preventDefault するか。default true。
    * 例外: delete は browser 標準動作 (Backspace 戻る等) を抑止する必要が無く、

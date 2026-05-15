@@ -13,7 +13,7 @@
 import type { State, Mode, SelectionProps } from '../core/state-interface';
 import type { Tool } from '../usecases/tools/tool-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
-import type { MenuActionRegistry } from '../usecases/menu/menu-action-registry-interface';
+import type { MenuActions } from '../menu-action-registry';
 import type { ToolbarController, ToolbarControllerDeps } from './toolbar-interface';
 import { switchMode } from '../renderer/switch-mode';
 import { fontFamilySel, fontStyleSel, populateStyleList } from '../renderer/font-enumeration';
@@ -23,7 +23,7 @@ export class ToolbarControllerImpl implements ToolbarController {
   private readonly state: State;
   private readonly tools: Record<Mode, Tool>;
   private readonly selectCharTool: SelectCharTool;
-  private readonly menuActions: MenuActionRegistry;
+  private readonly menuActions: MenuActions;
   private readonly modeButtons: Record<string, HTMLButtonElement>;
 
   // DOM 参照
@@ -96,22 +96,22 @@ export class ToolbarControllerImpl implements ToolbarController {
 
   /** btn-select-all click。 */
   readonly onSelectAllClick = (): void => {
-    void this.menuActions.execute('select-all');
+    void this.menuActions['select-all']();
   };
 
   /** btn-clear click。 */
   readonly onClearClick = (): void => {
-    void this.menuActions.execute('clear-all');
+    void this.menuActions['clear-all']();
   };
 
   /** btn-export click。 */
   readonly onExportClick = (): void => {
-    void this.menuActions.execute('export-canvas-png');
+    void this.menuActions['export-canvas-png']();
   };
 
   /** btn-outline click。 */
   readonly onOutlineClick = (): void => {
-    void this.menuActions.execute('outline');
+    void this.menuActions.outline();
   };
 
   // ── snap config ─────────────────────────────────────────────────────

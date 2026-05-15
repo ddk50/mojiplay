@@ -8,13 +8,13 @@
 // IText 編集中は fabric/Electron の native copy に任せたいので bypass する
 // (= 既存挙動踏襲)。
 
-import type { MenuActionRegistry } from '../usecases/menu/menu-action-registry-interface';
+import { type MenuActions, isMenuActionId } from '../menu-action-registry';
 import type { HostShell } from '../usecases/host-shell-interface';
 import type { MenuController, MenuControllerDeps } from './menu-interface';
 import { initMenuBar } from '../renderer/menu-bar';
 
 export class MenuControllerImpl implements MenuController {
-  private readonly menuActions: MenuActionRegistry;
+  private readonly menuActions: MenuActions;
   private readonly host: HostShell;
   private readonly canvas: fabric.Canvas;
   private unsubscribeCopy: (() => void) | null = null;
@@ -29,9 +29,11 @@ export class MenuControllerImpl implements MenuController {
   //  Public event handlers (= Controller の contract)
   // ====================================================================
 
-  /** HTML メニューバーの data-action click から呼ばれる (initMenuBar 経由)。 */
+  /** HTML メニューバーの data-action click から呼ばれる (initMenuBar 経由)。
+   *  data-action は HTML 側で定義された任意 string なので boundary check で narrow。 */
   readonly onMenuAction = (actionId: string): void => {
-    void this.menuActions.execute(actionId);
+    if (!isMenuActionId(actionId, this.menuActions)) return;
+    void this.menuActions[actionId]();
   };
 
   /** HostShell.onCopyRequest (= Electron native menu の Edit > Copy IPC) から呼ばれる。
@@ -40,7 +42,7 @@ export class MenuControllerImpl implements MenuController {
     this.host.log.debug('[copy] menu-copy IPC received');
     const active = this.canvas.getActiveObject();
     if (active?.type === 'i-text' && (active as fabric.IText).isEditing) return;
-    void this.menuActions.execute('copy');
+    void this.menuActions.copy();
   };
 
   // ====================================================================

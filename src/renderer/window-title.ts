@@ -3,7 +3,7 @@
 // document.title を更新すると Electron の BrowserWindow タイトルバーが追従する
 // (BrowserWindow は title オプション未指定なので HTML の title 要素を採用)。
 
-import type { FileIOInteractor } from '../usecases/menu/file-io-interactor';
+import type { FileIOInteractor } from '../usecases/menu/file-io-interactor-interface';
 
 const TITLE_BASE = 'Font Layout Editor';
 

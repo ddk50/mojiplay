@@ -17,15 +17,9 @@ import type { State } from '../../core/state-interface';
 import type { LoadError } from '../../core/document/snapshot';
 import type { DocumentRepository } from '../../repository/document-interface';
 import type { UIPort } from '../ui-port-interface';
+import type { DocStatus, FileIOInteractor } from './file-io-interactor-interface';
 
-export interface DocStatus {
-  /** 現在のファイル名 (= basename)。未保存なら null。 */
-  fileName: string | null;
-  /** 最後の save / load 以降に state に変更が入っていれば true。 */
-  dirty: boolean;
-}
-
-export class FileIOInteractor {
+export class FileIOInteractorImpl implements FileIOInteractor {
   private currentPath: string | null = null;
   private savedToken: number;
   private saving = false;

@@ -5,13 +5,13 @@
 import type { State, Mode } from '../core/state-interface';
 import type { Tool } from '../usecases/tools/tool-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
-import type { MenuActionRegistry } from '../usecases/menu/menu-action-registry-interface';
+import type { MenuActions } from '../menu-action-registry';
 
 export interface ToolbarControllerDeps {
   state: State;
   tools: Record<Mode, Tool>;
   selectCharTool: SelectCharTool;
-  menuActions: MenuActionRegistry;
+  menuActions: MenuActions;
   /** buildToolbar が生成した mode → button マップ。is-active class 切替に使う。 */
   modeButtons: Record<string, HTMLButtonElement>;
 }

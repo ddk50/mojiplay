@@ -29,10 +29,9 @@ import { State } from './renderer/state';
 import { FontkitFontProvider } from './renderer/font-provider-fontkit';
 import { ElectronUIPort } from './renderer/ui-port-impl';
 import { ElectronHostShell } from './renderer/electron-host-shell';
-import { FileIOInteractor } from './usecases/menu/file-io-interactor';
+import { FileIOInteractorImpl } from './usecases/menu/file-io-interactor';
 import { FileSystemDocumentRepository } from './repository/file-system-document';
-import { createMenuActionRegistry } from './menu-action-registry';
-import type { MenuActionRegistry } from './usecases/menu/menu-action-registry-interface';
+import { makeMenuActions, type MenuActions } from './menu-action-registry';
 import { buildToolbar } from './renderer/toolbar';
 import { currentTextProps } from './renderer/font-current';
 
@@ -74,7 +73,7 @@ function basename(p: string): string {
   return i >= 0 ? p.slice(i + 1) : p;
 }
 
-const fileIO = new FileIOInteractor(state, repo, ui, basename);
+const fileIO = new FileIOInteractorImpl(state, repo, ui, basename);
 
 // ── 2. Tool インスタンスと buildToolbar ────────────────────────────────────
 
@@ -107,7 +106,7 @@ const modeButtons = buildToolbar(
 
 // ── 3. MenuActionRegistry ─────────────────────────────────────────────────
 
-const menuActions: MenuActionRegistry = createMenuActionRegistry({ state, ui, fileIO, host });
+const menuActions: MenuActions = makeMenuActions({ state, ui, fileIO, host });
 
 // ── 4. Controllers ────────────────────────────────────────────────────────
 // 変数の型は interface 側を使う (= consumer は contract のみに依存)。
