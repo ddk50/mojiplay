@@ -76,3 +76,31 @@ export type MenuActionId = keyof MenuActions;
 export function isMenuActionId(s: string, m: MenuActions): s is MenuActionId {
   return s in m;
 }
+
+/**
+ * DOM 内の `data-action` 属性を全スキャンし、対応する MenuAction が存在しない
+ * (= orphan = typo 等) を console.warn する。startup 時に renderer.ts から 1 回呼ぶ。
+ *
+ * 型システムが HTML を見えないため、HTML ↔ MenuActions の不整合は通常 silent
+ * no-op になる。本 validator が起動時に loud に検出する。
+ */
+export function validateMenuActionWiring(
+  menuActions: MenuActions,
+  root: ParentNode = document,
+): void {
+  const buttons = root.querySelectorAll<HTMLElement>('[data-action]');
+  const orphans: string[] = [];
+  for (const btn of Array.from(buttons)) {
+    const id = btn.dataset.action;
+    if (!id) continue;
+    if (!isMenuActionId(id, menuActions)) {
+      orphans.push(`<${btn.tagName.toLowerCase()}> data-action="${id}"`);
+    }
+  }
+  if (orphans.length > 0) {
+    console.warn(
+      `[menu-action wiring] ${orphans.length} orphan data-action(s) in HTML:\n  ` +
+        orphans.join('\n  '),
+    );
+  }
+}

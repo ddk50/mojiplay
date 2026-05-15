@@ -31,7 +31,11 @@ import { ElectronUIPort } from './renderer/ui-port-impl';
 import { ElectronHostShell } from './renderer/electron-host-shell';
 import { FileIOInteractorImpl } from './usecases/menu/file-io-interactor';
 import { FileSystemDocumentRepository } from './repository/file-system-document';
-import { makeMenuActions, type MenuActions } from './menu-action-registry';
+import {
+  makeMenuActions,
+  type MenuActions,
+  validateMenuActionWiring,
+} from './menu-action-registry';
 import { buildToolbar } from './renderer/toolbar';
 import { currentTextProps } from './renderer/font-current';
 
@@ -107,6 +111,7 @@ const modeButtons = buildToolbar(
 // ── 3. MenuActionRegistry ─────────────────────────────────────────────────
 
 const menuActions: MenuActions = makeMenuActions({ state, ui, fileIO, host });
+validateMenuActionWiring(menuActions); // HTML data-action と MenuActions の整合性 startup check
 
 // ── 4. Controllers ────────────────────────────────────────────────────────
 // 変数の型は interface 側を使う (= consumer は contract のみに依存)。
