@@ -12,7 +12,7 @@ export default tseslint.config(
       'out/**',
       'build/**',
       'logs/**',
-      'renderer/vendor/**',
+      'public/vendor/**',
     ],
   },
   {

@@ -4,6 +4,6 @@ release/
 out/
 build/
 logs/
-renderer/vendor/
+public/vendor/
 node_modules/
 package-lock.json

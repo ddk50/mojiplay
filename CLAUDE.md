@@ -92,7 +92,7 @@ src/
 2. `tsc -p tsconfig.renderer.json` (noEmit) → src/renderer.ts + core/usecases/repository/controllers/renderer の typecheck
 3. `node esbuild.renderer.mjs` → src/renderer.ts を entry に renderer 全体を `dist/renderer/bundle.js` (IIFE)
 
-`renderer/index.html` は 3 つの `<script>` のみ: `vendor/fabric.min.js` / `vendor/fontkit.js` / `dist/renderer/bundle.js`。fabric / fontkit は UMD グローバルとして runtime 解決、`allowUmdGlobalAccess: true` で `import` 文無しで参照可能。
+`public/index.html` は 3 つの `<script>` のみ: `vendor/fabric.min.js` / `vendor/fontkit.js` / `dist/renderer/bundle.js`。fabric / fontkit は UMD グローバルとして runtime 解決、`allowUmdGlobalAccess: true` で `import` 文無しで参照可能。
 
 新規 ts ファイル追加時は `tsconfig.renderer.json` の include グロブ (`src/renderer.ts` + `src/{core,usecases,repository,controllers,renderer}/**/*.ts`) に該当することを確認するだけ。`src/globals/electron-api.d.ts` は両 tsconfig 共有で `window.electronAPI` を定義。
 

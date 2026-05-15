@@ -55,7 +55,7 @@ export interface CanvasMouseDownInput {
 // - label:   button の title (= ツールチップ) に表示する人間可読ラベル
 // - iconSvg: button.innerHTML に流す SVG (or 任意の HTML) 文字列。renderer の
 //            CSS class (tool-icon, outline-arrow, pen-icon, pen-nib 等) を参照
-//            するのは許容 (renderer/style.css 側で定義済の package である前提)
+//            するのは許容 (public/style.css 側で定義済の package である前提)
 //
 // 依存方向: tool → renderer の一方通行。tool が UI 表現の文字列を自己完結で
 // 宣言し、renderer (toolbar.ts) は受け取った文字列をそのまま innerHTML に
