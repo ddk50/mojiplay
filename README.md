@@ -46,6 +46,20 @@ npm test
 
 Unit tests run on [Jest](https://jestjs.io/) via [ts-jest](https://kulshekhar.github.io/ts-jest/).
 
+## Lint & format
+
+```bash
+npm run lint           # ESLint
+npm run format:check   # Prettier (verify only)
+npm run format         # Prettier (auto-fix)
+```
+
+Before pushing, make sure all four checks pass:
+
+```bash
+npm run build && npm test && npm run lint && npm run format:check
+```
+
 ## Build a Windows binary
 
 [electron-builder](https://www.electron.build/) is used to produce a portable `.exe` (x64).
