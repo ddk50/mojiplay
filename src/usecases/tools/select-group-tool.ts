@@ -20,15 +20,13 @@ import type {
   CanvasMouseDownInput,
 } from './tool-interface';
 import type { State, ObjectHandle } from '../../core/state-interface';
+import selectGroupToolIcon from './icons/select-group-tool.svg';
 
 export class SelectGroupTool implements Tool {
   readonly descriptor: ToolDescriptor = {
     id: 'select-group',
     label: 'グループ選択/移動 (黒矢印)',
-    iconSvg:
-      '<svg class="tool-icon" viewBox="0 0 14 18" xmlns="http://www.w3.org/2000/svg">' +
-      '<path d="M2,1 L2,14 L5,11 L7.5,16.5 L9.5,15.5 L7,10 L12,10 Z"/>' +
-      '</svg>',
+    iconSvg: selectGroupToolIcon,
   };
 
   onActivate(_state: State): void {

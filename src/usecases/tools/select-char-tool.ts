@@ -31,6 +31,7 @@ import type {
 } from './tool-interface';
 import type { State, PathHandle } from '../../core/state-interface';
 import type { ObjectSnapshot } from '../../core/history/types';
+import selectCharToolIcon from './icons/select-char-tool.svg';
 
 export interface SnapConfig {
   readonly enabled: boolean;
@@ -60,10 +61,7 @@ export class SelectCharTool implements Tool {
   readonly descriptor: ToolDescriptor = {
     id: 'select-char',
     label: '文字選択/カーニング (白矢印)',
-    iconSvg:
-      '<svg class="tool-icon outline-arrow" viewBox="0 0 14 18" xmlns="http://www.w3.org/2000/svg">' +
-      '<path d="M2,1 L2,14 L5,11 L7.5,16.5 L9.5,15.5 L7,10 L12,10 Z"/>' +
-      '</svg>',
+    iconSvg: selectCharToolIcon,
   };
 
   // 既定値は app.ts のトップ初期値と一致させる (pitch=8, threshold=5)。

@@ -22,6 +22,11 @@ const opts = {
   // 開発時の安心感のため minify はしない (Electron は配布前提でも devtools で
   // 読みたい場面が多い)。本番配布で気になったらここで切り替え。
   minify: false,
+  // *.svg を文字列として bundle に埋め込む (Tool descriptor の iconSvg 用)。
+  // 別ファイル管理にしておく方が手元のグラフィックエディタで編集しやすい。
+  loader: {
+    '.svg': 'text',
+  },
   logLevel: 'info',
 };
 

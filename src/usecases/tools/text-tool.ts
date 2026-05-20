@@ -17,6 +17,7 @@ import type {
   CanvasMouseDownInput,
 } from './tool-interface';
 import type { State, TextCreateProps } from '../../core/state-interface';
+import textToolIcon from './icons/text-tool.svg';
 
 type FontPropsProvider = () => TextCreateProps;
 
@@ -24,7 +25,7 @@ export class TextTool implements Tool {
   readonly descriptor: ToolDescriptor = {
     id: 'text',
     label: '文字入力 (T)',
-    iconSvg: '<span style="font-weight:700;font-size:12px;">T</span>',
+    iconSvg: textToolIcon,
   };
 
   constructor(private getFontProps: FontPropsProvider) {}
