@@ -82,7 +82,7 @@ npm run dist:win
 The artifact is written to:
 
 ```
-release/mojiplay-1.0.0-portable-x64.exe
+release/mojiplay-0.1.0-portable-x64.exe
 ```
 
 Copy it to any Windows PC and run — no installer needed.
