@@ -1,10 +1,10 @@
 // HTML ベースのカスタムメニューバー (Claude Desktop 風)
 //
-// ネイティブ Electron メニューの代わりに #menu-bar を開閉する UI ロジック。
+// ネイティブ Electron メニューの代わりに #drawing-menu-bar を開閉する UI ロジック。
 // 実際のアクション処理は呼び出し側 (app.ts の handleMenuAction) に任せる。
 
 export function initMenuBar(handleAction: (action: string) => void): void {
-  const menuItems = document.querySelectorAll('#menu-bar .menu-item');
+  const menuItems = document.querySelectorAll('#drawing-menu-bar .menu-item');
 
   function closeAll(): void {
     menuItems.forEach((mi) => mi.classList.remove('is-open'));
@@ -23,7 +23,7 @@ export function initMenuBar(handleAction: (action: string) => void): void {
 
     // ホバーで切り替え (他メニューが開いている時)
     label.addEventListener('mouseenter', () => {
-      const anyOpen = document.querySelector('#menu-bar .menu-item.is-open');
+      const anyOpen = document.querySelector('#drawing-menu-bar .menu-item.is-open');
       if (anyOpen && anyOpen !== item) {
         closeAll();
         item.classList.add('is-open');
@@ -35,7 +35,7 @@ export function initMenuBar(handleAction: (action: string) => void): void {
   document.addEventListener('click', closeAll);
 
   // アクション実行 (data-action 属性の文字列を呼び出し側にディスパッチ)
-  document.querySelectorAll('#menu-bar .menu-dropdown button[data-action]').forEach((btn) => {
+  document.querySelectorAll('#drawing-menu-bar .menu-dropdown button[data-action]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const action = (btn as HTMLElement).dataset.action;

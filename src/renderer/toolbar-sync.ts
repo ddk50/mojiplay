@@ -5,9 +5,9 @@
 
 import { fontFamilySel, fontStyleSel, populateStyleList, styleValue } from './font-enumeration';
 
-const fontSizeInput = document.getElementById('font-size') as HTMLInputElement;
-const fontColorInput = document.getElementById('font-color') as HTMLInputElement;
-const rotationInput = document.getElementById('rotation') as HTMLInputElement;
+const fontSizeInput = document.getElementById('drawing-font-size') as HTMLInputElement;
+const fontColorInput = document.getElementById('drawing-font-color') as HTMLInputElement;
+const rotationInput = document.getElementById('drawing-rotation') as HTMLInputElement;
 
 export function syncToolbarToSelection(canvas: fabric.Canvas): void {
   const active = canvas.getActiveObject() as (fabric.Object & Partial<fabric.Text>) | null;

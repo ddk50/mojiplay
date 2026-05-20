@@ -37,8 +37,8 @@ export function parseStyle(s: string): StyleInfo {
 
 export const fontsByFamily = new Map<string, StyleInfo[]>();
 
-export const fontFamilySel = document.getElementById('font-family') as HTMLSelectElement;
-export const fontStyleSel = document.getElementById('font-style') as HTMLSelectElement;
+export const fontFamilySel = document.getElementById('drawing-font-family') as HTMLSelectElement;
+export const fontStyleSel = document.getElementById('drawing-font-style') as HTMLSelectElement;
 
 export function styleValue(weight: number, italic: boolean): string {
   return `${weight}|${italic ? 'italic' : 'normal'}`;

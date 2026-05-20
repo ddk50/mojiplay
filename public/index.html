@@ -7,108 +7,160 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div id="menu-bar">
-      <div class="menu-item" data-menu="file">
-        <span class="menu-label">File</span>
-        <div class="menu-dropdown">
-          <button data-action="file-open">開く<span class="shortcut">Ctrl+O</span></button>
-          <div class="menu-separator"></div>
-          <button data-action="file-save">保存<span class="shortcut">Ctrl+S</span></button>
-          <button data-action="file-save-as">
-            別名で保存<span class="shortcut">Ctrl+Shift+S</span>
-          </button>
+    <div id="app-root">
+      <div id="screen-drawing" class="screen is-active">
+        <div id="drawing-menu-bar">
+          <div class="menu-item" data-menu="file">
+            <span class="menu-label">File</span>
+            <div class="menu-dropdown">
+              <button data-action="file-open">開く<span class="shortcut">Ctrl+O</span></button>
+              <div class="menu-separator"></div>
+              <button data-action="file-save">保存<span class="shortcut">Ctrl+S</span></button>
+              <button data-action="file-save-as">
+                別名で保存<span class="shortcut">Ctrl+Shift+S</span>
+              </button>
+            </div>
+          </div>
+          <div class="menu-item" data-menu="edit">
+            <span class="menu-label">Edit</span>
+            <div class="menu-dropdown">
+              <button data-action="undo">元に戻す<span class="shortcut">Ctrl+Z</span></button>
+              <button data-action="redo">やり直し<span class="shortcut">Ctrl+Shift+Z</span></button>
+              <div class="menu-separator"></div>
+              <button data-action="copy">コピー (PNG)<span class="shortcut">Ctrl+C</span></button>
+              <button data-action="paste">貼り付け<span class="shortcut">Ctrl+V</span></button>
+              <button data-action="duplicate">複製<span class="shortcut">Ctrl+D</span></button>
+              <button data-action="delete">削除<span class="shortcut">Delete</span></button>
+              <div class="menu-separator"></div>
+              <button data-action="select-all">すべて選択<span class="shortcut">Ctrl+A</span></button>
+            </div>
+          </div>
+          <div class="menu-item" data-menu="view">
+            <span class="menu-label">View</span>
+            <div class="menu-dropdown">
+              <button data-action="devtools">開発者ツール<span class="shortcut">F12</span></button>
+              <div class="menu-separator"></div>
+              <button data-action="zoom-in">拡大<span class="shortcut">Ctrl+=</span></button>
+              <button data-action="zoom-out">縮小<span class="shortcut">Ctrl+-</span></button>
+              <button data-action="zoom-reset">リセット<span class="shortcut">Ctrl+0</span></button>
+              <div class="menu-separator"></div>
+              <button data-action="fullscreen">全画面表示<span class="shortcut">F11</span></button>
+            </div>
+          </div>
+        </div>
+
+        <div id="drawing-main-area">
+          <div id="drawing-canvas-container">
+            <canvas id="drawing-main-canvas"></canvas>
+
+            <!-- 下中央フローティングツールバー (Figma 風 card)。
+                 親 #drawing-bottom-bar が card 装飾 / 位置決めを持ち、
+                 内側 #drawing-tool-buttons は buildToolbar() が動的 fill する
+                 領域 (mode button 群)。将来 .bottom-bar-divider + screen 切替
+                 ボタンをここに足す予定。 -->
+            <div id="drawing-bottom-bar" class="floating-toolbar">
+              <div id="drawing-tool-buttons"></div>
+            </div>
+          </div>
+
+          <div id="drawing-sidebar">
+            <div class="sidebar-resize-handle" role="separator" aria-orientation="vertical"></div>
+            <div class="sidebar-header">
+              <button
+                id="drawing-sidebar-toggle"
+                class="sidebar-toggle"
+                aria-expanded="true"
+                title="サイドバー開閉"
+              >
+                ›
+              </button>
+            </div>
+            <div class="sidebar-content">
+              <div class="sidebar-section">
+                <div class="sidebar-section-title">フォント</div>
+                <label for="drawing-font-family">ファミリー</label>
+                <select id="drawing-font-family">
+                  <option value="Arial">Arial</option>
+                </select>
+                <label for="drawing-font-style">スタイル</label>
+                <select id="drawing-font-style">
+                  <option value="400|normal">Regular</option>
+                </select>
+                <label for="drawing-font-size">サイズ</label>
+                <input
+                  id="drawing-font-size"
+                  type="number"
+                  value="72"
+                  min="8"
+                  max="400"
+                  step="1"
+                />
+                <label for="drawing-font-color">カラー</label>
+                <input id="drawing-font-color" type="color" value="#000000" />
+              </div>
+
+              <div class="sidebar-section">
+                <div class="sidebar-section-title">変形</div>
+                <label for="drawing-rotation">回転 (°)</label>
+                <div class="sidebar-row">
+                  <input
+                    id="drawing-rotation"
+                    type="number"
+                    value="0"
+                    min="-360"
+                    max="360"
+                    step="1"
+                  />
+                  <button id="drawing-btn-apply-rotation">適用</button>
+                </div>
+              </div>
+
+              <div
+                class="sidebar-section"
+                title="白矢印モードでの移動時、グリッドに吸着します (Alt で一時バイパス)"
+              >
+                <div class="sidebar-section-title">スナップ</div>
+                <label class="sidebar-checkbox" for="drawing-snap-enabled">
+                  <input id="drawing-snap-enabled" type="checkbox" checked />
+                  <span>有効</span>
+                </label>
+                <label for="drawing-snap-pitch">グリッド</label>
+                <input
+                  id="drawing-snap-pitch"
+                  type="number"
+                  value="8"
+                  min="1"
+                  max="64"
+                  step="1"
+                />
+                <label for="drawing-snap-threshold">閾値</label>
+                <input
+                  id="drawing-snap-threshold"
+                  type="number"
+                  value="5"
+                  min="1"
+                  max="32"
+                  step="1"
+                />
+              </div>
+
+              <div class="sidebar-section">
+                <div class="sidebar-section-title">アクション</div>
+                <button id="drawing-btn-select-all">全選択</button>
+                <button id="drawing-btn-clear">クリア</button>
+                <button id="drawing-btn-outline" title="選択中の文字をパス化 (Cmd/Ctrl+Shift+O)">
+                  アウトライン化
+                </button>
+              </div>
+
+              <div class="sidebar-section">
+                <div class="sidebar-section-title">エクスポート</div>
+                <button id="drawing-btn-export" class="btn-primary">PNG書き出し</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="menu-item" data-menu="edit">
-        <span class="menu-label">Edit</span>
-        <div class="menu-dropdown">
-          <button data-action="undo">元に戻す<span class="shortcut">Ctrl+Z</span></button>
-          <button data-action="redo">やり直し<span class="shortcut">Ctrl+Shift+Z</span></button>
-          <div class="menu-separator"></div>
-          <button data-action="copy">コピー (PNG)<span class="shortcut">Ctrl+C</span></button>
-          <button data-action="paste">貼り付け<span class="shortcut">Ctrl+V</span></button>
-          <button data-action="duplicate">複製<span class="shortcut">Ctrl+D</span></button>
-          <button data-action="delete">削除<span class="shortcut">Delete</span></button>
-          <div class="menu-separator"></div>
-          <button data-action="select-all">すべて選択<span class="shortcut">Ctrl+A</span></button>
-        </div>
-      </div>
-      <div class="menu-item" data-menu="view">
-        <span class="menu-label">View</span>
-        <div class="menu-dropdown">
-          <button data-action="devtools">開発者ツール<span class="shortcut">F12</span></button>
-          <div class="menu-separator"></div>
-          <button data-action="zoom-in">拡大<span class="shortcut">Ctrl+=</span></button>
-          <button data-action="zoom-out">縮小<span class="shortcut">Ctrl+-</span></button>
-          <button data-action="zoom-reset">リセット<span class="shortcut">Ctrl+0</span></button>
-          <div class="menu-separator"></div>
-          <button data-action="fullscreen">全画面表示<span class="shortcut">F11</span></button>
-        </div>
-      </div>
-    </div>
-
-    <div id="toolbar">
-      <!-- モード切替ボタンは renderer/toolbar.ts が tools 配列から動的生成する。
-         id="tool-buttons" を JS 側で querySelector して中身を埋める。 -->
-      <div id="tool-buttons" class="toolbar-group"></div>
-
-      <div class="toolbar-group">
-        <label for="font-family">フォント</label>
-        <select id="font-family">
-          <option value="Arial">Arial</option>
-        </select>
-        <label for="font-style">スタイル</label>
-        <select id="font-style">
-          <option value="400|normal">Regular</option>
-        </select>
-      </div>
-
-      <div class="toolbar-group">
-        <label for="font-size">サイズ</label>
-        <input id="font-size" type="number" value="72" min="8" max="400" step="1" />
-      </div>
-
-      <div class="toolbar-group">
-        <label for="font-color">カラー</label>
-        <input id="font-color" type="color" value="#000000" />
-      </div>
-
-      <div class="toolbar-group">
-        <label for="rotation">回転 (°)</label>
-        <input id="rotation" type="number" value="0" min="-360" max="360" step="1" />
-        <button id="btn-apply-rotation">適用</button>
-      </div>
-
-      <div
-        class="toolbar-group"
-        title="白矢印モードでの移動時、グリッドに吸着します (Alt で一時バイパス)"
-      >
-        <label for="snap-enabled">スナップ</label>
-        <input id="snap-enabled" type="checkbox" checked />
-        <label for="snap-pitch">グリッド</label>
-        <input id="snap-pitch" type="number" value="8" min="1" max="64" step="1" />
-        <label for="snap-threshold">閾値</label>
-        <input id="snap-threshold" type="number" value="5" min="1" max="32" step="1" />
-      </div>
-
-      <div class="toolbar-group">
-        <button id="btn-select-all">全選択</button>
-        <button id="btn-clear">クリア</button>
-      </div>
-
-      <div class="toolbar-group">
-        <button id="btn-outline" title="選択中の文字をパス化 (Cmd/Ctrl+Shift+O)">
-          アウトライン化
-        </button>
-      </div>
-
-      <div class="toolbar-group">
-        <button id="btn-export" class="btn-primary">PNG書き出し</button>
-      </div>
-    </div>
-
-    <div id="canvas-container">
-      <canvas id="main-canvas"></canvas>
     </div>
 
     <script src="vendor/fabric.min.js"></script>

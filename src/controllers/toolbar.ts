@@ -26,22 +26,30 @@ export class ToolbarControllerImpl implements ToolbarController {
   private readonly menuActions: MenuActions;
   private readonly modeButtons: Record<string, HTMLButtonElement>;
 
-  // DOM 参照
-  private readonly fontSizeInput = document.getElementById('font-size') as HTMLInputElement;
-  private readonly fontColorInput = document.getElementById('font-color') as HTMLInputElement;
-  private readonly rotationInput = document.getElementById('rotation') as HTMLInputElement;
-  private readonly snapEnabledInput = document.getElementById('snap-enabled') as HTMLInputElement;
-  private readonly snapPitchInput = document.getElementById('snap-pitch') as HTMLInputElement;
+  // DOM 参照 (= drawing screen 配下の `drawing-*` prefix 付き ID)
+  private readonly fontSizeInput = document.getElementById('drawing-font-size') as HTMLInputElement;
+  private readonly fontColorInput = document.getElementById(
+    'drawing-font-color',
+  ) as HTMLInputElement;
+  private readonly rotationInput = document.getElementById('drawing-rotation') as HTMLInputElement;
+  private readonly snapEnabledInput = document.getElementById(
+    'drawing-snap-enabled',
+  ) as HTMLInputElement;
+  private readonly snapPitchInput = document.getElementById(
+    'drawing-snap-pitch',
+  ) as HTMLInputElement;
   private readonly snapThresholdInput = document.getElementById(
-    'snap-threshold',
+    'drawing-snap-threshold',
   ) as HTMLInputElement;
   private readonly btnApplyRotation = document.getElementById(
-    'btn-apply-rotation',
+    'drawing-btn-apply-rotation',
   ) as HTMLButtonElement;
-  private readonly btnSelectAll = document.getElementById('btn-select-all') as HTMLButtonElement;
-  private readonly btnClear = document.getElementById('btn-clear') as HTMLButtonElement;
-  private readonly btnExport = document.getElementById('btn-export') as HTMLButtonElement;
-  private readonly btnOutline = document.getElementById('btn-outline') as HTMLButtonElement;
+  private readonly btnSelectAll = document.getElementById(
+    'drawing-btn-select-all',
+  ) as HTMLButtonElement;
+  private readonly btnClear = document.getElementById('drawing-btn-clear') as HTMLButtonElement;
+  private readonly btnExport = document.getElementById('drawing-btn-export') as HTMLButtonElement;
+  private readonly btnOutline = document.getElementById('drawing-btn-outline') as HTMLButtonElement;
 
   constructor(deps: ToolbarControllerDeps) {
     this.state = deps.state;
