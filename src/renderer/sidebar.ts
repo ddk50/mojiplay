@@ -18,7 +18,6 @@ const LS_KEY_HIDDEN = 'mojiplay.sidebar.hidden';
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 480;
 const DEFAULT_WIDTH = 240;
-const COLLAPSED_WIDTH = 40;
 
 function setWidthVar(width: number): void {
   document.documentElement.style.setProperty('--sidebar-width', `${width}px`);
