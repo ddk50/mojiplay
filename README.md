@@ -27,7 +27,7 @@ Each character you type becomes an independent, movable object on the canvas. Fr
 Requires Node.js v20 or later.
 
 ```bash
-git clone <this repository URL>
+git clone git@github.com:ddk50/mojiplay.git
 cd mojiplay
 npm install
 ```
