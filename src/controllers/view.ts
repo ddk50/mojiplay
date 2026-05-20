@@ -15,6 +15,7 @@ export class ViewControllerImpl implements ViewController {
   private readonly fileIO: FileIOInteractor;
   private readonly canvas: fabric.Canvas;
   private readonly container: HTMLElement;
+  private resizeObserver: ResizeObserver | null = null;
   private unsubscribeCloseGuard: (() => void) | null = null;
   private unsubscribeDocStatus: (() => void) | null = null;
 
@@ -29,7 +30,8 @@ export class ViewControllerImpl implements ViewController {
   //  Public event handlers (= Controller の contract)
   // ====================================================================
 
-  /** window resize: canvas を container にフィットさせる。 */
+  /** container サイズ変化 (window resize / サイドバー幅変化 / 折りたたみ) で
+   *  canvas を container にフィットさせる。ResizeObserver から駆動される。 */
   readonly onResize = (): void => {
     this.canvas.setWidth(this.container.clientWidth);
     this.canvas.setHeight(this.container.clientHeight);
@@ -53,8 +55,11 @@ export class ViewControllerImpl implements ViewController {
   // ====================================================================
 
   attach(): void {
-    window.addEventListener('resize', this.onResize);
-    this.onResize();
+    // window resize 単体ではなく container 自身の寸法変化を観察する
+    // (window resize / 右サイドバー drag / 折りたたみ / 完全 hide を 1 経路で
+    // 受ける)。observe 直後に 1 度発火するので明示初期化は不要。
+    this.resizeObserver = new ResizeObserver(() => this.onResize());
+    this.resizeObserver.observe(this.container);
 
     // 起動初期化と継続的な title 同期
     this.refreshTitle();
@@ -64,7 +69,8 @@ export class ViewControllerImpl implements ViewController {
   }
 
   detach(): void {
-    window.removeEventListener('resize', this.onResize);
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     this.unsubscribeDocStatus?.();
     this.unsubscribeDocStatus = null;
     this.unsubscribeCloseGuard?.();

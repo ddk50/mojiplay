@@ -1,0 +1,527 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #f4f4f5;
+  --surface: #ffffff;
+  --border: #d4d4d8;
+  --text: #18181b;
+  --accent: #2563eb;
+  --accent-h: #1d4ed8;
+  --danger: #dc2626;
+  --sidebar-width: 240px;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    'Noto Sans JP',
+    'Noto Sans',
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+#app-root {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* ── Screen 抽象 (全画面排他) ──────────────────────────────────────────── */
+
+.screen {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.screen.is-active {
+  display: flex;
+}
+
+/* ── Drawing Screen: Menu Bar ─────────────────────────────────────────── */
+
+#drawing-menu-bar {
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px;
+  height: 30px;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.menu-item {
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+
+.menu-label {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.menu-label:hover,
+.menu-item.is-open .menu-label {
+  background: #e4e4e7;
+}
+
+.menu-dropdown {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  min-width: 240px;
+  padding: 4px 0;
+  z-index: 1000;
+}
+
+.menu-item.is-open .menu-dropdown {
+  display: block;
+}
+
+.menu-dropdown button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 8px 16px;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 0;
+  color: var(--text);
+  transition: background 0.08s;
+}
+
+.menu-dropdown button:hover {
+  background: #e4e4e7;
+}
+
+.menu-dropdown .shortcut {
+  color: #a1a1aa;
+  font-size: 12px;
+  margin-left: 24px;
+  flex-shrink: 0;
+}
+
+.menu-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+/* ── Drawing Screen: Main Area (canvas + sidebar) ───────────────────── */
+
+#drawing-main-area {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+#drawing-canvas-container {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+  /* Checkerboard to visualise transparency */
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, #e0e0e0 25%, transparent 25%),
+    linear-gradient(-45deg, #e0e0e0 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e0e0e0 75%),
+    linear-gradient(-45deg, transparent 75%, #e0e0e0 75%);
+  background-size: 20px 20px;
+  background-position:
+    0 0,
+    0 10px,
+    10px -10px,
+    -10px 0px;
+  overflow: hidden;
+}
+
+#drawing-main-canvas {
+  display: block;
+}
+
+#drawing-canvas-container > .canvas-container {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ── Drawing Screen: Floating Tool Bar (下中央) ──────────────────────── */
+
+.floating-toolbar {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 10;
+  user-select: none;
+}
+
+#drawing-tool-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bottom-bar-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+/* ── Drawing Screen: Sidebar (右側、可変幅 + 折りたたみ) ────────────── */
+
+#drawing-sidebar {
+  position: relative;
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.12s ease;
+}
+
+#drawing-sidebar.is-collapsed {
+  width: 40px;
+}
+
+#drawing-sidebar.is-collapsed .sidebar-content {
+  display: none;
+}
+
+#drawing-sidebar.is-hidden {
+  width: 0;
+  border-left-width: 0;
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 5;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.is-dragging {
+  background: var(--accent);
+  opacity: 0.4;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 4px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebar-toggle {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: #71717a;
+  border-radius: 4px;
+}
+
+.sidebar-toggle:hover {
+  background: #e4e4e7;
+}
+
+#drawing-sidebar.is-collapsed .sidebar-toggle {
+  transform: rotate(180deg);
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.sidebar-section {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sidebar-section:last-child {
+  border-bottom: none;
+}
+
+.sidebar-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #52525b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.sidebar-section label {
+  display: block;
+  color: #71717a;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.sidebar-section label.sidebar-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.sidebar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── 共通 input / button スタイル ───────────────────────────────────── */
+
+label {
+  color: #71717a;
+  white-space: nowrap;
+}
+
+input[type='text'],
+input[type='number'],
+select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 4px 7px;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+
+input[type='text']:focus,
+input[type='number']:focus,
+select:focus {
+  border-color: var(--accent);
+}
+
+input[type='color'] {
+  width: 40px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.sidebar-row input[type='number'] {
+  flex: 1;
+}
+
+button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+  white-space: nowrap;
+}
+
+button:hover {
+  background: #e4e4e7;
+  border-color: #a1a1aa;
+}
+
+button.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+button.btn-primary:hover {
+  background: var(--accent-h);
+  border-color: var(--accent-h);
+}
+
+/* ── モード切替ボタン (フローティングツールバー内) ────────────────── */
+
+button.mode-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+}
+
+button.mode-btn:hover {
+  /* 「これが選択されるよ」を伝える薄い塗り。枠は出さない。 */
+  background: rgba(37, 99, 235, 0.1); /* accent を 10% で */
+  border-color: transparent;
+}
+
+button.mode-btn.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button.mode-btn.is-active:hover {
+  /* active 中は hover の薄塗りで誤魔化さず accent をそのまま見せる */
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.tool-icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+  fill: currentColor;
+}
+
+.outline-arrow path {
+  fill: var(--surface);
+  stroke: currentColor;
+  stroke-width: 1.5px;
+  stroke-linejoin: round;
+}
+
+.mode-btn.is-active .outline-arrow path {
+  fill: var(--accent);
+  stroke: #fff;
+}
+
+.pen-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.pen-icon .pen-nib {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4px;
+  stroke-linejoin: round;
+}
+
+.pen-icon .pen-dot {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4px;
+}
+
+.pen-icon .pen-sign {
+  stroke: currentColor;
+  fill: none;
+}
+
+.mode-btn.is-active .pen-icon .pen-nib,
+.mode-btn.is-active .pen-icon .pen-dot,
+.mode-btn.is-active .pen-icon .pen-sign {
+  stroke: #fff;
+}
+
+/* ── Toast ───────────────────────────────────────────────────────────── */
+
+.toast {
+  position: fixed;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ffffff;
+  border: 1px solid #d4d4d8;
+  border-radius: 6px;
+  color: #18181b;
+  padding: 8px 18px;
+  font-size: 12px;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  animation: fade-in-down 0.2s ease;
+}
+
+.toast.toast-error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+@keyframes fade-in-down {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}

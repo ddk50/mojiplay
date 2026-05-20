@@ -1,4 +1,4 @@
-// fontkit の最小型宣言。UMD 版を renderer/vendor/fontkit.js から <script> 読み
+// fontkit の最小型宣言。UMD 版を public/vendor/fontkit.js から <script> 読み
 // 込みしているので、グローバル `fontkit` からアクセスする。
 // 参考: https://github.com/foliojs/fontkit
 //

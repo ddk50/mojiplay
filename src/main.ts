@@ -67,7 +67,7 @@ function createWindow(): BrowserWindow {
   });
 
   win.once('ready-to-show', () => win.show());
-  win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  win.loadFile(path.join(__dirname, '..', 'public', 'index.html'));
   wireCloseGuard(win);
   return win;
 }

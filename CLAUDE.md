@@ -12,7 +12,23 @@
 - `npm start` — ビルド + Electron 起動
 - `npm run build` — main + renderer ビルド (起動なし)
 - `npm test` — Jest (ts-jest 経由)
+- `npm run lint` — ESLint
+- `npm run format` / `format:check` — Prettier 自動整形 / 検査
 - `npm run dist:win` / `pack` — Windows portable / unpacked
+
+### push 前のチェック (必須)
+
+`git push` する前に**必ず以下 4 コマンドが全て pass** することを確認する。
+1 つでも飛ばすと CI / 他開発者環境で落ちる:
+
+```
+npm run build && npm test && npm run lint && npm run format:check
+```
+
+- `format:check` が落ちたら `npm run format` で自動整形 → 再度 4 工程を最初から確認
+- `lint` が落ちたら修正 → 再度 4 工程を確認
+- 1 工程パスしたから次もパス、ではない (前工程の修正で後工程が落ちる場合あり)。最終的に 4 つを連続で通すこと
+- build + test だけで OK と判断しない (lint / prettier は独立した工程)
 
 ## ディレクトリ構成 (CA / Hexagonal sibling 階層)
 
@@ -92,7 +108,7 @@ src/
 2. `tsc -p tsconfig.renderer.json` (noEmit) → src/renderer.ts + core/usecases/repository/controllers/renderer の typecheck
 3. `node esbuild.renderer.mjs` → src/renderer.ts を entry に renderer 全体を `dist/renderer/bundle.js` (IIFE)
 
-`renderer/index.html` は 3 つの `<script>` のみ: `vendor/fabric.min.js` / `vendor/fontkit.js` / `dist/renderer/bundle.js`。fabric / fontkit は UMD グローバルとして runtime 解決、`allowUmdGlobalAccess: true` で `import` 文無しで参照可能。
+`public/index.html` は 3 つの `<script>` のみ: `vendor/fabric.min.js` / `vendor/fontkit.js` / `dist/renderer/bundle.js`。fabric / fontkit は UMD グローバルとして runtime 解決、`allowUmdGlobalAccess: true` で `import` 文無しで参照可能。
 
 新規 ts ファイル追加時は `tsconfig.renderer.json` の include グロブ (`src/renderer.ts` + `src/{core,usecases,repository,controllers,renderer}/**/*.ts`) に該当することを確認するだけ。`src/globals/electron-api.d.ts` は両 tsconfig 共有で `window.electronAPI` を定義。
 
