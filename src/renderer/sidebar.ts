@@ -26,7 +26,9 @@ function setWidthVar(width: number): void {
 function restoreInitial(sidebar: HTMLElement): void {
   const raw = localStorage.getItem(LS_KEY_WIDTH);
   const parsed = raw === null ? NaN : parseInt(raw, 10);
-  const width = Number.isFinite(parsed) ? Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, parsed)) : DEFAULT_WIDTH;
+  const width = Number.isFinite(parsed)
+    ? Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, parsed))
+    : DEFAULT_WIDTH;
   setWidthVar(width);
 
   if (localStorage.getItem(LS_KEY_COLLAPSED) === '1') {

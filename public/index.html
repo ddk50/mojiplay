@@ -32,7 +32,9 @@
               <button data-action="duplicate">複製<span class="shortcut">Ctrl+D</span></button>
               <button data-action="delete">削除<span class="shortcut">Delete</span></button>
               <div class="menu-separator"></div>
-              <button data-action="select-all">すべて選択<span class="shortcut">Ctrl+A</span></button>
+              <button data-action="select-all">
+                すべて選択<span class="shortcut">Ctrl+A</span>
+              </button>
             </div>
           </div>
           <div class="menu-item" data-menu="view">
@@ -87,14 +89,7 @@
                   <option value="400|normal">Regular</option>
                 </select>
                 <label for="drawing-font-size">サイズ</label>
-                <input
-                  id="drawing-font-size"
-                  type="number"
-                  value="72"
-                  min="8"
-                  max="400"
-                  step="1"
-                />
+                <input id="drawing-font-size" type="number" value="72" min="8" max="400" step="1" />
                 <label for="drawing-font-color">カラー</label>
                 <input id="drawing-font-color" type="color" value="#000000" />
               </div>
@@ -125,14 +120,7 @@
                   <span>有効</span>
                 </label>
                 <label for="drawing-snap-pitch">グリッド</label>
-                <input
-                  id="drawing-snap-pitch"
-                  type="number"
-                  value="8"
-                  min="1"
-                  max="64"
-                  step="1"
-                />
+                <input id="drawing-snap-pitch" type="number" value="8" min="1" max="64" step="1" />
                 <label for="drawing-snap-threshold">閾値</label>
                 <input
                   id="drawing-snap-threshold"

@@ -35,12 +35,14 @@ export function initMenuBar(handleAction: (action: string) => void): void {
   document.addEventListener('click', closeAll);
 
   // アクション実行 (data-action 属性の文字列を呼び出し側にディスパッチ)
-  document.querySelectorAll('#drawing-menu-bar .menu-dropdown button[data-action]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const action = (btn as HTMLElement).dataset.action;
-      closeAll();
-      handleAction(action || '');
+  document
+    .querySelectorAll('#drawing-menu-bar .menu-dropdown button[data-action]')
+    .forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const action = (btn as HTMLElement).dataset.action;
+        closeAll();
+        handleAction(action || '');
+      });
     });
-  });
 }
