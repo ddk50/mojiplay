@@ -11,6 +11,7 @@ import {
 import * as path from 'path';
 import * as fs from 'fs';
 import log from 'electron-log';
+import type { IpcSaveResult, IpcOpenResult, IpcDiscardChoice } from './electron-api';
 
 // ログ出力先をバイナリ横の logs/ ディレクトリに固定する。
 //  - Dev (`npm start`): app.getAppPath() = プロジェクトルート → logs/main.log
@@ -91,7 +92,7 @@ function wireCloseGuard(win: BrowserWindow): void {
 }
 
 // IPC handler: renderer sends base64 PNG data URL → main writes file
-ipcMain.handle('save-png', async (_event, base64Data: string): Promise<SaveResult> => {
+ipcMain.handle('save-png', async (_event, base64Data: string): Promise<IpcSaveResult> => {
   const { canceled, filePath } = await dialog.showSaveDialog({
     title: 'Export as PNG',
     defaultPath: 'layout.png',
@@ -168,7 +169,7 @@ ipcMain.handle('paste', (event) => {
 // いずれかしか観測されない。
 ipcMain.handle(
   'save-mply',
-  async (_event, json: string, currentPath: string | null): Promise<SaveResult> => {
+  async (_event, json: string, currentPath: string | null): Promise<IpcSaveResult> => {
     let filePath = currentPath;
     if (!filePath) {
       const r = await dialog.showSaveDialog({
@@ -199,7 +200,7 @@ ipcMain.handle(
   },
 );
 
-ipcMain.handle('open-mply', async (): Promise<OpenResult> => {
+ipcMain.handle('open-mply', async (): Promise<IpcOpenResult> => {
   const r = await dialog.showOpenDialog({
     title: '開く',
     properties: ['openFile'],
@@ -217,7 +218,7 @@ ipcMain.handle('open-mply', async (): Promise<OpenResult> => {
   }
 });
 
-ipcMain.handle('confirm-discard', async (_event, message: string): Promise<DiscardChoice> => {
+ipcMain.handle('confirm-discard', async (_event, message: string): Promise<IpcDiscardChoice> => {
   const win = BrowserWindow.getFocusedWindow();
   const opts = {
     type: 'warning' as const,

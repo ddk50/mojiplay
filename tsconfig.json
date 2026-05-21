@@ -1,12 +1,26 @@
+// IDE 向けの広い tsconfig (WebStorm / VS Code が src/ 配下の任意のファイルを
+// 開いたときに globals/*.d.ts を確実に読み込ませるためのもの)。
+//
+// ビルド / テストは process ごとに別の tsconfig を使う:
+//   - npm run build:main      → tsconfig.main.json     (main + preload, commonjs, Node API)
+//   - npm run build:typecheck → tsconfig.renderer.json (renderer 側 noEmit type check)
+//   - npm test                → tsconfig.test.json    (jest + ts-jest)
+//
+// この root tsconfig は noEmit。compilerOptions は 3 つの sub-config の union
+// (lib: ES2022 + DOM、types: node + jest + fabric、allowUmdGlobalAccess) で、
+// IDE が main / renderer / test のどのファイルを開いても globals が解決される。
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "outDir": "dist",
-    "rootDir": "src"
+    "lib": ["ES2022", "DOM"],
+    "types": ["node", "jest", "fabric"],
+    "allowUmdGlobalAccess": true,
+    "noEmit": true
   },
-  "include": ["src/main.ts", "src/preload.ts", "src/globals/**/*.d.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts"]
 }

@@ -104,20 +104,30 @@ src/
 
 `npm run build` の 3 段階:
 
-1. `tsc -p tsconfig.json` → main + preload を `dist/{main,preload}.js` (CommonJS, Node API)
+1. `tsc -p tsconfig.main.json` → main + preload を `dist/{main,preload}.js` (CommonJS, Node API)
 2. `tsc -p tsconfig.renderer.json` (noEmit) → src/renderer.ts + core/usecases/repository/controllers/renderer の typecheck
 3. `node esbuild.renderer.mjs` → src/renderer.ts を entry に renderer 全体を `dist/renderer/bundle.js` (IIFE)
 
 `public/index.html` は 3 つの `<script>` のみ: `vendor/fabric.min.js` / `vendor/fontkit.js` / `dist/renderer/bundle.js`。fabric / fontkit は UMD グローバルとして runtime 解決、`allowUmdGlobalAccess: true` で `import` 文無しで参照可能。
 
-新規 ts ファイル追加時は `tsconfig.renderer.json` の include グロブ (`src/renderer.ts` + `src/{core,usecases,repository,controllers,renderer}/**/*.ts`) に該当することを確認するだけ。`src/globals/electron-api.d.ts` は両 tsconfig 共有で `window.electronAPI` を定義。
+### tsconfig 4 種の役割
+
+- `tsconfig.main.json` — `build:main` 用。main + preload を CommonJS で `dist/` に emit
+- `tsconfig.renderer.json` — `build:typecheck` 用。renderer 側全体を noEmit で typecheck (esnext / DOM lib / `types: ["fabric"]`)
+- `tsconfig.test.json` — jest (ts-jest) 用。test/ + globals を読む
+- `tsconfig.json` (root) — **IDE 専用**。WebStorm / VS Code が src/ 配下の任意ファイルを開いたとき globals (`electron-api.d.ts` / `fabric-augment.d.ts` / `fontkit.d.ts`) を確実に読ませるための広い include。`noEmit: true` でビルドには使わない。3 つの sub-config の compilerOptions union (lib: ES2022 + DOM、types: node + jest + fabric、allowUmdGlobalAccess) で main / renderer / test どのファイルでも globals が解決される
+
+新規 ts ファイル追加時は `tsconfig.renderer.json` の include グロブ (`src/renderer.ts` + `src/{core,usecases,repository,controllers,renderer}/**/*.ts`) に該当することを確認するだけ。`src/globals/*.d.ts` は全 tsconfig 共有で `window.electronAPI` / `fabric.Canvas.getRetinaScaling` / `fontkit.*` を定義。
+
+`src/globals/*.d.ts` は全て module-mode (`declare global { ... } export {};`) で書く。script-mode の `interface Window {...}` や `declare namespace fontkit` は WebStorm / 一部 IDE の TS service がファイル discovery タイミング次第で読み込み損なうことがあるため避ける。
 
 ## アーキテクチャ
 
 **Electron 3 プロセス**:
 
 - `src/main.ts` — main process Composition Root。BrowserWindow (`contextIsolation: on`, `nodeIntegration: off`)。IPC: `save-png` / `copy-image` / `log` / view 系 / `save-mply` (atomic write) / `open-mply` / `confirm-discard` / `app-close-request`。ネイティブメニューは `Menu.setApplicationMenu(null)` で無効化 (HTML メニューバー使用)
-- `src/preload.ts` — preload Composition Root。`contextBridge` で `window.electronAPI` 公開
+- `src/preload.ts` — preload Composition Root。`contextBridge` で `window.electronAPI` 公開。`ElectronAPI` 契約 (`src/electron-api.ts`) を `const api: ElectronAPI = {...}` の型として参照し、実装が契約とずれていればコンパイルエラー
+- `src/electron-api.ts` — `ElectronAPI` interface + `IpcSaveResult` / `IpcOpenResult` / `IpcDiscardChoice` の **IPC 契約 single source of truth**。preload.ts (impl) / `globals/electron-api.d.ts` (Window 拡張) / main.ts (`ipcMain.handle` の型) の 3 箇所から import される。pure type のみで runtime code 無し。core/document/snapshot.ts の domain `SaveResult` (ok/canceled/error) と name conflict しないよう Ipc\* prefix で区別
 - `src/renderer.ts` — renderer process Composition Root (~150 行、CA の最外層 = Frameworks & Drivers)。fabric.Canvas / State / HostShell / UIPort / FontProvider / Repository / FileIOInteractor / Tool 群 / MenuActionRegistry / 5 Controllers を構築して `attach()` するだけ。Presenter ではないので `renderer/` 配下ではなく top-level に置く
 
 ### 5 Controllers (`controllers/`)
