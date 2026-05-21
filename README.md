@@ -1,5 +1,7 @@
 # mojiplay
 
+[![CI](https://github.com/ddk50/mojiplay/actions/workflows/ci.yml/badge.svg)](https://github.com/ddk50/mojiplay/actions/workflows/ci.yml)
+
 A desktop app for laying out text character-by-character, converting it to bezier outlines, editing the paths, and exporting the result as a transparent PNG.
 
 ![mojiplay screenshot](docs/screenshot.png)
