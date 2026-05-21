@@ -19,11 +19,11 @@ import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 
 installFabricStub();
 
-import type { PathCommand } from '../src/core/path/types';
-import type { DocumentSnapshot } from '../src/core/document/snapshot';
-import { State } from '../src/renderer/state';
-import { SelectCharTool } from '../src/usecases/tools/select-char-tool';
-import { toFabricPath } from '../src/renderer/path-adapter';
+import type { PathCommand } from '../src/window/core/path/types';
+import type { DocumentSnapshot } from '../src/window/core/document/snapshot';
+import { State } from '../src/window/presenter/state';
+import { SelectCharTool } from '../src/window/usecases/tools/select-char-tool';
+import { toFabricPath } from '../src/window/presenter/path-adapter';
 import { pointer, NullFontProvider } from './fakes';
 
 async function setupWithPath(commands: ReadonlyArray<PathCommand>): Promise<{

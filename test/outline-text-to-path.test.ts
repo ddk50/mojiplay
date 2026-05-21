@@ -5,8 +5,11 @@
 // renderer/outline-conversion.ts に閉じ込められ、test 不可だった (fontkit + DOM の壁)。
 // port 分離により orchestration を pure にして単体 test 可能に。
 
-import type { FontProvider, GlyphPathResult } from '../src/usecases/font-provider-interface';
-import { outlineTextToPath, type OutlineTextProps } from '../src/usecases/outline-text-to-path';
+import type { FontProvider, GlyphPathResult } from '../src/window/usecases/font-provider-interface';
+import {
+  outlineTextToPath,
+  type OutlineTextProps,
+} from '../src/window/usecases/outline-text-to-path';
 
 // 任意の glyph data を返す fake (= 「フォント取得できた」シナリオ)
 class FakeFontProvider implements FontProvider {

@@ -1,6 +1,6 @@
 // ObjectId / ObjectType / ensureObjectId のテスト
 
-import { ensureObjectId, type IdentifiableData } from '../src/core/object-id';
+import { ensureObjectId, type IdentifiableData } from '../src/window/core/object-id';
 
 describe('ensureObjectId', () => {
   test('ULID 形式 (26 文字 Crockford base32) の ID を発行する', () => {

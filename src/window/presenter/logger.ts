@@ -19,15 +19,15 @@ export function fmtObj(obj: fabric.Object | null | undefined): string {
 export const logger = {
   debug: (msg: string) => {
     console.debug(msg);
-    void window.electronAPI?.log?.debug(msg);
+    void window.electronIPC?.log?.debug(msg);
   },
   info: (msg: string) => {
     console.info(msg);
-    void window.electronAPI?.log?.info(msg);
+    void window.electronIPC?.log?.info(msg);
   },
   warn: (msg: string) => {
     console.warn(msg);
-    void window.electronAPI?.log?.warn(msg);
+    void window.electronIPC?.log?.warn(msg);
   },
   error: (msg: string, err?: unknown) => {
     const stack =
@@ -38,6 +38,6 @@ export const logger = {
           : '';
     const full = msg + stack;
     console.error(full);
-    void window.electronAPI?.log?.error(full);
+    void window.electronIPC?.log?.error(full);
   },
 };

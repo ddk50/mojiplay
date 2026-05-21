@@ -3,7 +3,7 @@
 // fabric の TMat2D 互換の 6 要素タプル [a, b, c, d, tx, ty] を扱う。
 // (x, y) → (a*x + c*y + tx, b*x + d*y + ty) という 2x3 アフィン。
 
-import type { Point } from '../src/core/path/types';
+import type { Point } from '../src/window/core/path/types';
 import {
   applyMatrix,
   applyMatrixToDelta,
@@ -11,8 +11,8 @@ import {
   pathLocalToScreen,
   screenToPathLocal,
   worldDeltaToPathLocalDelta,
-} from '../src/core/path/coords';
-import type { Mat2x3, PathTransform } from '../src/core/path/coords';
+} from '../src/window/core/path/coords';
+import type { Mat2x3, PathTransform } from '../src/window/core/path/coords';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 

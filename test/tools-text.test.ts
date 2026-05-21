@@ -9,10 +9,10 @@ import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 
 installFabricStub();
 
-import { State } from '../src/renderer/state';
+import { State } from '../src/window/presenter/state';
 import { NullFontProvider } from './fakes';
-import { TextTool } from '../src/usecases/tools/text-tool';
-import type { TextCreateProps } from '../src/core/state-interface';
+import { TextTool } from '../src/window/usecases/tools/text-tool';
+import type { TextCreateProps } from '../src/window/core/state-interface';
 
 const PROPS: TextCreateProps = {
   fontFamily: 'Arial',

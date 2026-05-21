@@ -3,9 +3,9 @@
 // fabric.js が扱う生タプル ([['M', 0, 0], ['C', ...]]) と、
 // core/path/anchors.ts が扱うオブジェクト ADT の相互変換をテスト。
 
-import type { PathCommand } from '../src/core/path/types';
-import { fromFabricPath, toFabricPath } from '../src/renderer/path-adapter';
-import type { FabricPathCommand } from '../src/renderer/path-adapter';
+import type { PathCommand } from '../src/window/core/path/types';
+import { fromFabricPath, toFabricPath } from '../src/window/presenter/path-adapter';
+import type { FabricPathCommand } from '../src/window/presenter/path-adapter';
 
 const M = (x: number, y: number): PathCommand => ({ type: 'M', to: { x, y } });
 const L = (x: number, y: number): PathCommand => ({ type: 'L', to: { x, y } });

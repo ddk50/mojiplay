@@ -19,11 +19,11 @@ import type { State, Mode } from '../core/state-interface';
 import type { Tool } from '../usecases/tools/tool-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
 import type { CanvasInputController, CanvasInputControllerDeps } from './canvas-input-interface';
-import { buildPointerInput } from '../renderer/canvas-coords';
-import { drawAnchorOverlay } from '../renderer/anchor-overlay';
-import { syncToolbarToSelection, setRotationInput } from '../renderer/toolbar-sync';
-import { getUpperCanvasEl } from '../renderer/fabric-internals';
-import { zoomCanvasByWheel } from '../renderer/zoom-canvas-by-wheel';
+import { buildPointerInput } from '../presenter/canvas-coords';
+import { drawAnchorOverlay } from '../presenter/anchor-overlay';
+import { syncToolbarToSelection, setRotationInput } from '../presenter/toolbar-sync';
+import { getUpperCanvasEl } from '../presenter/fabric-internals';
+import { zoomCanvasByWheel } from '../presenter/zoom-canvas-by-wheel';
 
 export class CanvasInputControllerImpl implements CanvasInputController {
   private readonly state: State;

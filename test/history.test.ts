@@ -1,8 +1,8 @@
 // History (ring buffer + cursor) のテスト。
 
-import type { Command, ObjectSnapshot } from '../src/core/history/types';
-import { History } from '../src/core/history/history';
-import type { ObjectId } from '../src/core/object-id';
+import type { Command, ObjectSnapshot } from '../src/window/core/history/types';
+import { History } from '../src/window/core/history/history';
+import type { ObjectId } from '../src/window/core/object-id';
 
 // テスト用の最小 Command を作るヘルパ。
 // snapshot の中身は識別用に kind / id / tag だけ持たせて、apply/revert 自体はテストしない。

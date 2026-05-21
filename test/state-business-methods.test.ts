@@ -8,9 +8,9 @@ import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 
 installFabricStub();
 
-import { State } from '../src/renderer/state';
+import { State } from '../src/window/presenter/state';
 import { NullFontProvider } from './fakes';
-import type { Mode } from '../src/core/state-interface';
+import type { Mode } from '../src/window/core/state-interface';
 
 function setupWithText(): { state: State; canvas: FakeFabricCanvas } {
   const canvas = new FakeFabricCanvas();

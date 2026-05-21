@@ -1,8 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { ElectronAPI } from './electron-api';
+import type { ElectronIPC } from './electron-ipc';
 
-// ElectronAPI 契約を満たす実装。型エラーで dropされた key があれば即検出。
-const api: ElectronAPI = {
+// ElectronIPC 契約を満たす実装。型エラーで dropされた key があれば即検出。
+const api: ElectronIPC = {
   savePng: (base64Data) => ipcRenderer.invoke('save-png', base64Data),
   copyImageToClipboard: (dataUrl) => ipcRenderer.invoke('copy-image', dataUrl),
   onMenuCopy: (callback) => {
@@ -35,4 +35,4 @@ const api: ElectronAPI = {
   },
 };
 
-contextBridge.exposeInMainWorld('electronAPI', api);
+contextBridge.exposeInMainWorld('electronIPC', api);

@@ -22,8 +22,8 @@
 // renderer-path-adapter.test.ts でテスト。
 // 4 点の純 Bezier 数値評価 (evalCubicAt / evalQuadAt) は bezier.test.ts でテスト。
 
-import type { PathCommand, HandleRef } from '../src/core/path/types';
-import { Path } from '../src/core/path/path';
+import type { PathCommand, HandleRef } from '../src/window/core/path/types';
+import { Path } from '../src/window/core/path/path';
 
 // 短縮ヘルパ: テストの可読性向上のため
 const M = (x: number, y: number): PathCommand => ({ type: 'M', to: { x, y } });

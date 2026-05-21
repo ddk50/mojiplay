@@ -15,10 +15,10 @@ import {
   arrowStepMagnitude,
   moveSelectedAnchorsByArrow,
   type ArrowDirection,
-} from '../src/usecases/menu/move-selected-anchors-by-arrow';
-import { State } from '../src/renderer/state';
+} from '../src/window/usecases/menu/move-selected-anchors-by-arrow';
+import { State } from '../src/window/presenter/state';
 import { NullFontProvider } from './fakes';
-import type { SelectCharTool } from '../src/usecases/tools/select-char-tool';
+import type { SelectCharTool } from '../src/window/usecases/tools/select-char-tool';
 
 describe('arrowKeyToDirection (pure)', () => {
   test.each<[string, ArrowDirection | null]>([

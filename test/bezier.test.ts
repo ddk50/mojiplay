@@ -1,6 +1,6 @@
 // Bezier 数値評価 (evalCubicAt / evalQuadAt) の単体テスト。
 
-import { evalCubicAt, evalQuadAt } from '../src/core/path/bezier';
+import { evalCubicAt, evalQuadAt } from '../src/window/core/path/bezier';
 
 describe('evalCubicAt', () => {
   test('t=0 で始点、t=1 で終点を返す', () => {

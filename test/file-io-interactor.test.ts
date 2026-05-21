@@ -17,14 +17,18 @@ import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 
 installFabricStub();
 
-import { FileIOInteractorImpl } from '../src/usecases/menu/file-io-interactor';
-import type { FileIOInteractor } from '../src/usecases/menu/file-io-interactor-interface';
-import type { DocumentRepository } from '../src/repository/document-interface';
-import type { DocumentSnapshot, LoadResult, SaveResult } from '../src/core/document/snapshot';
-import type { UIPort, DiscardChoice } from '../src/usecases/ui-port-interface';
-import type { Command, ObjectSnapshot } from '../src/core/history/types';
-import type { ObjectId } from '../src/core/object-id';
-import { State } from '../src/renderer/state';
+import { FileIOInteractorImpl } from '../src/window/usecases/menu/file-io-interactor';
+import type { FileIOInteractor } from '../src/window/usecases/menu/file-io-interactor-interface';
+import type { DocumentRepository } from '../src/window/repository/document-interface';
+import type {
+  DocumentSnapshot,
+  LoadResult,
+  SaveResult,
+} from '../src/window/core/document/snapshot';
+import type { UIPort, DiscardChoice } from '../src/window/usecases/ui-port-interface';
+import type { Command, ObjectSnapshot } from '../src/window/core/history/types';
+import type { ObjectId } from '../src/window/core/object-id';
+import { State } from '../src/window/presenter/state';
 import { NullFontProvider } from './fakes';
 
 // ── 外部 boundary の test double ─────────────────────────────────────────

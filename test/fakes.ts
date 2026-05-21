@@ -4,8 +4,8 @@
 // tautology になっていたため削除済 (= real `class State` (renderer/state.ts) +
 // fabric stub に置き換え)。fabric の最小 stub は test/fabric-stub.ts 参照。
 
-import type { PointerInput } from '../src/usecases/tools/tool-interface';
-import type { FontProvider, GlyphPathResult } from '../src/usecases/font-provider-interface';
+import type { PointerInput } from '../src/window/usecases/tools/tool-interface';
+import type { FontProvider, GlyphPathResult } from '../src/window/usecases/font-provider-interface';
 
 /** 何もできない FakeFontProvider。常に null を返す (= グリフ無しと同じ)。
  *  outlineActiveTexts を実行しない / 結果を観測しない test で State 構築に使う。 */

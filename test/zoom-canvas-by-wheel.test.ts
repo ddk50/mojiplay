@@ -9,8 +9,11 @@ import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 
 installFabricStub();
 
-import { computeZoomFromWheel, zoomCanvasByWheel } from '../src/renderer/zoom-canvas-by-wheel';
-import { State } from '../src/renderer/state';
+import {
+  computeZoomFromWheel,
+  zoomCanvasByWheel,
+} from '../src/window/presenter/zoom-canvas-by-wheel';
+import { State } from '../src/window/presenter/state';
 import { NullFontProvider } from './fakes';
 
 describe('computeZoomFromWheel (pure)', () => {

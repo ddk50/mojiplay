@@ -28,10 +28,10 @@ import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 
 installFabricStub();
 
-import { State } from '../src/renderer/state';
+import { State } from '../src/window/presenter/state';
 import { NullFontProvider } from './fakes';
-import { SelectGroupTool } from '../src/usecases/tools/select-group-tool';
-import type { DocumentSnapshot } from '../src/core/document/snapshot';
+import { SelectGroupTool } from '../src/window/usecases/tools/select-group-tool';
+import type { DocumentSnapshot } from '../src/window/core/document/snapshot';
 
 /**
  * State.applySnapshot 経由で text オブジェクト群を投入する fixture helper。

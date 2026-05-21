@@ -53,7 +53,7 @@
 //
 // ──────────────────────────────────────────────────────────────────────────
 
-import { computeOutlinePathPosition } from '../src/core/outline-position';
+import { computeOutlinePathPosition } from '../src/window/core/outline-position';
 
 describe('computeOutlinePathPosition', () => {
   test('fabric デフォルト定数 (FABRIC_FONT_SIZE_MULT=1.13, FABRIC_FONT_SIZE_FRACTION=0.222) で計算できる', () => {

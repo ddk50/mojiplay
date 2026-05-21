@@ -3,15 +3,15 @@
 // PathSnapshot + viewportMatrix から「screen 座標つきアンカー / ハンドル一覧」
 // を計算する純粋関数と、その結果へのヒットテストを検証。
 
-import type { PathCommand } from '../src/core/path/types';
-import type { Mat2x3 } from '../src/core/path/coords';
-import { Path } from '../src/core/path/path';
-import type { PathSnapshot } from '../src/core/state-interface';
+import type { PathCommand } from '../src/window/core/path/types';
+import type { Mat2x3 } from '../src/window/core/path/coords';
+import { Path } from '../src/window/core/path/path';
+import type { PathSnapshot } from '../src/window/core/state-interface';
 import {
   computeOverlayLayout,
   hitTestAnchorAt,
   hitTestHandleAt,
-} from '../src/core/path/overlay-layout';
+} from '../src/window/core/path/overlay-layout';
 
 const IDENT: Mat2x3 = [1, 0, 0, 1, 0, 0];
 

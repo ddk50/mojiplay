@@ -11,7 +11,7 @@
 import { type MenuActions, isMenuActionId } from '../menu-action-registry';
 import type { HostShell } from '../usecases/host-shell-interface';
 import type { MenuController, MenuControllerDeps } from './menu-interface';
-import { initMenuBar } from '../renderer/menu-bar';
+import { initMenuBar } from '../presenter/menu-bar';
 
 export class MenuControllerImpl implements MenuController {
   private readonly menuActions: MenuActions;

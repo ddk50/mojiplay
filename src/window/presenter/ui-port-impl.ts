@@ -11,27 +11,27 @@ export class ElectronUIPort implements UIPort {
   }
 
   async confirmDiscard(message: string): Promise<DiscardChoice> {
-    if (!window.electronAPI?.confirmDiscard) {
+    if (!window.electronIPC?.confirmDiscard) {
       // 開発中 IPC 未配線フォールバック: confirm dialog で代用 (= デフォルトはキャンセル扱い)
       return 'cancel';
     }
-    return await window.electronAPI.confirmDiscard(message);
+    return await window.electronIPC.confirmDiscard(message);
   }
 
   async confirmYesNo(message: string): Promise<boolean> {
     // 破壊的操作の確認は browser native confirm() で十分 (OS native dialog 経由にする
-    // motivation が無い)。将来 IPC 化したくなったら electronAPI.confirmYesNo を足す。
+    // motivation が無い)。将来 IPC 化したくなったら electronIPC.confirmYesNo を足す。
     return Promise.resolve(window.confirm(message));
   }
 
   setNativeDirty(dirty: boolean): void {
-    void window.electronAPI?.setDirty?.(dirty);
+    void window.electronIPC?.setDirty?.(dirty);
   }
 
   async copyImageToClipboard(dataUrl: string): Promise<void> {
-    if (!window.electronAPI?.copyImageToClipboard) {
-      throw new Error('electronAPI.copyImageToClipboard が未配線');
+    if (!window.electronIPC?.copyImageToClipboard) {
+      throw new Error('electronIPC.copyImageToClipboard が未配線');
     }
-    await window.electronAPI.copyImageToClipboard(dataUrl);
+    await window.electronIPC.copyImageToClipboard(dataUrl);
   }
 }

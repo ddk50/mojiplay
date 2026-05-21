@@ -16,9 +16,9 @@
 //   3. manager.show('drawing') で初回 active 化
 //   4. window.unload で manager.detach() (= 全 screen を tear-down)
 
-import type { Screen, ScreenId } from './renderer/screens/screen-interface';
-import { ScreenManager } from './renderer/screens/screen-manager';
-import { createDrawingScreen } from './renderer/screens/drawing-screen';
+import type { Screen, ScreenId } from './presenter/screens/screen-interface';
+import { ScreenManager } from './presenter/screens/screen-manager';
+import { createDrawingScreen } from './presenter/screens/drawing-screen';
 
 void (async () => {
   const screens = new Map<ScreenId, Screen>();

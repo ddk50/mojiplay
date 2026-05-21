@@ -7,12 +7,12 @@
 import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 installFabricStub();
 
-import { State } from '../src/renderer/state';
+import { State } from '../src/window/presenter/state';
 import { NullFontProvider } from './fakes';
-import { makeMenuActions, type MenuActions } from '../src/menu-action-registry';
-import type { UIPort, DiscardChoice } from '../src/usecases/ui-port-interface';
-import type { HostShell } from '../src/usecases/host-shell-interface';
-import type { FileIOInteractor } from '../src/usecases/menu/file-io-interactor-interface';
+import { makeMenuActions, type MenuActions } from '../src/window/menu-action-registry';
+import type { UIPort, DiscardChoice } from '../src/window/usecases/ui-port-interface';
+import type { HostShell } from '../src/window/usecases/host-shell-interface';
+import type { FileIOInteractor } from '../src/window/usecases/menu/file-io-interactor-interface';
 
 class FakeUI implements UIPort {
   toasts: Array<{ message: string; isError: boolean }> = [];

@@ -1,6 +1,6 @@
-// IPC 越し (contextBridge → window.electronAPI) の API 契約。
+// IPC 越し (contextBridge → window.electronIPC) の API 契約。
 //
-// preload.ts (impl) / globals/electron-api.d.ts (Window 拡張) / main.ts
+// preload.ts (impl) / globals/electron-ipc.d.ts (Window 拡張) / host/ipc.ts
 // (ipcMain.handle の型) から参照される single source of truth。
 // pure type のみ、runtime code 無し。
 //
@@ -19,7 +19,7 @@ export type IpcOpenResult =
 
 export type IpcDiscardChoice = 'save' | 'discard' | 'cancel';
 
-export interface ElectronAPI {
+export interface ElectronIPC {
   savePng(base64Data: string): Promise<IpcSaveResult>;
   copyImageToClipboard(dataUrl: string): Promise<void>;
   onMenuCopy(callback: () => void): void;

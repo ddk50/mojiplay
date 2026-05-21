@@ -1,11 +1,11 @@
 // ElectronHostShell: HostShell の Electron 実装。
 //
-// renderer process から window.electronAPI 経由で main process / IPC を叩く処理を
+// renderer process から window.electronIPC 経由で main process / IPC を叩く処理を
 // この 1 ファイルに集約する。Controller (ViewController / MenuController) と
 // Use Case (FileIOInteractor 等) はこの concrete を直接知らず、interface 経由で扱う。
 //
 // 設計:
-//   - log は既存 logger.ts (console + window.electronAPI fallback) に委譲する。
+//   - log は既存 logger.ts (console + window.electronIPC fallback) に委譲する。
 //     これで static `import { logger } from './logger'` を使う既存コード (state.ts /
 //     copy-export.ts / tools 等) と HostShell.log のバックエンドが一致し、ログが
 //     1 経路に揃う。logger.ts は console fallback 付きなので Web 環境でも動く。
@@ -21,38 +21,38 @@ export class ElectronHostShell implements HostShell {
   async savePng(
     dataUrl: string,
   ): Promise<{ ok: true; filePath: string } | { ok: false; reason: string }> {
-    if (!window.electronAPI?.savePng) {
-      return { ok: false, reason: 'electronAPI.savePng が未配線' };
+    if (!window.electronIPC?.savePng) {
+      return { ok: false, reason: 'electronIPC.savePng が未配線' };
     }
-    const r = await window.electronAPI.savePng(dataUrl);
+    const r = await window.electronIPC.savePng(dataUrl);
     if (r.success) return { ok: true, filePath: r.filePath };
     return { ok: false, reason: r.reason };
   }
 
   async copyImageToClipboard(dataUrl: string): Promise<void> {
-    if (!window.electronAPI?.copyImageToClipboard) {
-      throw new Error('electronAPI.copyImageToClipboard が未配線');
+    if (!window.electronIPC?.copyImageToClipboard) {
+      throw new Error('electronIPC.copyImageToClipboard が未配線');
     }
-    await window.electronAPI.copyImageToClipboard(dataUrl);
+    await window.electronIPC.copyImageToClipboard(dataUrl);
   }
 
   setZoom(delta: 'in' | 'out' | 'reset'): void {
-    if (!window.electronAPI) return;
-    if (delta === 'in') void window.electronAPI.zoomIn();
-    else if (delta === 'out') void window.electronAPI.zoomOut();
-    else if (delta === 'reset') void window.electronAPI.zoomReset();
+    if (!window.electronIPC) return;
+    if (delta === 'in') void window.electronIPC.zoomIn();
+    else if (delta === 'out') void window.electronIPC.zoomOut();
+    else if (delta === 'reset') void window.electronIPC.zoomReset();
   }
 
   toggleFullscreen(): void {
-    void window.electronAPI?.toggleFullscreen();
+    void window.electronIPC?.toggleFullscreen();
   }
 
   toggleDevTools(): void {
-    void window.electronAPI?.toggleDevTools();
+    void window.electronIPC?.toggleDevTools();
   }
 
   setNativeDirty(dirty: boolean): void {
-    void window.electronAPI?.setDirty?.(dirty);
+    void window.electronIPC?.setDirty?.(dirty);
   }
 
   onPasteRequest(_cb: () => void): () => void {
@@ -67,11 +67,11 @@ export class ElectronHostShell implements HostShell {
 
   onCopyRequest(cb: () => void): () => void {
     // main process の Edit > Copy IPC ('menu-copy') を購読。
-    if (!window.electronAPI?.onMenuCopy)
+    if (!window.electronIPC?.onMenuCopy)
       return () => {
         /* no-op */
       };
-    window.electronAPI.onMenuCopy(cb);
+    window.electronIPC.onMenuCopy(cb);
     // 注: preload の onMenuCopy は ipcRenderer.on を呼ぶだけで removeListener API が
     // 露出していない。複数 attach すると重複するが、現状 1 controller が 1 回だけ
     // attach する設計なので問題は出ない。Web 化時は HostShell の interface に合わせて
@@ -82,14 +82,14 @@ export class ElectronHostShell implements HostShell {
   }
 
   onCloseGuardRequest(cb: () => Promise<CloseGuardDecision>): () => void {
-    if (!window.electronAPI?.onAppCloseRequest)
+    if (!window.electronIPC?.onAppCloseRequest)
       return () => {
         /* no-op */
       };
-    window.electronAPI.onAppCloseRequest(() => {
+    window.electronIPC.onAppCloseRequest(() => {
       void (async () => {
         const decision = await cb();
-        void window.electronAPI?.respondAppClose(decision);
+        void window.electronIPC?.respondAppClose(decision);
       })();
     });
     return () => {

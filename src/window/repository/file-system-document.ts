@@ -15,25 +15,25 @@ import type {
 
 export class FileSystemDocumentRepository implements DocumentRepository {
   async save(snapshot: DocumentSnapshot, currentPath: string | null): Promise<SaveResult> {
-    if (!window.electronAPI?.saveMply) {
-      return { ok: false, canceled: false, error: { message: 'electronAPI.saveMply が未配線' } };
+    if (!window.electronIPC?.saveMply) {
+      return { ok: false, canceled: false, error: { message: 'electronIPC.saveMply が未配線' } };
     }
     const json = JSON.stringify(snapshot);
-    const r = await window.electronAPI.saveMply(json, currentPath);
+    const r = await window.electronIPC.saveMply(json, currentPath);
     if (r.success) return { ok: true, filePath: r.filePath };
     if (r.reason === 'canceled') return { ok: false, canceled: true };
     return { ok: false, canceled: false, error: { message: r.reason } };
   }
 
   async load(): Promise<LoadResult> {
-    if (!window.electronAPI?.openMply) {
+    if (!window.electronIPC?.openMply) {
       return {
         ok: false,
         canceled: false,
-        error: { kind: 'io', message: 'electronAPI.openMply が未配線' },
+        error: { kind: 'io', message: 'electronIPC.openMply が未配線' },
       };
     }
-    const r = await window.electronAPI.openMply();
+    const r = await window.electronIPC.openMply();
     if (!r.ok) {
       if (r.reason === 'canceled') return { ok: false, canceled: true };
       return { ok: false, canceled: false, error: { kind: 'io', message: r.reason } };

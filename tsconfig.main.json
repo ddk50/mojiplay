@@ -8,5 +8,5 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src/main.ts", "src/preload.ts", "src/globals/**/*.d.ts"]
+  "include": ["src/host/**/*.ts", "src/preload.ts", "src/electron-ipc.ts", "src/globals/**/*.d.ts"]
 }

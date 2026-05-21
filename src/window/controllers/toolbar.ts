@@ -15,9 +15,9 @@ import type { Tool } from '../usecases/tools/tool-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
 import type { MenuActions } from '../menu-action-registry';
 import type { ToolbarController, ToolbarControllerDeps } from './toolbar-interface';
-import { switchMode } from '../renderer/switch-mode';
-import { fontFamilySel, fontStyleSel, populateStyleList } from '../renderer/font-enumeration';
-import { currentFontStyle } from '../renderer/font-current';
+import { switchMode } from '../presenter/switch-mode';
+import { fontFamilySel, fontStyleSel, populateStyleList } from '../presenter/font-enumeration';
+import { currentFontStyle } from '../presenter/font-current';
 
 export class ToolbarControllerImpl implements ToolbarController {
   private readonly state: State;

@@ -12,13 +12,5 @@
     "noEmit": true,
     "rootDir": "src"
   },
-  "include": [
-    "src/renderer.ts",
-    "src/core/**/*.ts",
-    "src/usecases/**/*.ts",
-    "src/repository/**/*.ts",
-    "src/controllers/**/*.ts",
-    "src/renderer/**/*.ts",
-    "src/globals/**/*.d.ts"
-  ]
+  "include": ["src/window/**/*.ts", "src/globals/**/*.d.ts"]
 }

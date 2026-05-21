@@ -1,6 +1,7 @@
-// renderer process を 1 個の IIFE bundle にまとめる。entry は src/renderer.ts
-// (= renderer process の Composition Root、main.ts / preload.ts と並ぶ top-level)。
-// そこから src/{core,usecases,repository,controllers,renderer}/* が芋づる式に bundle 入り。
+// renderer process (Chromium / main world) を 1 個の IIFE bundle にまとめる。
+// entry は src/window/renderer.ts (= main world の Composition Root)。
+// そこから src/window/{core,usecases,repository,controllers,presenter}/* が
+// 芋づる式に bundle 入り。
 // fabric / fontkit は vendor/ から <script> でグローバルロードしているので、
 // import 文は書かれていない (= esbuild は global 参照として残す)。
 //
@@ -12,7 +13,7 @@ import { build, context } from 'esbuild';
 const isWatch = process.argv.includes('--watch');
 
 const opts = {
-  entryPoints: ['src/renderer.ts'],
+  entryPoints: ['src/window/renderer.ts'],
   bundle: true,
   outfile: 'dist/renderer/bundle.js',
   format: 'iife',
@@ -33,9 +34,7 @@ const opts = {
 if (isWatch) {
   const ctx = await context(opts);
   await ctx.watch();
-  console.log(
-    '[esbuild] watching src/renderer.ts + src/{core,usecases,repository,controllers,renderer}/*',
-  );
+  console.log('[esbuild] watching src/window/**/*');
 } else {
   await build(opts);
 }
