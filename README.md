@@ -101,12 +101,12 @@ Drop a `build/icon.ico` (256×256 or larger) into the repo and it becomes the ap
 
 ## Tech stack
 
-| Purpose               | Library                                                                       |
-| --------------------- | ----------------------------------------------------------------------------- |
-| Desktop framework     | [Electron](https://www.electronjs.org/) v29                                   |
-| Canvas / interaction  | [Fabric.js](http://fabricjs.com/) v5.3                                        |
-| Glyph path extraction | [fontkit](https://github.com/foliojs/fontkit) v2                              |
-| Tests                 | [Jest](https://jestjs.io/) + [ts-jest](https://kulshekhar.github.io/ts-jest/) |
+| Purpose               | Library                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------- |
+| Desktop framework     | [Electron](https://www.electronjs.org/) v41                                           |
+| Canvas / interaction  | [Fabric.js](http://fabricjs.com/) v5.3                                                |
+| Glyph path extraction | [fontkit](https://github.com/foliojs/fontkit) v2                                      |
+| Tests                 | [Jest](https://jestjs.io/) v30 + [ts-jest](https://kulshekhar.github.io/ts-jest/) v29 |
 
 ## License
 
