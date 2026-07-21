@@ -22,7 +22,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "electron-log": "^5.4.3",
+    "electron-log": "^5.4.4",
     "ulid": "^3.0.2"
   },
   "devDependencies": {
