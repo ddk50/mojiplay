@@ -13,16 +13,13 @@ updates:
       prefix: 'chore(deps)'
       prefix-development: 'chore(deps-dev)'
     groups:
-      # patch / minor はまとめて 1 PR (PR 乱立を防ぐ)。
-      # major は別 PR で出て人間レビュー対象になる。
-      dev-minor-patch:
-        dependency-type: 'development'
+      # major も含めて全 npm 依存を 1 PR にまとめる (PR 乱立を防ぐ)。
+      # 個人用途なので major も一括レビューで十分。
+      npm-all:
+        patterns:
+          - '*'
         update-types:
-          - 'minor'
-          - 'patch'
-      prod-minor-patch:
-        dependency-type: 'production'
-        update-types:
+          - 'major'
           - 'minor'
           - 'patch'
 
@@ -38,7 +35,10 @@ updates:
     commit-message:
       prefix: 'ci(deps)'
     groups:
-      github-actions:
+      github-actions-all:
+        patterns:
+          - '*'
         update-types:
+          - 'major'
           - 'minor'
           - 'patch'
