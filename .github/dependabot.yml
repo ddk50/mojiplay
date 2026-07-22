@@ -13,15 +13,22 @@ updates:
       prefix: 'chore(deps)'
       prefix-development: 'chore(deps-dev)'
     groups:
-      # major も含めて全 npm 依存を 1 PR にまとめる (PR 乱立を防ぐ)。
-      # 個人用途なので major も一括レビューで十分。
-      npm-all:
+      # minor / patch のみをまとめて 1 PR に (常に green・PR 乱立も無し)。
+      npm-minor-patch:
         patterns:
           - '*'
         update-types:
-          - 'major'
           - 'minor'
           - 'patch'
+    ignore:
+      # major は自動 PR を出さない。破壊的変更は手動で対応する。
+      #   - typescript 7: ts-jest が peer typescript "<7" のため install 不可 (追従待ち)
+      #   - fabric 7: アプリが v5 内部 API に依存 + @types/fabric が v5 系のみ
+      #   - electron / @types/node 等のメジャーも意図的に手動更新
+      # 更新したくなったら該当行を一時的に外して recreate する。
+      - dependency-name: '*'
+        update-types:
+          - 'version-update:semver-major'
 
   # GitHub Actions 自体 (actions/checkout, actions/setup-node 等) の更新
   - package-ecosystem: 'github-actions'
