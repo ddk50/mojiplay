@@ -10,12 +10,10 @@
 // boundary translation は repository/file-system-document.ts で行う。
 
 export type IpcSaveResult =
-  | { success: true; filePath: string }
-  | { success: false; reason: string };
+  { success: true; filePath: string } | { success: false; reason: string };
 
 export type IpcOpenResult =
-  | { ok: true; filePath: string; content: string }
-  | { ok: false; reason: string };
+  { ok: true; filePath: string; content: string } | { ok: false; reason: string };
 
 export type IpcDiscardChoice = 'save' | 'discard' | 'cancel';
 
