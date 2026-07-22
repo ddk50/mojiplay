@@ -25,8 +25,11 @@ jobs:
           node-version: '24'
           cache: 'npm'
 
+      # optional 依存は除外する。fabric v5 が Node 用に持つ canvas / jsdom は
+      # このアプリでは未使用 (renderer は vendored fabric、test は fabric-stub)。
+      # npm 11 は lockfile に無い optional canvas を要求して npm ci を失敗させるため。
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --omit=optional
 
       # tsc (main + preload), tsc --noEmit (renderer typecheck), esbuild (renderer bundle)
       # の 3 段階を順に走らせる。型エラーやコンパイル失敗があればここで落ちる。
