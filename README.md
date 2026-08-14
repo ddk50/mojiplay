@@ -84,7 +84,7 @@ npm run dist:win
 The artifact is written to:
 
 ```
-release/mojiplay-0.1.0-portable-x64.exe
+release/mojiplay-<version>-portable-x64.exe   # e.g. mojiplay-0.2.0-portable-x64.exe
 ```
 
 Copy it to any Windows PC and run — no installer needed.
@@ -105,8 +105,8 @@ Drop a `build/icon.ico` (256×256 or larger) into the repo and it becomes the ap
 
 | Purpose               | Library                                                                               |
 | --------------------- | ------------------------------------------------------------------------------------- |
-| Desktop framework     | [Electron](https://www.electronjs.org/) v41                                           |
-| Canvas / interaction  | [Fabric.js](http://fabricjs.com/) v5.3                                                |
+| Desktop framework     | [Electron](https://www.electronjs.org/) v43                                           |
+| Canvas / interaction  | [Fabric.js](http://fabricjs.com/) v5.5                                                |
 | Glyph path extraction | [fontkit](https://github.com/foliojs/fontkit) v2                                      |
 | Tests                 | [Jest](https://jestjs.io/) v30 + [ts-jest](https://kulshekhar.github.io/ts-jest/) v29 |
 
