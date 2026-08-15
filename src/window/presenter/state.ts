@@ -1,8 +1,15 @@
-// renderer/state.ts — fabric.Canvas を encapsulate した State クラス。
+// renderer/state.ts — fabric.Canvas を encapsulate した State クラス (canvas Gateway)。
 //
 // CLAUDE.md「Undo/Redo + 永続化に向けた State / Viewport 分離モデル」の State 層を
-// 1 クラスに集約。fabric への結合を 1 ファイルに閉じ込め、外部 (Tool / app.ts /
-// menu) には ToolHost interface + History API + 永続化 API を提供する。
+// 集約。外部 (Tool / app.ts / menu) には ToolHost interface + History API +
+// 永続化 API を提供する。presenter/ 配下だが役割は Presenter (内→外の表示整形)
+// ではなく canvas という device への Gateway (双方向の fabric 接触面)。
+//
+// 不透明 snapshot の canvas 読み書き (undo/redo の Command 適用・永続化) は
+// CanvasPort (usecases/canvas-port-interface.ts) 経由 — 実装は
+// presenter/fabric-canvas-port.ts。それ以外の fabric 癒着 (object 構築 /
+// イベント正規化 / 選択操作) は当面このファイルに残り、DocumentInteractor
+// 切り出し (Step 2 以降) で段階的に港へ寄せる。
 //
 // fabric の癖 (path 配列の直接代入 / `_setPositionDimensions` / pathOffset 補正 /
 // ActiveSelection の座標系) はすべてこの中に閉じ込められている。
@@ -40,6 +47,8 @@ import {
   type OutlinedPathSpec,
 } from '../usecases/outline-text-to-path';
 import type { FontProvider } from '../usecases/font-provider-interface';
+import type { CanvasPort } from '../usecases/canvas-port-interface';
+import { FabricCanvasPort } from './fabric-canvas-port';
 import { exportObjectToPngDataUrl } from './copy-export';
 import {
   getUpperCanvasEl,
@@ -70,6 +79,9 @@ type InternalHandle = ObjectHandle & { _obj: fabric.Object };
 
 export class State implements StateContract {
   private readonly canvas: fabric.Canvas;
+  // 不透明 snapshot の canvas 読み書き口。undo/redo の Command 適用と永続化は
+  // fabric 直接ではなくこの port を経由する (将来 DocumentInteractor へ移す準備)。
+  private readonly port: CanvasPort;
   private readonly history: History;
   private readonly upperCanvas: HTMLCanvasElement;
   private readonly fontProvider: FontProvider;
@@ -99,6 +111,9 @@ export class State implements StateContract {
 
   constructor(canvas: fabric.Canvas, fontProvider: FontProvider, options: CreateStateOptions = {}) {
     this.canvas = canvas;
+    // Step 1 の暫定: port は State 内部で構築 (constructor signature を変えない)。
+    // DocumentInteractor 切り出し時に Composition Root からの注入へ移行する。
+    this.port = new FabricCanvasPort(canvas);
     this.history = new History({ max: options.historyMax ?? 100 });
     this.upperCanvas = getUpperCanvasEl(canvas);
     this.fontProvider = fontProvider;
@@ -220,16 +235,12 @@ export class State implements StateContract {
     return {
       format: 'mojiplay',
       version: 1,
-      canvas: this.canvas.toJSON(['data']),
+      canvas: this.port.dumpDocument(),
     };
   }
 
   async applySnapshot(s: DocumentSnapshot): Promise<void> {
-    this.canvas.clear();
-    // canvas.loadFromJSON は内部で enlivenObjects を呼ぶため非同期。callback で resolve。
-    await new Promise<void>((resolve) => this.canvas.loadFromJSON(s.canvas, () => resolve()));
-    this.canvas.viewportTransform = [1, 0, 0, 1, 0, 0];
-    this.canvas.requestRenderAll();
+    await this.port.loadDocument(s.canvas);
     // 注: data.objectId は信頼してそのまま採用 (再発行しない)。
     // 単一 window 前提。複数 window 同時 load を許す機能を入れる時は要検討。
     this.clearHistory();
@@ -624,92 +635,6 @@ export class State implements StateContract {
     this.mutationListeners.forEach((cb) => cb());
   }
 
-  // ----- ObjectSnapshot 境界変換 -----
-
-  private resolveObjectById(id: ObjectId): fabric.Object | null {
-    return this.canvas.getObjects().find((o) => o.data?.objectId === id) ?? null;
-  }
-
-  private writeSnapshotToCanvas(snapshot: ObjectSnapshot): void {
-    const id = snapshot.data.objectId;
-    const obj = this.resolveObjectById(id);
-    if (!obj) return;
-
-    const type = snapshot.type as string;
-
-    if (type === 'path') {
-      const p = obj as fabric.Path;
-      // path 配列の上書きは set() に任せず直接代入 (fabric 内部の正規化を回避)。
-      (p as unknown as { path: PathCommandArray }).path = snapshot.path as PathCommandArray;
-      p.set({
-        left: snapshot.left as number,
-        top: snapshot.top as number,
-        scaleX: snapshot.scaleX as number,
-        scaleY: snapshot.scaleY as number,
-        angle: snapshot.angle as number,
-        flipX: snapshot.flipX as boolean | undefined,
-        flipY: snapshot.flipY as boolean | undefined,
-        skewX: snapshot.skewX as number | undefined,
-        skewY: snapshot.skewY as number | undefined,
-        fill: snapshot.fill as string | undefined,
-      });
-      // commands 変更後、width / height / pathOffset を再算出
-      recomputePathDimensions(p, { left: p.left, top: p.top });
-      markPathDirty(p);
-    } else if (type === 'text' || type === 'i-text') {
-      const t = obj as fabric.Text;
-      t.set({
-        text: snapshot.text as string,
-        left: snapshot.left as number,
-        top: snapshot.top as number,
-        scaleX: snapshot.scaleX as number,
-        scaleY: snapshot.scaleY as number,
-        angle: snapshot.angle as number,
-        flipX: snapshot.flipX as boolean | undefined,
-        flipY: snapshot.flipY as boolean | undefined,
-        skewX: snapshot.skewX as number | undefined,
-        skewY: snapshot.skewY as number | undefined,
-        fill: snapshot.fill as string | undefined,
-        fontFamily: snapshot.fontFamily as string | undefined,
-        fontSize: snapshot.fontSize as number | undefined,
-        fontWeight: snapshot.fontWeight as string | number | undefined,
-        fontStyle: snapshot.fontStyle as fabric.IText['fontStyle'],
-      });
-    }
-
-    // data (objectId / type / その他 custom field) を snapshot から復元。
-    obj.data = { ...obj.data, ...snapshot.data };
-
-    obj.setCoords();
-  }
-
-  private createObjectOnCanvas(snapshot: ObjectSnapshot): fabric.Object {
-    const type = snapshot.type as string;
-    let obj: fabric.Object;
-
-    if (type === 'path') {
-      const { path: pathData, type: _t, ...opts } = snapshot;
-      obj = new fabric.Path(pathData as unknown as fabric.Point[], opts as fabric.IPathOptions);
-    } else if (type === 'text' || type === 'i-text') {
-      const { text: textValue, type: _t, ...opts } = snapshot;
-      obj = new fabric.Text(textValue as string, opts as fabric.TextOptions);
-    } else {
-      throw new Error(`Unknown object type for createObjectOnCanvas: ${type}`);
-    }
-
-    if (!obj.data || !obj.data.objectId) {
-      obj.data = { ...snapshot.data };
-    }
-
-    this.canvas.add(obj);
-    return obj;
-  }
-
-  private removeObjectFromCanvas(id: ObjectId): void {
-    const obj = this.resolveObjectById(id);
-    if (obj) this.canvas.remove(obj);
-  }
-
   // ----- PathHandle / ObjectHandle 実装 -----
 
   /** drag 終了時の bbox 再計算 + pathOffset 補正 + object:modified 発火。 */
@@ -803,13 +728,13 @@ export class State implements StateContract {
   private applyCommand(cmd: Command): void {
     switch (cmd.kind) {
       case 'objectChanged':
-        this.writeSnapshotToCanvas(cmd.after);
+        this.port.writeSnapshot(cmd.after);
         break;
       case 'objectCreated':
-        this.createObjectOnCanvas(cmd.after);
+        this.port.createFromSnapshot(cmd.after);
         break;
       case 'objectDeleted':
-        this.removeObjectFromCanvas(cmd.objectId);
+        this.port.removeObject(cmd.objectId);
         break;
       case 'compound':
         cmd.commands.forEach((c) => this.applyCommand(c));
@@ -819,19 +744,19 @@ export class State implements StateContract {
         return _;
       }
     }
-    this.canvas.requestRenderAll();
+    this.port.requestRender();
   }
 
   private revertCommand(cmd: Command): void {
     switch (cmd.kind) {
       case 'objectChanged':
-        this.writeSnapshotToCanvas(cmd.before);
+        this.port.writeSnapshot(cmd.before);
         break;
       case 'objectCreated':
-        this.removeObjectFromCanvas(cmd.objectId);
+        this.port.removeObject(cmd.objectId);
         break;
       case 'objectDeleted':
-        this.createObjectOnCanvas(cmd.before);
+        this.port.createFromSnapshot(cmd.before);
         break;
       case 'compound':
         // 逆順で revert (= apply の逆順序で打ち消す)
@@ -842,7 +767,7 @@ export class State implements StateContract {
         return _;
       }
     }
-    this.canvas.requestRenderAll();
+    this.port.requestRender();
   }
 
   // ----- fabric event handlers (arrow methods で this binding を保つ) -----

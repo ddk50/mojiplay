@@ -44,7 +44,7 @@ src/
 ├── window/                      # RENDERER / main world (アプリ本体)
 │   ├── renderer.ts              # entry / Composition Root (DI のみ)
 │   ├── core/                    # Entities: path/ history/ document/ state-interface.ts / object-id.ts
-│   ├── usecases/                # Use Case (Interactor + Port): tools/ menu/ ui-port-interface.ts / host-shell-interface.ts
+│   ├── usecases/                # Use Case (Interactor + Port): tools/ menu/ ui-port-interface.ts / host-shell-interface.ts / canvas-port-interface.ts
 │   ├── repository/              # Gateway: document-interface.ts + file-system-document.ts
 │   ├── controllers/             # Input Adapter (外→内): canvas-input / keyboard / menu / toolbar / view
 │   ├── presenter/               # Presenter + Frameworks 接触面 (内→外、fabric/DOM 癒着レイヤ)
@@ -163,7 +163,8 @@ undo/redo は `ObjectSnapshot` (= `fabric.Object.toObject(['data'])`) を canvas
 
 - **state-jump 一貫採用**: 差分 / 位置補正ロジックを持たない
 - **`ObjectSnapshot` = `toObject(['data'])`**: 永続化フォーマットと自動一致 (format 変換不要)
-- **`History` は fabric 不知**: pure data 責務。fabric への反映は `presenter/state.ts` 内
+- **`History` は fabric 不知**: pure data 責務。fabric への反映は `CanvasPort` (`usecases/canvas-port-interface.ts`、不透明 snapshot の canvas 読み書き口) 経由で `presenter/fabric-canvas-port.ts` が担う
+- **`presenter/state.ts` は Presenter ではなく canvas Gateway**: presenter/ 配下だが役割は fabric 接触面 (双方向)。業務判断は触るたびに usecase 側 (pure function / port 経由) へくり抜いていく方針
 - **type が変わる操作は新規 ID 発行**: outline 化 (Text→Path) は `objectDeleted`+`objectCreated` の compound
 - **`e.action` の有無で fabric-driven / tool-driven を区別**: `object:modified` の二重 push 防止
 - **path 書き戻しの `path` 配列は `set()` 経由ではなく直接代入**: fabric 内部正規化を回避
