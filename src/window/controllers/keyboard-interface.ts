@@ -11,7 +11,6 @@ export interface KeyboardControllerDeps {
   state: State;
   selectCharTool: SelectCharTool;
   menuActions: MenuActions;
-  canvas: fabric.Canvas;
 }
 
 export interface KeyboardController {

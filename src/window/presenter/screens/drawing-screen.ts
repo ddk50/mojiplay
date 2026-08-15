@@ -15,8 +15,9 @@
 //   2. Tool インスタンスと ToolbarPresenter (modeButtons) 生成
 //   3. MenuActionRegistry 構築 + screen 内で wiring validate
 //   4. 5 個の Controller を構築して attach
-//   5. attachSidebar() でサイドバー operate を有効化
-// unmount で全 Controller detach + sidebar detach。
+//   5. Presenter (Toolbar / AnchorOverlay) を self-wiring attach
+//   6. attachSidebar() でサイドバー operate を有効化
+// unmount で全 Presenter / Controller detach + sidebar detach。
 
 import type { Tool } from '../../usecases/tools/tool-interface';
 import type { Mode } from '../../core/state-interface';
@@ -37,7 +38,8 @@ import {
   type MenuActions,
   validateMenuActionWiring,
 } from '../../menu-action-registry';
-import { ToolbarPresenterImpl } from '../toolbar';
+import { ToolbarPresenter } from '../toolbar';
+import { AnchorOverlayPresenter } from '../anchor-overlay';
 import { currentTextProps } from '../font-current';
 import { attachSidebar } from '../sidebar';
 
@@ -121,7 +123,7 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
 
       const toolButtonsContainer = document.getElementById('drawing-tool-buttons');
       if (!toolButtonsContainer) throw new Error('#drawing-tool-buttons not found');
-      const toolbarPresenter = new ToolbarPresenterImpl();
+      const toolbarPresenter = new ToolbarPresenter(canvas);
       const modeButtons = toolbarPresenter.buildModeButtons(
         Object.values(tools),
         toolButtonsContainer,
@@ -149,19 +151,17 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
         tools,
         selectCharTool,
         canvas,
-        toolbar: toolbarPresenter,
         onZoomChanged: () => viewController.refreshTitle(),
       });
       const keyboardController: KeyboardController = new KeyboardControllerImpl({
         state,
         selectCharTool,
         menuActions,
-        canvas,
       });
       const menuController: MenuController = new MenuControllerImpl({
         menuActions,
         host,
-        canvas,
+        state,
       });
       const toolbarController: ToolbarController = new ToolbarControllerImpl({
         state,
@@ -180,12 +180,22 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
       ] as const;
       controllers.forEach((c) => c.attach());
 
+      // 内→外の Presenter self-wiring。Controller の後に attach することで、
+      // selection イベント時に Tool の選択処理 → toolbar 同期の順を保つ
+      // (fabric の listener は購読順に発火する)。
+      const presenters = [
+        toolbarPresenter,
+        new AnchorOverlayPresenter({ state, selectCharTool, canvas }),
+      ] as const;
+      presenters.forEach((p) => p.attach());
+
       // ── 5. Sidebar (DOM-only helper) ─────────────────────────────────
       const sidebarRoot = document.getElementById('drawing-sidebar');
       if (!sidebarRoot) throw new Error('#drawing-sidebar not found');
       const detachSidebar = attachSidebar(sidebarRoot);
 
       detach = (): void => {
+        for (const p of presenters) p.detach();
         for (const c of controllers) c.detach();
         detachSidebar();
       };

@@ -27,13 +27,11 @@ export class KeyboardControllerImpl implements KeyboardController {
   private readonly state: State;
   private readonly selectCharTool: SelectCharTool;
   private readonly menuActions: MenuActions;
-  private readonly canvas: fabric.Canvas;
 
   constructor(deps: KeyboardControllerDeps) {
     this.state = deps.state;
     this.selectCharTool = deps.selectCharTool;
     this.menuActions = deps.menuActions;
-    this.canvas = deps.canvas;
   }
 
   // ====================================================================
@@ -47,14 +45,13 @@ export class KeyboardControllerImpl implements KeyboardController {
    * IText 編集中は Enter 以外を bypass。
    */
   readonly onKeyDownCapture = (e: KeyboardEvent): void => {
-    const editing = this.isEditingIText();
+    const editing = this.state.isEditingText();
 
     // Enter で IText 確定 (capture phase で Fabric の keydown より先に exitEditing)
     if (e.key === 'Enter' && editing) {
       e.preventDefault();
       e.stopPropagation();
-      const it = this.canvas.getActiveObject() as fabric.IText;
-      it.exitEditing(); // → text:editing:exited → State.handleTextEditingExited
+      this.state.exitTextEditing(); // → text:editing:exited → State.handleTextEditingExited
       return;
     }
 
@@ -66,7 +63,7 @@ export class KeyboardControllerImpl implements KeyboardController {
 
   /** bubble phase keydown。fabric の処理後で良いもの (shortcut 全般 + 矢印キー)。 */
   readonly onKeyDownBubble = (e: KeyboardEvent): void => {
-    if (this.isEditingIText()) return;
+    if (this.state.isEditingText()) return;
 
     if (this.dispatchBinding(e, 'bubble')) return;
 
@@ -120,14 +117,9 @@ export class KeyboardControllerImpl implements KeyboardController {
 
   private buildContext(): BindingContext {
     return {
-      hasActiveObject: !!this.canvas.getActiveObject(),
+      hasActiveObject: this.state.getActiveObjects().length > 0,
       isToolbarInput: this.isToolbarInput(),
     };
-  }
-
-  private isEditingIText(): boolean {
-    const active = this.canvas.getActiveObject();
-    return active?.type === 'i-text' && (active as fabric.IText).isEditing === true;
   }
 
   private isToolbarInput(): boolean {

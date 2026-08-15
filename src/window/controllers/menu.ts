@@ -10,19 +10,20 @@
 
 import { type MenuActions, isMenuActionId } from '../menu-action-registry';
 import type { HostShell } from '../usecases/host-shell-interface';
+import type { State } from '../core/state-interface';
 import type { MenuController, MenuControllerDeps } from './menu-interface';
 import { initMenuBar } from '../presenter/menu-bar';
 
 export class MenuControllerImpl implements MenuController {
   private readonly menuActions: MenuActions;
   private readonly host: HostShell;
-  private readonly canvas: fabric.Canvas;
+  private readonly state: State;
   private unsubscribeCopy: (() => void) | null = null;
 
   constructor(deps: MenuControllerDeps) {
     this.menuActions = deps.menuActions;
     this.host = deps.host;
-    this.canvas = deps.canvas;
+    this.state = deps.state;
   }
 
   // ====================================================================
@@ -40,8 +41,7 @@ export class MenuControllerImpl implements MenuController {
    *  IText 編集中は fabric/Electron の native copy に任せたいので bypass する。 */
   readonly onCopyRequest = (): void => {
     this.host.log.debug('[copy] menu-copy IPC received');
-    const active = this.canvas.getActiveObject();
-    if (active?.type === 'i-text' && (active as fabric.IText).isEditing) return;
+    if (this.state.isEditingText()) return;
     void this.menuActions.copy();
   };
 

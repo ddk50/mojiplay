@@ -164,6 +164,20 @@ export interface State {
    */
   commitActiveText(): void;
 
+  /**
+   * IText を編集中 (テキスト入力セッション中) か。Controller の event filter 用
+   * (編集中は global shortcut を bypass、Enter は commit に変換など)。
+   * Controller が canvas.getActiveObject() を直接覗かないための API。
+   */
+  isEditingText(): boolean;
+
+  /**
+   * IText 編集中なら exitEditing() で入力セッションを終了する (編集中でなければ
+   * no-op)。'text:editing:exited' → 文字分割 commit の経路を起動する。
+   * commitActiveText と違い選択解除 (discardActiveObject) はしない。
+   */
+  exitTextEditing(): void;
+
   // ── 高レベル副作用 (= 旧 app.ts の business logic を State 内に閉じ込め) ──
 
   /**

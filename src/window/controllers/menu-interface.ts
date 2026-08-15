@@ -4,11 +4,12 @@
 
 import type { MenuActions } from '../menu-action-registry';
 import type { HostShell } from '../usecases/host-shell-interface';
+import type { State } from '../core/state-interface';
 
 export interface MenuControllerDeps {
   menuActions: MenuActions;
   host: HostShell;
-  canvas: fabric.Canvas;
+  state: State;
 }
 
 export interface MenuController {

@@ -5,9 +5,9 @@
 // 集約。Tool への dispatch、PointerInput 中立化、object:modified の e.action 判別
 // (二重 push 回避) はすべてこの 1 クラスに閉じる。
 //
-// アンカー overlay 描画 (after:render hook) と toolbar 同期 (selection:created /
-// updated / cleared hook) もここから駆動する。toolbar 反映の実体は deps 注入の
-// ToolbarPresenter (内→外) に委譲し、drawAnchorOverlay は renderer/ の helper 関数。
+// 内→外 (toolbar 同期 / anchor overlay 描画) はここには無い — ToolbarPresenter /
+// AnchorOverlayPresenter が fabric イベントを自分で購読する (Presenter self-wiring)。
+// この Controller は入力 (外→内) 専任。
 //
 // 設計判断:
 //   - public な on* メソッドが Controller の真の contract (= 「この Controller が
@@ -19,9 +19,7 @@ import type { State, Mode } from '../core/state-interface';
 import type { Tool } from '../usecases/tools/tool-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
 import type { CanvasInputController, CanvasInputControllerDeps } from './canvas-input-interface';
-import type { ToolbarPresenter } from '../presenter/toolbar-presenter-interface';
 import { buildPointerInput } from '../presenter/canvas-coords';
-import { drawAnchorOverlay } from '../presenter/anchor-overlay';
 import { getUpperCanvasEl } from '../presenter/fabric-internals';
 import { zoomCanvasByWheel } from '../presenter/zoom-canvas-by-wheel';
 
@@ -31,7 +29,6 @@ export class CanvasInputControllerImpl implements CanvasInputController {
   private readonly selectCharTool: SelectCharTool;
   private readonly canvas: fabric.Canvas;
   private readonly upperCanvas: HTMLCanvasElement;
-  private readonly toolbar: ToolbarPresenter;
   private readonly onZoomChanged: () => void;
 
   constructor(deps: CanvasInputControllerDeps) {
@@ -40,7 +37,6 @@ export class CanvasInputControllerImpl implements CanvasInputController {
     this.selectCharTool = deps.selectCharTool;
     this.canvas = deps.canvas;
     this.upperCanvas = getUpperCanvasEl(deps.canvas);
-    this.toolbar = deps.toolbar;
     this.onZoomChanged = deps.onZoomChanged;
   }
 
@@ -130,16 +126,10 @@ export class CanvasInputControllerImpl implements CanvasInputController {
     target.setCoords();
   };
 
-  /** fabric の object:rotating。回転ハンドル操作で toolbar の角度入力を追従。 */
-  readonly onObjectRotating = (e: fabric.IEvent): void => {
-    if (e.target) this.toolbar.setRotation(e.target.angle ?? 0);
-  };
-
   /** fabric の selection:cleared。overlay クリア + アンカー選択リセット。 */
   readonly onSelectionCleared = (): void => {
     this.state.clearOverlay();
     this.selectCharTool.clearSelectedAnchors();
-    this.toolbar.syncToSelection(this.canvas);
   };
 
   /** fabric の selection:created / selection:updated 共通 handler。 */
@@ -147,12 +137,6 @@ export class CanvasInputControllerImpl implements CanvasInputController {
     this.state.clearOverlay();
     this.selectCharTool.clearSelectedAnchors();
     this.tools[this.state.getCurrentMode()].onSelectionChanged(this.state);
-    this.toolbar.syncToSelection(this.canvas);
-  };
-
-  /** fabric の after:render。アンカー overlay 描画 (= Presenter)。 */
-  readonly onAfterRender = (): void => {
-    drawAnchorOverlay(this.state, this.selectCharTool, this.canvas);
   };
 
   // ====================================================================
@@ -165,11 +149,9 @@ export class CanvasInputControllerImpl implements CanvasInputController {
     this.canvas.on('mouse:down', this.onCanvasMouseDown);
     this.canvas.on('mouse:wheel', this.onCanvasMouseWheel);
     this.canvas.on('object:moving', this.onObjectMoving);
-    this.canvas.on('object:rotating', this.onObjectRotating);
     this.canvas.on('selection:cleared', this.onSelectionCleared);
     this.canvas.on('selection:created', this.onSelectionChanged);
     this.canvas.on('selection:updated', this.onSelectionChanged);
-    this.canvas.on('after:render', this.onAfterRender);
   }
 
   detach(): void {
@@ -178,10 +160,8 @@ export class CanvasInputControllerImpl implements CanvasInputController {
     this.canvas.off('mouse:down', this.onCanvasMouseDown as never);
     this.canvas.off('mouse:wheel', this.onCanvasMouseWheel as never);
     this.canvas.off('object:moving', this.onObjectMoving as never);
-    this.canvas.off('object:rotating', this.onObjectRotating as never);
     this.canvas.off('selection:cleared', this.onSelectionCleared as never);
     this.canvas.off('selection:created', this.onSelectionChanged as never);
     this.canvas.off('selection:updated', this.onSelectionChanged as never);
-    this.canvas.off('after:render', this.onAfterRender as never);
   }
 }

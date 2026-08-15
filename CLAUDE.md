@@ -116,13 +116,19 @@ preload は `const api: ElectronIPC = {...}` で型強制 → 契約とずれた
 
 | Controller              | 入力                                                  | dispatch 先                                          |
 | ----------------------- | ----------------------------------------------------- | ---------------------------------------------------- |
-| `CanvasInputController` | DOM mousedown/move + fabric mouse/selection/object 系 | Tool, Alt+wheel zoom, anchor overlay, toolbar 同期   |
+| `CanvasInputController` | DOM mousedown/move + fabric mouse/selection/object 系 | Tool, Alt+wheel zoom                                 |
 | `KeyboardController`    | document keydown                                      | MenuAction, Tool command, Enter で IText commit      |
 | `MenuController`        | HTML メニューバー click + `host.onCopyRequest`        | MenuAction                                           |
 | `ToolbarController`     | toolbar input/button + mode buttons                   | `state.applyPropsToSelection` / MenuAction / setMode |
 | `ViewController`        | window resize / close guard / docStatus               | canvas resize / title bar / close guard              |
 
 各 Controller は `xxx-interface.ts` + `xxx.ts` の 2 ファイル組。consumer は interface 側に依存。`attach()` / `detach()` は self-wiring。
+
+**Controller の canvas アクセス規約** (`window.electronIPC` の 4 ファイル規約と同型):
+
+- `fabric.Canvas` を持ってよい Controller は **`canvas-input` (イベント配線 + 座標変換) と `view` (リサイズ) のみ**。用途もその 2 つに限定
+- 状態の読み取り・変更 (選択有無 / IText 編集中判定 / 編集確定など) は全 Controller が **State API 経由** (`getActiveObjects()` / `isEditingText()` / `exitTextEditing()` 等)。`canvas.getActiveObject()` の直接参照を新規に書かない
+- **内→外 (表示同期) は Controller の仕事ではない**: `ToolbarPresenter` / `AnchorOverlayPresenter` が fabric イベント (`selection:*` / `object:rotating` / `after:render`) を自分で購読する (Presenter self-wiring、canvas は constructor 注入)。Controller が Presenter を蹴る経路を新規に作らない
 
 ### 文字モデル (コードからは見えにくい)
 

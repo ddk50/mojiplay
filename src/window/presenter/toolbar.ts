@@ -1,20 +1,20 @@
-// ToolbarPresenter の Impl。toolbar の挙動に責任を持つコードをここに集約する:
+// ToolbarPresenter。toolbar の挙動に責任を持つコードをここに集約する:
 //
-//   - buildModeButtons: mode 切替ボタン群を tools 配列から動的生成 (旧 buildToolbar)。
+//   - buildModeButtons: mode 切替ボタン群を tools 配列から動的生成。
 //     各 Tool が descriptor (id / label / iconSvg) を自己完結で持つので「受け取った
 //     文字列を innerHTML に流す pure sink」として動く。icon registry のような中間層
 //     は持たない (1 アイコン 1 箇所主義)。構造不変条件 (非空フィールド / id 衝突無し)
 //     は起動時に fail-fast で弾く。
-//   - syncToSelection: 選択中 object → ツールバー表示の同期 + フォント系 disable
-//     (旧 toolbar-sync.ts の syncToolbarToSelection)
-//   - setRotation: object:rotating の回転入力追従 (旧 setRotationInput)
+//   - 選択→表示同期: fabric の selection:created/updated/cleared と object:rotating
+//     を **自分で購読** して、選択中 object の props をツールバーへ反映 + フォント系
+//     disable 判定。内→外の表示同期は Presenter の責務なので、Controller 経由で
+//     蹴ってもらうのではなく self-wiring する (attach/detach は Controller と同じ流儀)。
 //
-// DOM 参照は module top-level ではなく constructor で取得する (import 時副作用を
-// 持たせない)。fontFamilySel / fontStyleSel は font-enumeration.ts の module-level
-// export を引き続き参照 (将来ここへ吸収する候補)。
+// canvas / DOM 参照は constructor で受け取り・取得する (import 時副作用なし)。
+// fontFamilySel / fontStyleSel は font-enumeration.ts の module-level export を
+// 引き続き参照 (将来ここへ吸収する候補)。
 
 import type { Tool } from '../usecases/tools/tool-interface';
-import type { ToolbarPresenter } from './toolbar-presenter-interface';
 import { fontFamilySel, fontStyleSel, populateStyleList, styleValue } from './font-enumeration';
 import { shouldDisableFontControls, type FontEditableProbe } from './font-editable';
 
@@ -32,12 +32,14 @@ function assertValidDescriptors(tools: ReadonlyArray<Tool>): void {
   }
 }
 
-export class ToolbarPresenterImpl implements ToolbarPresenter {
+export class ToolbarPresenter {
+  private readonly canvas: fabric.Canvas;
   private readonly fontSizeInput: HTMLInputElement;
   private readonly fontColorInput: HTMLInputElement;
   private readonly rotationInput: HTMLInputElement;
 
-  constructor() {
+  constructor(canvas: fabric.Canvas) {
+    this.canvas = canvas;
     this.fontSizeInput = document.getElementById('drawing-font-size') as HTMLInputElement;
     this.fontColorInput = document.getElementById('drawing-font-color') as HTMLInputElement;
     this.rotationInput = document.getElementById('drawing-rotation') as HTMLInputElement;
@@ -68,18 +70,50 @@ export class ToolbarPresenterImpl implements ToolbarPresenter {
     return map;
   }
 
-  syncToSelection(canvas: fabric.Canvas): void {
+  // ====================================================================
+  //  Lifecycle (self-wiring)
+  // ====================================================================
+
+  attach(): void {
+    this.canvas.on('selection:created', this.onSelectionEvent);
+    this.canvas.on('selection:updated', this.onSelectionEvent);
+    this.canvas.on('selection:cleared', this.onSelectionEvent);
+    this.canvas.on('object:rotating', this.onObjectRotating);
+  }
+
+  detach(): void {
+    this.canvas.off('selection:created', this.onSelectionEvent as never);
+    this.canvas.off('selection:updated', this.onSelectionEvent as never);
+    this.canvas.off('selection:cleared', this.onSelectionEvent as never);
+    this.canvas.off('object:rotating', this.onObjectRotating as never);
+  }
+
+  // ====================================================================
+  //  fabric event handlers (内→外の表示同期。冪等: 現在の選択を読むだけ)
+  // ====================================================================
+
+  private readonly onSelectionEvent = (): void => {
+    this.syncToSelection();
+  };
+
+  private readonly onObjectRotating = (e: fabric.IEvent): void => {
+    if (e.target) this.rotationInput.value = String(Math.round(e.target.angle ?? 0));
+  };
+
+  /** 選択中 object の props をツールバーへ反映し、フォント変更が効かない選択では
+   *  フォント系コントロールを disable にする。選択なし (cleared) は enable 復帰。 */
+  private syncToSelection(): void {
     // outlined path のみの選択ではフォント変更が効かない (サイレント no-op) ので
     // family / style / size を disable。activeSelection / 選択なし経路も含めて
     // ここで一括更新するため、下の早期 return より前に置く。
     const fontDisabled = shouldDisableFontControls(
-      canvas.getActiveObjects() as unknown as ReadonlyArray<FontEditableProbe>,
+      this.canvas.getActiveObjects() as unknown as ReadonlyArray<FontEditableProbe>,
     );
     fontFamilySel.disabled = fontDisabled;
     fontStyleSel.disabled = fontDisabled;
     this.fontSizeInput.disabled = fontDisabled;
 
-    const active = canvas.getActiveObject() as (fabric.Object & Partial<fabric.Text>) | null;
+    const active = this.canvas.getActiveObject() as (fabric.Object & Partial<fabric.Text>) | null;
     if (!active || active.type === 'activeSelection') return;
     if (active.fontFamily) {
       if (fontFamilySel.value !== active.fontFamily) {
@@ -99,9 +133,5 @@ export class ToolbarPresenterImpl implements ToolbarPresenter {
     if (active.fontSize) this.fontSizeInput.value = String(active.fontSize);
     if (active.fill) this.fontColorInput.value = active.fill as string;
     this.rotationInput.value = String(Math.round(active.angle ?? 0));
-  }
-
-  setRotation(angle: number): void {
-    this.rotationInput.value = String(Math.round(angle));
   }
 }

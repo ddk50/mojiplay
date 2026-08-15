@@ -5,8 +5,8 @@
 // 元々 app.ts の drawAnchorOverlay 関数だったロジックをここに集約。
 //
 // 設計判断:
-//   - state + selectCharTool への参照を closure で保持。CanvasInputController が
-//     hook (after:render) する。
+//   - AnchorOverlayPresenter が fabric の after:render を **自分で購読** して描画する
+//     (内→外は Presenter の self-wiring。Controller は関与しない)。
 //   - DPI スケーリング: contextTop は retina 対応のため canvas.getRetinaScaling() を
 //     掛ける必要あり (詳細は CLAUDE.md「DPI スケーリング」)。
 
@@ -14,6 +14,36 @@ import type { State } from '../core/state-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
 import { computeOverlayLayout } from '../core/path/overlay-layout';
 import { getContextTop } from './fabric-internals';
+
+export interface AnchorOverlayPresenterDeps {
+  state: State;
+  selectCharTool: SelectCharTool;
+  canvas: fabric.Canvas;
+}
+
+export class AnchorOverlayPresenter {
+  private readonly state: State;
+  private readonly selectCharTool: SelectCharTool;
+  private readonly canvas: fabric.Canvas;
+
+  constructor(deps: AnchorOverlayPresenterDeps) {
+    this.state = deps.state;
+    this.selectCharTool = deps.selectCharTool;
+    this.canvas = deps.canvas;
+  }
+
+  attach(): void {
+    this.canvas.on('after:render', this.onAfterRender);
+  }
+
+  detach(): void {
+    this.canvas.off('after:render', this.onAfterRender as never);
+  }
+
+  private readonly onAfterRender = (): void => {
+    drawAnchorOverlay(this.state, this.selectCharTool, this.canvas);
+  };
+}
 
 const ANCHOR_MARKER_PX = 7;
 const ANCHOR_FILL = '#ffffff';

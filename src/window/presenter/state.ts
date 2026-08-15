@@ -240,6 +240,19 @@ export class State implements StateContract {
     this.canvas.requestRenderAll();
   }
 
+  isEditingText(): boolean {
+    const active = this.canvas.getActiveObject();
+    return active?.type === 'i-text' && (active as fabric.IText).isEditing === true;
+  }
+
+  exitTextEditing(): void {
+    const active = this.canvas.getActiveObject();
+    if (active?.type === 'i-text' && (active as fabric.IText).isEditing) {
+      // → 'text:editing:exited' → handleTextEditingExited が文字分割 commit
+      (active as fabric.IText).exitEditing();
+    }
+  }
+
   // ===== 高レベル副作用 (= 旧 app.ts business logic) =====
 
   applyPropsToSelection(props: SelectionProps): void {
