@@ -25,7 +25,6 @@
 import { ensureObjectId } from '../core/object-id';
 import type { ObjectId } from '../core/object-id';
 import type { Command, ObjectSnapshot } from '../core/history/types';
-import { History } from '../core/history/history';
 import type {
   ObjectHandle,
   PathHandle,
@@ -47,7 +46,8 @@ import {
   type OutlinedPathSpec,
 } from '../usecases/outline-text-to-path';
 import type { FontProvider } from '../usecases/font-provider-interface';
-import type { CanvasPort } from '../usecases/canvas-port-interface';
+import type { DocumentInteractor } from '../usecases/document-interactor-interface';
+import { DocumentInteractorImpl } from '../usecases/document-interactor';
 import { FabricCanvasPort } from './fabric-canvas-port';
 import { exportObjectToPngDataUrl } from './copy-export';
 import {
@@ -79,10 +79,10 @@ type InternalHandle = ObjectHandle & { _obj: fabric.Object };
 
 export class State implements StateContract {
   private readonly canvas: fabric.Canvas;
-  // 不透明 snapshot の canvas 読み書き口。undo/redo の Command 適用と永続化は
-  // fabric 直接ではなくこの port を経由する (将来 DocumentInteractor へ移す準備)。
-  private readonly port: CanvasPort;
-  private readonly history: History;
+  // ドキュメントの抽象的内部表現 (History + dirty token + 永続化) の所有者。
+  // fabric 不知の Use Case で、canvas への反映は CanvasPort 経由。
+  // State は history 系 API をここへ委譲する facade。
+  private readonly doc: DocumentInteractor;
   private readonly upperCanvas: HTMLCanvasElement;
   private readonly fontProvider: FontProvider;
 
@@ -100,21 +100,18 @@ export class State implements StateContract {
   // mouse:down で capture、object:modified で消費。ObjectId をキー (multi-select 用)。
   private readonly transformBeforeSnapshots = new Map<ObjectId, ObjectSnapshot>();
 
-  // dirty tracking 用の opaque token。state を変えうる全操作 (pushCommand / undo / redo /
-  // clearHistory / applySnapshot) で increment し、mutationListeners を発火する。
-  private tokenCounter = 0;
-  private mutationListeners: Array<() => void> = [];
-
   // 現在のツールモード。setMode で更新、commitActiveText の selectable 判定で参照。
   // Controller 側の Tool dispatch / button class 切替は依然 Controller の責務。
   private currentMode: Mode = 'select-group';
 
   constructor(canvas: fabric.Canvas, fontProvider: FontProvider, options: CreateStateOptions = {}) {
     this.canvas = canvas;
-    // Step 1 の暫定: port は State 内部で構築 (constructor signature を変えない)。
-    // DocumentInteractor 切り出し時に Composition Root からの注入へ移行する。
-    this.port = new FabricCanvasPort(canvas);
-    this.history = new History({ max: options.historyMax ?? 100 });
+    // 暫定: port / interactor は State 内部で構築 (constructor signature を変えず
+    // consumer / テストを無傷に保つ)。facade が痩せきったら Composition Root 注入へ。
+    this.doc = new DocumentInteractorImpl({
+      port: new FabricCanvasPort(canvas),
+      historyMax: options.historyMax ?? 100,
+    });
     this.upperCanvas = getUpperCanvasEl(canvas);
     this.fontProvider = fontProvider;
 
@@ -192,58 +189,47 @@ export class State implements StateContract {
   }
 
   pushCommand(cmd: Command): void {
-    this.history.push(cmd);
+    this.doc.pushCommand(cmd);
     logger.debug(`[history] push kind=${cmd.kind}`);
-    this.bumpToken();
   }
 
-  // ===== History 操作 =====
+  // ===== History 操作 (DocumentInteractor へ委譲、log だけ facade が担う) =====
 
   undo(): void {
-    const cmd = this.history.undo();
+    const cmd = this.doc.undo();
     if (!cmd) {
       logger.debug('[history] undo: nothing to undo');
       return;
     }
     logger.debug(`[history] undo kind=${cmd.kind}`);
-    this.revertCommand(cmd);
-    this.bumpToken();
-    // Phase A 規約: undo は selection を能動的に変更しない (camera 層は履歴対象外)
   }
 
   redo(): void {
-    const cmd = this.history.redo();
+    const cmd = this.doc.redo();
     if (!cmd) {
       logger.debug('[history] redo: nothing to redo');
       return;
     }
     logger.debug(`[history] redo kind=${cmd.kind}`);
-    this.applyCommand(cmd);
-    this.bumpToken();
   }
 
   canUndo(): boolean {
-    return this.history.canUndo();
+    return this.doc.canUndo();
   }
   canRedo(): boolean {
-    return this.history.canRedo();
+    return this.doc.canRedo();
   }
 
-  // ===== 永続化 (snapshot 境界変換) =====
+  // ===== 永続化 (DocumentInteractor へ委譲) =====
 
   toSnapshot(): DocumentSnapshot {
-    return {
-      format: 'mojiplay',
-      version: 1,
-      canvas: this.port.dumpDocument(),
-    };
+    return this.doc.toSnapshot();
   }
 
   async applySnapshot(s: DocumentSnapshot): Promise<void> {
-    await this.port.loadDocument(s.canvas);
-    // 注: data.objectId は信頼してそのまま採用 (再発行しない)。
-    // 単一 window 前提。複数 window 同時 load を許す機能を入れる時は要検討。
-    this.clearHistory();
+    await this.doc.applySnapshot(s);
+    // fabric イベント正規化用の before-snapshot も document と一緒にリセット
+    this.transformBeforeSnapshots.clear();
   }
 
   commitActiveText(): void {
@@ -326,20 +312,16 @@ export class State implements StateContract {
   // ===== dirty tracking =====
 
   getHistoryToken(): number {
-    return this.tokenCounter;
+    return this.doc.getHistoryToken();
   }
 
   onMutate(cb: () => void): () => void {
-    this.mutationListeners.push(cb);
-    return () => {
-      this.mutationListeners = this.mutationListeners.filter((c) => c !== cb);
-    };
+    return this.doc.onMutate(cb);
   }
 
   clearHistory(): void {
-    this.history.clear();
+    this.doc.clearHistory();
     this.transformBeforeSnapshots.clear();
-    this.bumpToken();
   }
 
   // ===== 高レベル selection 操作 (= 旧 actions/* の fabric 操作をここに閉じ込め) =====
@@ -621,19 +603,12 @@ export class State implements StateContract {
   // ===== debug =====
 
   linearizeHistory(): ReadonlyArray<Command> {
-    return this.history.linearize();
+    return this.doc.linearizeHistory();
   }
 
   // ============================================================
   // 以下 private
   // ============================================================
-
-  // ----- dirty tracking -----
-
-  private bumpToken(): void {
-    this.tokenCounter++;
-    this.mutationListeners.forEach((cb) => cb());
-  }
 
   // ----- PathHandle / ObjectHandle 実装 -----
 
@@ -721,53 +696,6 @@ export class State implements StateContract {
         lockScalingFlip: true,
       });
     }
-  }
-
-  // ----- Command apply / revert -----
-
-  private applyCommand(cmd: Command): void {
-    switch (cmd.kind) {
-      case 'objectChanged':
-        this.port.writeSnapshot(cmd.after);
-        break;
-      case 'objectCreated':
-        this.port.createFromSnapshot(cmd.after);
-        break;
-      case 'objectDeleted':
-        this.port.removeObject(cmd.objectId);
-        break;
-      case 'compound':
-        cmd.commands.forEach((c) => this.applyCommand(c));
-        break;
-      default: {
-        const _: never = cmd;
-        return _;
-      }
-    }
-    this.port.requestRender();
-  }
-
-  private revertCommand(cmd: Command): void {
-    switch (cmd.kind) {
-      case 'objectChanged':
-        this.port.writeSnapshot(cmd.before);
-        break;
-      case 'objectCreated':
-        this.port.removeObject(cmd.objectId);
-        break;
-      case 'objectDeleted':
-        this.port.createFromSnapshot(cmd.before);
-        break;
-      case 'compound':
-        // 逆順で revert (= apply の逆順序で打ち消す)
-        [...cmd.commands].reverse().forEach((c) => this.revertCommand(c));
-        break;
-      default: {
-        const _: never = cmd;
-        return _;
-      }
-    }
-    this.port.requestRender();
   }
 
   // ----- fabric event handlers (arrow methods で this binding を保つ) -----
