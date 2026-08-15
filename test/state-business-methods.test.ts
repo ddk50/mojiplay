@@ -96,6 +96,110 @@ describe('State.applyPropsToSelection', () => {
   });
 });
 
+describe('State.applyPropsToSelection — 複数選択の一括回転', () => {
+  // stub の text は width=height=0 なので中心 = (left, top)
+  async function setupTwoTexts(): Promise<{ state: State; canvas: FakeFabricCanvas; objs: any[] }> {
+    const { state, canvas } = setupWithText();
+    await loadFixture(state, [
+      { type: 'text', text: 'A', left: 0, top: 0, data: { objectId: 'id1', type: 'text' } },
+      { type: 'text', text: 'B', left: 100, top: 0, data: { objectId: 'id2', type: 'text' } },
+    ]);
+    const objs = canvas.getObjects() as any[];
+    const fabricNS = (globalThis as any).fabric;
+    canvas.setActiveObject(new fabricNS.ActiveSelection(objs, { canvas }));
+    return { state, canvas, objs };
+  }
+
+  test('選択 bbox 中心周りの一括回転 (個別スピンではない)', async () => {
+    const { state, objs } = await setupTwoTexts();
+
+    state.applyPropsToSelection({ angle: 90 });
+
+    // pivot = (50, 0)。(0,0)→(50,-50)、(100,0)→(50,50)、角度は両方 90
+    expect(objs[0].left).toBeCloseTo(50);
+    expect(objs[0].top).toBeCloseTo(-50);
+    expect(objs[1].left).toBeCloseTo(50);
+    expect(objs[1].top).toBeCloseTo(50);
+    expect(objs[0].angle).toBe(90);
+    expect(objs[1].angle).toBe(90);
+
+    const cmds = state.linearizeHistory();
+    expect(cmds).toHaveLength(1);
+    expect(cmds[0]).toMatchObject({ kind: 'compound' });
+    expect((cmds[0] as any).commands).toHaveLength(2);
+    // snapshot は世界座標 (undo で正しく戻せる)
+    expect((cmds[0] as any).commands[0].before).toMatchObject({ left: 0, top: 0, angle: 0 });
+  });
+
+  test('適用後も複数選択が維持される (連続適用可能)', async () => {
+    const { state } = await setupTwoTexts();
+    state.applyPropsToSelection({ angle: 90 });
+    expect(state.getActiveObjects()).toHaveLength(2);
+  });
+
+  test('同角度の再適用でさらに回る (相対回転仕様)', async () => {
+    const { state, objs } = await setupTwoTexts();
+    state.applyPropsToSelection({ angle: 90 });
+    state.applyPropsToSelection({ angle: 90 });
+
+    // 90°×2 = 180°: (0,0)→(100,0)、(100,0)→(0,0)
+    expect(objs[0].left).toBeCloseTo(100);
+    expect(objs[0].top).toBeCloseTo(0);
+    expect(objs[1].left).toBeCloseTo(0);
+    expect(objs[1].top).toBeCloseTo(0);
+    expect(objs[0].angle).toBe(180);
+    expect(state.linearizeHistory()).toHaveLength(2);
+  });
+
+  test('混在 props (angle + fill) は 1 個の compound に収まる', async () => {
+    const { state, objs } = await setupTwoTexts();
+    state.applyPropsToSelection({ angle: 90, fill: '#ff0000' });
+
+    expect(objs[0].fill).toBe('#ff0000');
+    expect(objs[1].fill).toBe('#ff0000');
+    expect(objs[0].angle).toBe(90);
+
+    const cmds = state.linearizeHistory();
+    expect(cmds).toHaveLength(1);
+    expect(cmds[0]).toMatchObject({ kind: 'compound' });
+  });
+
+  test('angle: 0 の複数選択は幾何を触らず push もしない', async () => {
+    const { state, objs } = await setupTwoTexts();
+    const tokenBefore = state.getHistoryToken();
+    state.applyPropsToSelection({ angle: 0 });
+
+    expect(objs[0].left).toBe(0);
+    expect(objs[1].left).toBe(100);
+    expect(state.getHistoryToken()).toBe(tokenBefore);
+    expect(state.linearizeHistory()).toHaveLength(0);
+  });
+
+  test('回帰: 単一選択の angle は絶対セットのまま (+= ではない)', async () => {
+    const { state, canvas } = setupWithText();
+    await loadFixture(state, [
+      {
+        type: 'text',
+        text: 'A',
+        left: 10,
+        top: 20,
+        angle: 30,
+        data: { objectId: 'id1', type: 'text' },
+      },
+    ]);
+    const obj = (canvas.getObjects() as any)[0];
+    canvas.setActiveObject(obj);
+
+    state.applyPropsToSelection({ angle: 45 });
+    state.applyPropsToSelection({ angle: 45 });
+
+    expect(obj.angle).toBe(45); // 絶対セット + idempotent
+    expect(obj.left).toBe(10); // 位置は不変
+    expect(obj.top).toBe(20);
+    expect(state.linearizeHistory()).toHaveLength(1); // 2 回目は no-op skip
+  });
+});
+
 describe('State.setMode / getCurrentMode', () => {
   test('setMode で getCurrentMode が更新される', () => {
     const { state } = setupWithText();

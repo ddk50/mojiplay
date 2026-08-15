@@ -86,6 +86,15 @@ class FakeFabricPath {
   ): { left: number; top: number; width: number; height: number } {
     return { left: this.left, top: this.top, width: this.width, height: this.height };
   }
+  // angle=0 前提の最小実装 (回転を考慮した bbox/中心計算は core/rotate-selection の
+  // 純粋テスト側で担保する方針)。
+  getCenterPoint(): { x: number; y: number } {
+    return { x: this.left + this.width / 2, y: this.top + this.height / 2 };
+  }
+  setPositionByOrigin(pt: { x: number; y: number }, _ox: string, _oy: string): void {
+    this.left = pt.x - this.width / 2;
+    this.top = pt.y - this.height / 2;
+  }
   toObject(_keys: ReadonlyArray<string> = []): Record<string, unknown> {
     return {
       type: this.type,
@@ -111,6 +120,8 @@ class FakeFabricText {
   text: string;
   left = 0;
   top = 0;
+  width = 0;
+  height = 0;
   scaleX = 1;
   scaleY = 1;
   angle = 0;
@@ -136,6 +147,20 @@ class FakeFabricText {
   }
   setCoords(): void {
     /* no-op */
+  }
+  getBoundingRect(
+    _absolute?: boolean,
+    _calculate?: boolean,
+  ): { left: number; top: number; width: number; height: number } {
+    return { left: this.left, top: this.top, width: this.width, height: this.height };
+  }
+  // angle=0 前提の最小実装 (FakeFabricPath 側と同じ方針)。
+  getCenterPoint(): { x: number; y: number } {
+    return { x: this.left + this.width / 2, y: this.top + this.height / 2 };
+  }
+  setPositionByOrigin(pt: { x: number; y: number }, _ox: string, _oy: string): void {
+    this.left = pt.x - this.width / 2;
+    this.top = pt.y - this.height / 2;
   }
   toObject(_keys: ReadonlyArray<string> = []): Record<string, unknown> {
     return {

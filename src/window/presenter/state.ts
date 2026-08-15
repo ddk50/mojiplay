@@ -40,6 +40,7 @@ import { Path } from '../core/path/path';
 import { fromFabricPath, toFabricPath } from './path-adapter';
 import { logger, fmtObj } from './logger';
 import { generateGroupId } from './group-id';
+import { selectionPivot, rotatePointAround, normalizeAngle } from '../core/rotate-selection';
 import {
   outlineTextToPath,
   type OutlineTextProps,
@@ -259,6 +260,14 @@ export class State implements StateContract {
     const active = this.canvas.getActiveObjects();
     if (!active.length) return;
 
+    // 複数選択 + angle は per-object の絶対セットではなく「選択全体を 1 つの群として
+    // bbox 中心周りに相対回転」(マウス回転と同じメンタルモデル)。単一選択は従来どおり
+    // 絶対セット (下の per-object ループ)。
+    if (props.angle !== undefined && active.length > 1) {
+      this.applyPropsWithGroupRotation(active, props);
+      return;
+    }
+
     const cmds: Command[] = [];
     for (const obj of active) {
       const id = obj.data?.objectId;
@@ -278,6 +287,57 @@ export class State implements StateContract {
     } else if (cmds.length > 1) {
       this.pushCommand({ kind: 'compound', commands: cmds });
       logger.debug(`[history] push compound (toolbar) ${cmds.length} changes`);
+    }
+  }
+
+  /**
+   * 複数選択 + angle: 選択全体を 1 つの群として union bbox 中心周りに theta 度
+   * 相対回転する (適用のたびに入力角度ぶん回る)。混在 props (fill 等) は同じ pass 内で
+   * per-object に適用し、履歴は 1 個の compound に収める。
+   */
+  private applyPropsWithGroupRotation(selected: fabric.Object[], props: SelectionProps): void {
+    const { angle: theta = 0, ...styleProps } = props;
+    const hasStyleProps = Object.keys(styleProps).length > 0;
+
+    // ActiveSelection の子は left/top が group 中心相対なので、世界座標で扱うため
+    // 一旦 discardActiveObject する (duplicateActiveObjects と同じ理由)。
+    // snapshot も discard 後に撮ることで undo/redo が世界座標で正しく復元される。
+    this.canvas.discardActiveObject();
+
+    const pivot = selectionPivot(selected.map((o) => o.getBoundingRect(true, true)));
+
+    const cmds: Command[] = [];
+    for (const obj of selected) {
+      const before = this.captureObjectSnapshot(obj);
+      if (hasStyleProps) obj.set(styleProps as Partial<fabric.Object>);
+      // theta === 0 は幾何を触らない (FP 誤差で no-op skip が壊れるのを防ぐ)
+      if (theta !== 0 && pivot) {
+        const c = obj.getCenterPoint();
+        const nc = rotatePointAround({ x: c.x, y: c.y }, pivot, theta);
+        // setPositionByOrigin は現在の angle から left/top を導出するため angle が先
+        obj.set({ angle: normalizeAngle((obj.angle ?? 0) + theta) });
+        obj.setPositionByOrigin(new fabric.Point(nc.x, nc.y), 'center', 'center');
+        obj.setCoords();
+      }
+      const after = this.captureObjectSnapshot(obj);
+      const id = obj.data?.objectId;
+      // id 無しでも幾何変換自体は行う (スキップすると群の配置が崩れる) が履歴からは除外
+      if (id && JSON.stringify(after) !== JSON.stringify(before)) {
+        cmds.push({ kind: 'objectChanged', objectId: id, before, after });
+      }
+    }
+
+    // 再選択して連続適用を可能にする (duplicateActiveObjects 末尾と同型)
+    const sel = new fabric.ActiveSelection(selected, { canvas: this.canvas });
+    this.canvas.setActiveObject(sel);
+    this.canvas.requestRenderAll();
+
+    if (cmds.length === 1) {
+      this.pushCommand(cmds[0]);
+      logger.debug('[history] push toolbar group rotation');
+    } else if (cmds.length > 1) {
+      this.pushCommand({ kind: 'compound', commands: cmds });
+      logger.debug(`[history] push compound (toolbar rotation) ${cmds.length} changes`);
     }
   }
 
