@@ -239,6 +239,12 @@ export interface State {
    */
   zoomToPoint(zoom: number, focal: { x: number; y: number }): void;
 
+  /**
+   * viewport を screen px 単位で相対移動する (= canvas.relativePan 相当)。
+   * HandTool (中ボタン drag pan) 用。camera 層の操作なので history には乗らない。
+   */
+  panBy(dx: number, dy: number): void;
+
   /** 選択中の object をすべて削除。history に compound objectDeleted を push。 */
   removeActiveObjects(): void;
 

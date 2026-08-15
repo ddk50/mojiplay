@@ -352,6 +352,10 @@ export class FakeFabricCanvas {
     this._zoom = zoom;
     this._lastZoomFocal = focal;
   }
+  relativePan(point: { x: number; y: number }): void {
+    this.viewportTransform[4] += point.x;
+    this.viewportTransform[5] += point.y;
+  }
   // test 側で readback するための field
   private _zoom = 1;
   private _lastZoomFocal: { x: number; y: number } | null = null;
@@ -401,12 +405,21 @@ function reviveObject(o: { type: string; [k: string]: unknown }): FabricObjectLi
  * `window` 自体が未定義で ReferenceError になるため。`electronAPI` は undefined で
  * 良い (optional chaining で吸われる)。
  */
+/** fabric.Point の最小 stub (State.panBy → canvas.relativePan 経路で使用)。 */
+class FakePoint {
+  constructor(
+    public x: number,
+    public y: number,
+  ) {}
+}
+
 export function installFabricStub(): void {
   (globalThis as { fabric?: unknown }).fabric = {
     ActiveSelection: FakeActiveSelection,
     Path: FakeFabricPath,
     Text: FakeFabricText,
     IText: FakeFabricIText,
+    Point: FakePoint,
     Polyline: { prototype: fakePolylinePrototype },
   };
   if (typeof (globalThis as { window?: unknown }).window === 'undefined') {

@@ -277,6 +277,25 @@ describe('State.clearOverlay', () => {
   });
 });
 
+describe('State.panBy', () => {
+  test('viewportTransform の平行移動成分が screen px delta 分だけ動く', () => {
+    const { state } = setupWithText();
+    state.panBy(30, -10);
+    state.panBy(5, 5);
+    const m = state.getViewportMatrix();
+    expect(m[4]).toBe(35);
+    expect(m[5]).toBe(-5);
+  });
+
+  test('camera 層操作なので history には乗らない (dirty にならない)', () => {
+    const { state } = setupWithText();
+    const before = state.getHistoryToken();
+    state.panBy(100, 100);
+    expect(state.getHistoryToken()).toBe(before);
+    expect(state.canUndo()).toBe(false);
+  });
+});
+
 const ALL_MODES: Mode[] = ['select-group', 'select-char', 'text', 'pen-add', 'pen-remove'];
 
 describe('Mode 列挙', () => {

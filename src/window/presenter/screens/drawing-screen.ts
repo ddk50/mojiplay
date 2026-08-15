@@ -26,6 +26,7 @@ import { SelectGroupTool } from '../../usecases/tools/select-group-tool';
 import { TextTool } from '../../usecases/tools/text-tool';
 import { PenAddTool } from '../../usecases/tools/pen-add-tool';
 import { PenRemoveTool } from '../../usecases/tools/pen-remove-tool';
+import { HandTool } from '../../usecases/tools/hand-tool';
 
 import { State } from '../state';
 import { FontkitFontProvider } from '../font-provider-fontkit';
@@ -112,6 +113,8 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
       const textTool = new TextTool(currentTextProps);
       const penAddTool = new PenAddTool();
       const penRemoveTool = new PenRemoveTool();
+      // mode map 外の特殊ツール: 中ボタン drag で CanvasInputController が直接 routing
+      const handTool = new HandTool();
 
       const tools: Record<Mode, Tool> = {
         'select-group': selectGroupTool,
@@ -150,6 +153,7 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
         state,
         tools,
         selectCharTool,
+        handTool,
         canvas,
         onZoomChanged: () => viewController.refreshTitle(),
       });

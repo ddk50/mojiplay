@@ -12,6 +12,8 @@ export interface CanvasInputControllerDeps {
   state: State;
   tools: Record<Mode, Tool>;
   selectCharTool: SelectCharTool;
+  /** 中ボタン drag で mode 非依存に routing される手のひらツール (mode map 外)。 */
+  handTool: Tool;
   /** イベント配線 (on/off) と座標変換 (getPointer / buildPointerInput) 専用。
    *  状態の読み書きは state 経由で行うこと (CLAUDE.md の canvas アクセス規約)。 */
   canvas: fabric.Canvas;

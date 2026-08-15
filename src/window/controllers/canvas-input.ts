@@ -27,6 +27,7 @@ export class CanvasInputControllerImpl implements CanvasInputController {
   private readonly state: State;
   private readonly tools: Record<Mode, Tool>;
   private readonly selectCharTool: SelectCharTool;
+  private readonly handTool: Tool;
   private readonly canvas: fabric.Canvas;
   private readonly upperCanvas: HTMLCanvasElement;
   private readonly onZoomChanged: () => void;
@@ -35,6 +36,7 @@ export class CanvasInputControllerImpl implements CanvasInputController {
     this.state = deps.state;
     this.tools = deps.tools;
     this.selectCharTool = deps.selectCharTool;
+    this.handTool = deps.handTool;
     this.canvas = deps.canvas;
     this.upperCanvas = getUpperCanvasEl(deps.canvas);
     this.onZoomChanged = deps.onZoomChanged;
@@ -46,11 +48,13 @@ export class CanvasInputControllerImpl implements CanvasInputController {
 
   /**
    * upperCanvas の DOM mousedown (capture phase 想定)。
-   * 現ツールが 'consumed' を返したら fabric 伝播を抑止し、document-level
-   * mousemove/mouseup でドラッグ追跡する。
+   * 中ボタン (button === 1) は現行モードに関係なく HandTool へ、それ以外は現モードの
+   * ツールへ dispatch。'consumed' が返ったら fabric 伝播を抑止し、document-level
+   * mousemove/mouseup でドラッグ追跡する (preventDefault は Chromium の中クリック
+   * autoscroll 抑止も兼ねる)。
    */
   readonly onUpperCanvasMouseDown = (e: MouseEvent): void => {
-    const tool = this.tools[this.state.getCurrentMode()];
+    const tool = e.button === 1 ? this.handTool : this.tools[this.state.getCurrentMode()];
     const result = tool.onPointerDown(
       buildPointerInput(e, this.canvas, this.upperCanvas),
       this.state,
@@ -74,6 +78,7 @@ export class CanvasInputControllerImpl implements CanvasInputController {
 
   /** upperCanvas の DOM mousemove (idle hover、ドラッグ中はツール側で skip)。 */
   readonly onUpperCanvasMouseMove = (e: MouseEvent): void => {
+    if (this.handTool.isDragging()) return; // pan 中は mode tool の hover を走らせない
     const tool = this.tools[this.state.getCurrentMode()];
     if (tool.isDragging()) return;
     tool.onPointerMove(buildPointerInput(e, this.canvas, this.upperCanvas), this.state);

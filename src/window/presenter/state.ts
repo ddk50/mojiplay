@@ -347,6 +347,13 @@ export class State implements StateContract {
     this.canvas.zoomToPoint(focal, zoom);
   }
 
+  panBy(dx: number, dy: number): void {
+    // relativePan 経由 (viewportTransform 直接変異は各 object の coords 再計算が
+    // 走らず hit-test がずれる)
+    this.canvas.relativePan(new fabric.Point(dx, dy));
+    this.canvas.requestRenderAll();
+  }
+
   removeActiveObjects(): void {
     const selected = this.canvas.getActiveObjects();
     if (!selected.length) return;
