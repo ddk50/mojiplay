@@ -11,8 +11,13 @@
 //   - test 側からはこの stub を「fabric の代用」として扱い、振る舞いの assert は
 //     必ず real State の API (state.getActiveObjects() / state.toSnapshot() /
 //     state.canUndo() 等) を経由する。stub の internal counter / 内部 field を peek
-//     することは原則しない。例外は cursor (= 実 DOM の側面なので fake DOM
-//     stand-in 経由で観測する: `fabricCanvas.upperCanvasEl.style.cursor`)。
+//     することは原則しない。例外は 2 つ:
+//       1. cursor (= 実 DOM の側面なので fake DOM stand-in 経由で観測する:
+//          `fabricCanvas.upperCanvasEl.style.cursor`)
+//       2. 選択枠 affordance (hasControls / hasBorders / borderColor /
+//          lockScalingFlip)。fabric が描画・操作可否に使う observable surface で
+//          あり State API には露出しないため、canvas.getObjects() 等で取った
+//          オブジェクトのプロパティを直接 assert してよい。
 //   - 必要最小の surface だけ実装。state が新しい fabric API を呼ぶようになったら
 //     ここに足す。production の fabric を完全模写するつもりはない。
 //   - install は import の副作用にせず明示的な関数にする。test 側で「fabric stub を
@@ -54,6 +59,11 @@ class FakeFabricPath {
   height = 0;
   dirty = false;
   data: { [k: string]: unknown } = {};
+  // 選択枠 affordance (default は production fabric と同値)
+  hasControls = true;
+  hasBorders = true;
+  borderColor: string | undefined;
+  lockScalingFlip = false;
 
   constructor(rawPath: ReadonlyArray<ReadonlyArray<unknown>>, opts: Record<string, unknown> = {}) {
     this.path = Array.isArray(rawPath) ? rawPath.slice() : [];
@@ -68,6 +78,13 @@ class FakeFabricPath {
   }
   calcTransformMatrix(): readonly number[] {
     return [1, 0, 0, 1, 0, 0];
+  }
+  // constructFabricPathFromSpec の debug dump が呼ぶ。test では値を検証しない。
+  getBoundingRect(
+    _absolute?: boolean,
+    _calculate?: boolean,
+  ): { left: number; top: number; width: number; height: number } {
+    return { left: this.left, top: this.top, width: this.width, height: this.height };
   }
   toObject(_keys: ReadonlyArray<string> = []): Record<string, unknown> {
     return {
@@ -103,6 +120,11 @@ class FakeFabricText {
   fontWeight: number | string | undefined;
   fontStyle: string | undefined;
   data: { [k: string]: unknown } = {};
+  // 選択枠 affordance (default は production fabric と同値)
+  hasControls = true;
+  hasBorders = true;
+  borderColor: string | undefined;
+  lockScalingFlip = false;
 
   constructor(text: string, opts: Record<string, unknown> = {}) {
     this.text = text;
@@ -207,6 +229,9 @@ export class FakeFabricCanvas {
 
   add(o: FabricObjectLike): void {
     this._objects.push(o);
+    // production fabric は canvas.add / loadFromJSON の両方で _onObjectAdded を通り
+    // 'object:added' を fire する。State の導出スタイル適用フックがこれに依存。
+    this._fire('object:added', { target: o });
   }
   remove(o: FabricObjectLike): void {
     this._objects = this._objects.filter((x) => x !== o);
@@ -259,7 +284,7 @@ export class FakeFabricCanvas {
     cb?: () => void,
   ): void {
     for (const o of json?.objects ?? []) {
-      this._objects.push(reviveObject(o));
+      this.add(reviveObject(o));
     }
     cb?.();
   }

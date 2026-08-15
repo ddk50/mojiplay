@@ -137,6 +137,7 @@ export class CanvasInputControllerImpl implements CanvasInputController {
   readonly onSelectionCleared = (): void => {
     this.state.clearOverlay();
     this.selectCharTool.clearSelectedAnchors();
+    syncToolbarToSelection(this.canvas);
   };
 
   /** fabric の selection:created / selection:updated 共通 handler。 */

@@ -105,10 +105,12 @@ export class State implements StateContract {
 
     // fabric event hook (mouse:down で before snapshot capture、object:modified で
     // fabric-driven な transform を Command 化して history に push、
-    // text:editing:exited で IText を 1 文字ずつ fabric.Text に分割)
+    // text:editing:exited で IText を 1 文字ずつ fabric.Text に分割、
+    // object:added で選択枠 affordance を導出適用)
     this.canvas.on('mouse:down', this.handleMouseDown);
     this.canvas.on('object:modified', this.handleObjectModified);
     this.canvas.on('text:editing:exited', this.handleTextEditingExited);
+    this.canvas.on('object:added', this.handleObjectAdded);
   }
 
   // ===== ToolHost interface 実装 =====
@@ -283,6 +285,10 @@ export class State implements StateContract {
     this.canvas.forEachObject((o) => {
       o.selectable = isSelectMode;
       o.evented = isSelectMode;
+      // outlined path のハンドルはモード連動 (applyDerivedSelectionStyle と同じ規則)
+      if (o.type === 'path' && o.data?.outlined) {
+        o.hasControls = mode === 'select-group';
+      }
     });
 
     this.clearOverlay();
@@ -553,8 +559,6 @@ export class State implements StateContract {
       scaleY: spec.scaleY,
       selectable: spec.selectable,
       evented: spec.evented,
-      hasControls: false,
-      hasBorders: true,
     } as fabric.IPathOptions);
     p.data = { ...spec.data };
     ensureObjectId(p, 'path');
@@ -643,6 +647,10 @@ export class State implements StateContract {
         scaleX: snapshot.scaleX as number,
         scaleY: snapshot.scaleY as number,
         angle: snapshot.angle as number,
+        flipX: snapshot.flipX as boolean | undefined,
+        flipY: snapshot.flipY as boolean | undefined,
+        skewX: snapshot.skewX as number | undefined,
+        skewY: snapshot.skewY as number | undefined,
         fill: snapshot.fill as string | undefined,
       });
       // commands 変更後、width / height / pathOffset を再算出
@@ -657,6 +665,10 @@ export class State implements StateContract {
         scaleX: snapshot.scaleX as number,
         scaleY: snapshot.scaleY as number,
         angle: snapshot.angle as number,
+        flipX: snapshot.flipX as boolean | undefined,
+        flipY: snapshot.flipY as boolean | undefined,
+        skewX: snapshot.skewX as number | undefined,
+        skewY: snapshot.skewY as number | undefined,
         fill: snapshot.fill as string | undefined,
         fontFamily: snapshot.fontFamily as string | undefined,
         fontSize: snapshot.fontSize as number | undefined,
@@ -757,6 +769,33 @@ export class State implements StateContract {
     if (!obj || obj.type !== 'path') return null;
     if (!obj.data?.outlined) return null;
     return obj as fabric.Path;
+  }
+
+  // ----- 選択枠 affordance の導出適用 -----
+
+  private static readonly OUTLINED_BORDER_COLOR = '#f59e0b';
+
+  /** fabric の object:added。全オブジェクト生成経路 (新規 / アウトライン化 /
+   *  undo-redo 復元 / 複製 / loadFromJSON) がここに合流する。 */
+  private readonly handleObjectAdded = (e: fabric.IEvent): void => {
+    if (e.target) this.applyDerivedSelectionStyle(e.target);
+  };
+
+  /** 選択枠スタイル (borderColor / hasControls 等) は toObject snapshot に載らない
+   *  ため、per-object に一度だけ設定すると複製 / undo-redo / 再ロードで剥がれる。
+   *  data.outlined と現在モードから毎回導出して付け直す。 */
+  private applyDerivedSelectionStyle(obj: fabric.Object): void {
+    if (obj.type === 'path' && obj.data?.outlined) {
+      obj.set({
+        borderColor: State.OUTLINED_BORDER_COLOR,
+        hasBorders: true,
+        // ハンドルは select-group (変形) のみ。select-char / pen 系はアンカー編集と
+        // コーナーハンドルの当たり判定が競合するため非表示 (setMode でも追従)。
+        hasControls: this.currentMode === 'select-group',
+        // 反転禁止: アンカー編集の確定処理 (finalizeDrag) と undo 復元が flip 未対応
+        lockScalingFlip: true,
+      });
+    }
   }
 
   // ----- Command apply / revert -----

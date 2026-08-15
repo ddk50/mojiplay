@@ -92,6 +92,9 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
         selectionBorderColor: '#0066ff',
         selectionLineWidth: 1,
         selectionDashArray: [5, 3],
+        // skew ジェスチャ (中間ハンドル + Shift) を無効化。アンカー編集の確定処理
+        // (finalizeDrag) と undo 復元が skew 未対応のため、発動自体を封じる。
+        altActionKey: 'none',
       });
 
       const fontProvider = new FontkitFontProvider();
