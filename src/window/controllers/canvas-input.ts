@@ -6,8 +6,8 @@
 // (二重 push 回避) はすべてこの 1 クラスに閉じる。
 //
 // アンカー overlay 描画 (after:render hook) と toolbar 同期 (selection:created /
-// updated hook) も canvas 関連の Presenter として同居する。
-// drawAnchorOverlay / syncToolbarToSelection 自体は renderer/ の helper 関数。
+// updated / cleared hook) もここから駆動する。toolbar 反映の実体は deps 注入の
+// ToolbarPresenter (内→外) に委譲し、drawAnchorOverlay は renderer/ の helper 関数。
 //
 // 設計判断:
 //   - public な on* メソッドが Controller の真の contract (= 「この Controller が
@@ -19,9 +19,9 @@ import type { State, Mode } from '../core/state-interface';
 import type { Tool } from '../usecases/tools/tool-interface';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
 import type { CanvasInputController, CanvasInputControllerDeps } from './canvas-input-interface';
+import type { ToolbarPresenter } from '../presenter/toolbar-presenter-interface';
 import { buildPointerInput } from '../presenter/canvas-coords';
 import { drawAnchorOverlay } from '../presenter/anchor-overlay';
-import { syncToolbarToSelection, setRotationInput } from '../presenter/toolbar-sync';
 import { getUpperCanvasEl } from '../presenter/fabric-internals';
 import { zoomCanvasByWheel } from '../presenter/zoom-canvas-by-wheel';
 
@@ -31,6 +31,7 @@ export class CanvasInputControllerImpl implements CanvasInputController {
   private readonly selectCharTool: SelectCharTool;
   private readonly canvas: fabric.Canvas;
   private readonly upperCanvas: HTMLCanvasElement;
+  private readonly toolbar: ToolbarPresenter;
   private readonly onZoomChanged: () => void;
 
   constructor(deps: CanvasInputControllerDeps) {
@@ -39,6 +40,7 @@ export class CanvasInputControllerImpl implements CanvasInputController {
     this.selectCharTool = deps.selectCharTool;
     this.canvas = deps.canvas;
     this.upperCanvas = getUpperCanvasEl(deps.canvas);
+    this.toolbar = deps.toolbar;
     this.onZoomChanged = deps.onZoomChanged;
   }
 
@@ -130,14 +132,14 @@ export class CanvasInputControllerImpl implements CanvasInputController {
 
   /** fabric の object:rotating。回転ハンドル操作で toolbar の角度入力を追従。 */
   readonly onObjectRotating = (e: fabric.IEvent): void => {
-    if (e.target) setRotationInput(e.target.angle ?? 0);
+    if (e.target) this.toolbar.setRotation(e.target.angle ?? 0);
   };
 
   /** fabric の selection:cleared。overlay クリア + アンカー選択リセット。 */
   readonly onSelectionCleared = (): void => {
     this.state.clearOverlay();
     this.selectCharTool.clearSelectedAnchors();
-    syncToolbarToSelection(this.canvas);
+    this.toolbar.syncToSelection(this.canvas);
   };
 
   /** fabric の selection:created / selection:updated 共通 handler。 */
@@ -145,7 +147,7 @@ export class CanvasInputControllerImpl implements CanvasInputController {
     this.state.clearOverlay();
     this.selectCharTool.clearSelectedAnchors();
     this.tools[this.state.getCurrentMode()].onSelectionChanged(this.state);
-    syncToolbarToSelection(this.canvas);
+    this.toolbar.syncToSelection(this.canvas);
   };
 
   /** fabric の after:render。アンカー overlay 描画 (= Presenter)。 */

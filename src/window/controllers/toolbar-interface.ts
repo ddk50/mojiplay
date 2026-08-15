@@ -12,7 +12,7 @@ export interface ToolbarControllerDeps {
   tools: Record<Mode, Tool>;
   selectCharTool: SelectCharTool;
   menuActions: MenuActions;
-  /** buildToolbar が生成した mode → button マップ。is-active class 切替に使う。 */
+  /** ToolbarPresenter.buildModeButtons が生成した mode → button マップ。is-active class 切替に使う。 */
   modeButtons: Record<string, HTMLButtonElement>;
 }
 

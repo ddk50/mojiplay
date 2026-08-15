@@ -5,8 +5,8 @@
 // HTML メニューバー (= MenuController) よりも property-style な変更が多いので
 // 別 Controller として分離。
 //
-// ツールモード切替 (mode buttons) も含めるが、buildToolbar が button マップを
-// 動的生成するため、buildToolbar 呼び出しと初期 mode 設定は app.ts (DI 容器)
+// ツールモード切替 (mode buttons) も含めるが、ToolbarPresenter.buildModeButtons が
+// button マップを動的生成するため、その呼び出しと初期 mode 設定は app.ts (DI 容器)
 // で行い、setMode の実装本体だけここに置く。ToolbarController は modeButtons map
 // と現在モードの追従責務 (is-active class 切替) を負う。
 

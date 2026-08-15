@@ -12,7 +12,7 @@
 //
 // 起動シーケンス (mount):
 //   1. fabric.Canvas / State / HostShell / UIPort / Repository / FileIOInteractor 構築
-//   2. Tool インスタンスと buildToolbar (modeButtons) 生成
+//   2. Tool インスタンスと ToolbarPresenter (modeButtons) 生成
 //   3. MenuActionRegistry 構築 + screen 内で wiring validate
 //   4. 5 個の Controller を構築して attach
 //   5. attachSidebar() でサイドバー operate を有効化
@@ -37,7 +37,7 @@ import {
   type MenuActions,
   validateMenuActionWiring,
 } from '../../menu-action-registry';
-import { buildToolbar } from '../toolbar';
+import { ToolbarPresenterImpl } from '../toolbar';
 import { currentTextProps } from '../font-current';
 import { attachSidebar } from '../sidebar';
 
@@ -104,7 +104,7 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
       const repo = new FileSystemDocumentRepository();
       const fileIO = new FileIOInteractorImpl(state, repo, ui, basename);
 
-      // ── 2. Tool インスタンスと buildToolbar ──────────────────────────
+      // ── 2. Tool インスタンスと ToolbarPresenter ──────────────────────
       const selectGroupTool = new SelectGroupTool();
       const selectCharTool = new SelectCharTool();
       const textTool = new TextTool(currentTextProps);
@@ -121,7 +121,8 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
 
       const toolButtonsContainer = document.getElementById('drawing-tool-buttons');
       if (!toolButtonsContainer) throw new Error('#drawing-tool-buttons not found');
-      const modeButtons = buildToolbar(
+      const toolbarPresenter = new ToolbarPresenterImpl();
+      const modeButtons = toolbarPresenter.buildModeButtons(
         Object.values(tools),
         toolButtonsContainer,
         // ToolbarController が attach 時に setMode を上書きで配線するため、ここの
@@ -148,6 +149,7 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
         tools,
         selectCharTool,
         canvas,
+        toolbar: toolbarPresenter,
         onZoomChanged: () => viewController.refreshTitle(),
       });
       const keyboardController: KeyboardController = new KeyboardControllerImpl({
