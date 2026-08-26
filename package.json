@@ -69,5 +69,10 @@
     "portable": {
       "artifactName": "${productName}-${version}-portable-${arch}.exe"
     }
+  },
+  "allowScripts": {
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.28.2": true,
+    "unrs-resolver@1.12.2": true
   }
 }
