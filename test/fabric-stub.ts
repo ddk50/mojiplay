@@ -65,8 +65,19 @@ class FakeFabricPath {
   borderColor: string | undefined;
   lockScalingFlip = false;
 
-  constructor(rawPath: ReadonlyArray<ReadonlyArray<unknown>>, opts: Record<string, unknown> = {}) {
-    this.path = Array.isArray(rawPath) ? rawPath.slice() : [];
+  constructor(
+    rawPath: ReadonlyArray<ReadonlyArray<unknown>> | string,
+    opts: Record<string, unknown> = {},
+  ) {
+    // production fabric は文字列 (SVG d) も配列 (toObject の path) も受ける。
+    // State.constructFabricPathFromSpec は fontkit 由来の文字列を渡すので、
+    // 絶対座標 M/L/Q/C/Z だけの最小 parser で同等の tuple 列にする。
+    this.path =
+      typeof rawPath === 'string'
+        ? parseAbsoluteSvgPath(rawPath)
+        : Array.isArray(rawPath)
+          ? rawPath.slice()
+          : [];
     Object.assign(this, opts);
   }
   set(props: Record<string, unknown>): this {
@@ -112,6 +123,30 @@ class FakeFabricPath {
 
 function deepCopyRawPath(p: ReadonlyArray<ReadonlyArray<unknown>>): unknown[][] {
   return p.map((c) => (Array.isArray(c) ? c.slice() : [c]));
+}
+
+// fontkit の Path.toSVG() が出す形 ('M0 0 Q50 -50 100 0 Z' / 'M0 0L10 10' 等、
+// 絶対座標コマンドのみ) を fabric.util.parsePath + makePathSimpler 相当の
+// tuple 列にする。相対コマンド / H / V / S / T / A は非対応 (fontkit は出さない)。
+const SVG_ARG_COUNT: Record<string, number> = { M: 2, L: 2, Q: 4, C: 6, Z: 0 };
+
+function parseAbsoluteSvgPath(d: string): unknown[][] {
+  const tokens = d.match(/[MLQCZ]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) ?? [];
+  const out: unknown[][] = [];
+  let i = 0;
+  while (i < tokens.length) {
+    const letter = tokens[i++].toUpperCase();
+    const n = SVG_ARG_COUNT[letter];
+    if (n === undefined) throw new Error(`fabric stub: unsupported SVG path command '${letter}'`);
+    // 同じコマンド文字の後に引数が繰り返される形 (M x y x y ...) も production 同様に許容
+    do {
+      const args = tokens.slice(i, i + n).map(Number);
+      if (args.length !== n) throw new Error(`fabric stub: malformed SVG path near '${letter}'`);
+      out.push([letter, ...args]);
+      i += n;
+    } while (n > 0 && i < tokens.length && /^[-.\d]/.test(tokens[i]));
+  }
+  return out;
 }
 
 // ── Text ──────────────────────────────────────────────────────────────────

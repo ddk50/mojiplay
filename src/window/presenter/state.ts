@@ -37,6 +37,7 @@ import type {
 import type { DocumentSnapshot } from '../core/document/snapshot';
 import type { Mat2x3 } from '../core/path/coords';
 import { Path } from '../core/path/path';
+import { elevateQuadraticsToCubic, hasQuadratic } from '../core/path/elevate';
 import { fromFabricPath, toFabricPath } from './path-adapter';
 import { logger, fmtObj } from './logger';
 import { generateGroupId } from './group-id';
@@ -229,6 +230,14 @@ export class State implements StateContract {
 
   async applySnapshot(s: DocumentSnapshot): Promise<void> {
     await this.doc.applySnapshot(s);
+    // 旧ファイル互換: 正規化 (Q→C) 前に保存された outlined path を C に揃える。
+    // 形状不変の書き換えなので history には乗せない (doc.applySnapshot が
+    // clearHistory 済み、以降 pushCommand も呼ばない → dirty にならない)。
+    for (const obj of this.canvas.getObjects()) {
+      if (obj.type === 'path' && obj.data?.outlined) {
+        normalizeOutlinedPathInPlace(obj as fabric.Path);
+      }
+    }
     // fabric イベント正規化用の before-snapshot も document と一緒にリセット
     this.transformBeforeSnapshots.clear();
   }
@@ -636,6 +645,11 @@ export class State implements StateContract {
     p.data = { ...spec.data };
     ensureObjectId(p, 'path');
 
+    // 正規形 = C (3 次)。TrueType フォントは fontkit が Q (2 次) で返すので
+    // ここで次数上げ。形状は完全一致なので fabric が constructor で算出した
+    // width / height / pathOffset はそのまま有効。
+    normalizeOutlinedPathInPlace(p);
+
     // デバッグ: fabric が実際に保持している値をダンプ。
     const po = getPathOffset(p);
     const rect = p.getBoundingRect(true, true);
@@ -945,6 +959,17 @@ export class State implements StateContract {
 
 // fabric.Text → outlineTextToPath use case が要求する pure data props への抽出。
 // renderer/ に住む (= fabric を知る) ことで、use case 側を fabric 不知に保てる。
+/** outlined path の path 配列を正規形 (Q 無し、曲線は全て C) に書き換える。
+ *  Q→C は曲線形状が完全一致するため bbox / pathOffset の再計算は不要。
+ *  Q が無ければ何もしない (再描画フラグも立てない)。 */
+function normalizeOutlinedPathInPlace(p: fabric.Path): void {
+  const pp = p as unknown as { path: PathCommandArray };
+  const commands = fromFabricPath(pp.path);
+  if (!hasQuadratic(commands)) return;
+  pp.path = toFabricPath(elevateQuadraticsToCubic(commands)) as PathCommandArray;
+  markPathDirty(p);
+}
+
 function extractOutlineTextProps(ft: fabric.Text): OutlineTextProps {
   return {
     text: ft.text || '',

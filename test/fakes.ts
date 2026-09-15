@@ -15,6 +15,19 @@ export class NullFontProvider implements FontProvider {
   }
 }
 
+/** どの query にも同じ pathData を返す FakeFontProvider。
+ *  outlineActiveTexts の通しテスト (Q→C 正規化等) で「fontkit が返す形」を固定する。
+ *  bbox は pathData の座標系と同じ (Y-down)。 */
+export class FixedFontProvider implements FontProvider {
+  constructor(
+    private readonly pathData: string,
+    private readonly bbox: GlyphPathResult['bbox'] = { minX: 0, minY: -100, maxX: 100, maxY: 0 },
+  ) {}
+  async getGlyphPath(): Promise<GlyphPathResult | null> {
+    return { pathData: this.pathData, bbox: this.bbox };
+  }
+}
+
 /** screen / world 座標を同値で構築する PointerInput ヘルパ (= viewport 識別変換前提)。 */
 export function pointer(
   x: number,

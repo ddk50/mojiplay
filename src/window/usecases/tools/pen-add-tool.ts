@@ -1,12 +1,15 @@
 // +ペンツール: セグメント上クリックでアンカーを追加し、ドラッグでハンドルを設定する。
 //
 // フロー:
-//   1. onPointerDown でセグメントヒットがあれば splitSegment を呼んで M/Z 以外の
-//      C/Q/L を t で 2 分割。新アンカーを生成。
+//   1. onPointerDown でセグメントヒットがあれば、まずパス全体の Q を C に次数上げ
+//      (core/path/elevate.ts、形状不変) してから splitSegment を呼んで M/Z 以外の
+//      C/L を t で 2 分割。新アンカーを生成。
+//      → outlined path の正規形は C。Q が残った旧データを触った場合も、この時点で
+//        パス全体が C に揃う (部分的に C 化された混在パスを作らない)。
 //   2. ドラッグ中の onPointerMove では、新アンカーから pointer までのオフセット dx,dy を
 //      計算し、前後セグメントを C 化して対称ハンドル (c2 = anchor - d, 次の c1 = anchor + d)
 //      を設定する。元が C なら反対側ハンドル (前: c1、次: c2) は元の値を維持。
-//      L/Q を分割した場合は反対側ハンドルを 1/3 等分点でデフォルト生成。
+//      L を分割した場合は反対側ハンドルを 1/3 等分点でデフォルト生成。
 //   3. onPointerUp で finalize。
 //
 // hover カーソルはセグメント上で 'copy'。
@@ -45,6 +48,7 @@
 
 import type { Point, PathCommand } from '../../core/path/types';
 import { Path } from '../../core/path/path';
+import { elevateQuadraticsToCubic, hasQuadratic } from '../../core/path/elevate';
 import type { PathTransform } from '../../core/path/coords';
 import { screenToPathLocal } from '../../core/path/coords';
 import { findClosestSegment } from '../../core/path/segment-hit';
@@ -62,7 +66,7 @@ import penAddToolIcon from './icons/pen-add-tool.svg';
 
 interface PenAddDragState {
   readonly cmdIndex: number; // 分割した命令の前半 (新アンカー終端) の index
-  readonly origCmdType: 'C' | 'Q' | 'L';
+  readonly origCmdType: 'C' | 'L'; // Q は split 前に C 化済みなので来ない
   readonly anchor: Point; // 新アンカー位置 (固定)
   readonly prev: Point; // 直前のアンカー位置 (L→C 変換時のデフォルトハンドル算出用)
   readonly next: Point; // 直後のアンカー位置
@@ -116,21 +120,31 @@ export class PenAddTool implements Tool {
     );
     if (!hit) return 'pass';
 
-    const origCmd = snapshot.path.commands[hit.cmdIndex];
-    if (origCmd.type !== 'C' && origCmd.type !== 'Q' && origCmd.type !== 'L') {
+    // 正規化: Q を含むパスは全体を C 化してから分割する (形状不変、index も不変)。
+    // findClosestSegment の cmdIndex / t は次数上げ後もそのまま有効。
+    // 正規化自体は見た目が変わらないので undo 対象にしない (before snapshot は
+    // 正規化後に capture する → undo しても Q には戻らない)。
+    let normalized = snapshot.path;
+    if (hasQuadratic(normalized.commands)) {
+      normalized = new Path(elevateQuadraticsToCubic(normalized.commands));
+      path.setPath(normalized);
+    }
+
+    const origCmd = normalized.commands[hit.cmdIndex];
+    if (origCmd.type !== 'C' && origCmd.type !== 'L') {
       // splitSegment は M/Z に対しては null を返す。理論上ここには来ないが防御。
       return 'pass';
     }
     const origCmdType = origCmd.type;
 
-    const split = snapshot.path.splitSegment(hit.cmdIndex, hit.t);
+    const split = normalized.splitSegment(hit.cmdIndex, hit.t);
     if (!split) return 'pass';
     const firstCmd = split.commands[hit.cmdIndex];
-    if (firstCmd.type !== 'C' && firstCmd.type !== 'Q' && firstCmd.type !== 'L') return 'pass';
+    if (firstCmd.type !== 'C' && firstCmd.type !== 'L') return 'pass';
     const anchor = firstCmd.to;
     const secondIdx = hit.cmdIndex + 1;
     const nextCmd = split.commands[secondIdx];
-    if (nextCmd.type !== 'C' && nextCmd.type !== 'Q' && nextCmd.type !== 'L') return 'pass';
+    if (nextCmd.type !== 'C' && nextCmd.type !== 'L') return 'pass';
 
     const prevPt = split.segmentStart(hit.cmdIndex);
     const prev = prevPt ?? anchor;
@@ -166,7 +180,7 @@ export class PenAddTool implements Tool {
       const { anchor, prev, next, origCmdType } = this.drag;
 
       // 前半セグメント = anchor で終わる C コマンド。
-      // c1 (前アンカーの outgoing) は元が C ならその値、それ以外は 1/3 等分点。
+      // c1 (前アンカーの outgoing) は元が C ならその値、L なら 1/3 等分点。
       // c2 (新アンカーの incoming) は anchor から pointer の対称ハンドル。
       const firstC1: Point =
         origCmdType === 'C' && curFirst.type === 'C'
@@ -181,7 +195,7 @@ export class PenAddTool implements Tool {
 
       // 後半セグメント = next で終わる C コマンド。
       // c1 (新アンカーの outgoing) は anchor から pointer の方向。
-      // c2 (next アンカーの incoming) は元が C ならその値、それ以外は 2/3 点。
+      // c2 (next アンカーの incoming) は元が C ならその値、L なら 2/3 点。
       const secondC2: Point =
         origCmdType === 'C' && curSecond.type === 'C'
           ? curSecond.c2
