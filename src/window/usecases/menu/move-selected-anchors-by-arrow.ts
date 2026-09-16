@@ -6,7 +6,7 @@
 //   - moveSelectedAnchorsByArrow: orchestration (selection 有無チェック + tool 呼び出し)。
 //     act したかを bool で返す (controller 側で preventDefault するか判定するため)。
 //
-// 修飾子チェック (no ctrl/meta/alt)、mode チェック、toolbar input focus チェックは
+// 修飾子チェック (no ctrl/meta/alt)、mode チェック、入力欄 focus チェックは
 // controller 側 (event filter) に残す。
 
 import type { State } from '../../core/state-interface';

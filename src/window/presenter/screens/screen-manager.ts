@@ -7,7 +7,7 @@
 //   4. 新 screen の mount() を await (= 初期化完了まで待つ)
 //
 // 各 Screen は ScreenManager 自身を deps として受け取り、screen 切替トリガ
-// (例: drawing 画面の bottom-bar から「Font Viewer を開く」ボタン) を実装できる。
+// (例: drawing 画面の toolbar から「Font Viewer を開く」ボタン) を実装できる。
 // Screen 同士は ScreenManager 経由でのみ切替を起こす (= 直接 root を触らない)。
 
 import type { Screen, ScreenId } from './screen-interface';

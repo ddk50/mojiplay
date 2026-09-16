@@ -1,8 +1,8 @@
-// 現在の toolbar 入力 (font / weight / italic / size / color) から TextCreateProps /
+// 現在のサイドバー入力 (font / weight / italic / size / color) から TextCreateProps /
 // SelectionProps を組み立てるヘルパ。
 //
-// TextTool (新規 IText 生成) と ToolbarController (toolbar 変更時の applyToSelection)
-// の両方で同じ DOM source を使うため、ここに 1 か所集約する。
+// TextTool (新規 IText 生成) と SidebarController (サイドバー変更時の
+// applyToSelection) の両方で同じ DOM source を使うため、ここに 1 か所集約する。
 
 import type { TextCreateProps } from '../core/state-interface';
 import { fontFamilySel, fontStyleSel } from './font-enumeration';

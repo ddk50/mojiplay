@@ -1,129 +1,95 @@
-// Sidebar: 右サイドバーの可変幅 + 折りたたみ + 完全 hide を担う pure DOM helper。
+// SidebarPresenter: 右サイドバー (= #drawing-sidebar) の内→外 (選択 → 表示同期)。
 //
-// State / business を持たないため Controller 抽象は新設せず、camera 層 op
-// (= switch-mode / zoom-canvas-by-wheel 等) と同類の renderer/ 配下 helper として配置。
+// 旧 ToolbarPresenter.syncToSelection を、担当領域の実体に合わせて改名・分離した
+// もの (下部フローティングツールバーではなく右パネルを触っている)。
 //
-// 責務:
-// - left 端 drag handle (mousedown → mousemove で幅変更、min/max clamp)
-// - header の toggle button click で is-collapsed (40px アイコンストリップ) トグル
-// - Tab キーで is-hidden (幅 0、完全 hide) トグル。IText 編集中 / input focus 中は bypass
-// - 幅 / collapsed / hidden を LocalStorage に独立保存・復元
+// fabric の selection:created/updated/cleared と object:rotating を **自分で購読**
+// して、選択中 object の props をサイドバーへ反映 + フォント系 disable 判定を行う。
+// 内→外の表示同期は Presenter の責務なので、Controller 経由で蹴ってもらうのでは
+// なく self-wiring する (attach/detach は Controller と同じ流儀)。
 //
-// 戻り値は detach 関数。screen unmount / window unload で呼ぶ。
+// canvas / DOM 参照は constructor で受け取り・取得する (import 時副作用なし)。
+// fontFamilySel / fontStyleSel は font-enumeration.ts の module-level export を
+// 引き続き参照 (将来ここへ吸収する候補)。
 
-const LS_KEY_WIDTH = 'mojiplay.sidebar.width';
-const LS_KEY_COLLAPSED = 'mojiplay.sidebar.collapsed';
-const LS_KEY_HIDDEN = 'mojiplay.sidebar.hidden';
+import { fontFamilySel, fontStyleSel, populateStyleList, styleValue } from './font-enumeration';
+import { shouldDisableFontControls, type FontEditableProbe } from './font-editable';
 
-const MIN_WIDTH = 200;
-const MAX_WIDTH = 480;
-const DEFAULT_WIDTH = 240;
+export class SidebarPresenter {
+  private readonly canvas: fabric.Canvas;
+  private readonly fontSizeInput: HTMLInputElement;
+  private readonly fontColorInput: HTMLInputElement;
+  private readonly rotationInput: HTMLInputElement;
 
-function setWidthVar(width: number): void {
-  document.documentElement.style.setProperty('--sidebar-width', `${width}px`);
-}
-
-function restoreInitial(sidebar: HTMLElement): void {
-  const raw = localStorage.getItem(LS_KEY_WIDTH);
-  const parsed = raw === null ? NaN : parseInt(raw, 10);
-  const width = Number.isFinite(parsed)
-    ? Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, parsed))
-    : DEFAULT_WIDTH;
-  setWidthVar(width);
-
-  if (localStorage.getItem(LS_KEY_COLLAPSED) === '1') {
-    sidebar.classList.add('is-collapsed');
-  }
-  if (localStorage.getItem(LS_KEY_HIDDEN) === '1') {
-    sidebar.classList.add('is-hidden');
-  }
-}
-
-export function attachSidebar(sidebarRoot: HTMLElement): () => void {
-  const handle = sidebarRoot.querySelector<HTMLElement>('.sidebar-resize-handle');
-  const toggle = sidebarRoot.querySelector<HTMLButtonElement>('.sidebar-toggle');
-  if (!handle || !toggle) {
-    throw new Error('attachSidebar: .sidebar-resize-handle and .sidebar-toggle required');
+  constructor(canvas: fabric.Canvas) {
+    this.canvas = canvas;
+    this.fontSizeInput = document.getElementById('drawing-font-size') as HTMLInputElement;
+    this.fontColorInput = document.getElementById('drawing-font-color') as HTMLInputElement;
+    this.rotationInput = document.getElementById('drawing-rotation') as HTMLInputElement;
   }
 
-  restoreInitial(sidebarRoot);
+  // ====================================================================
+  //  Lifecycle (self-wiring)
+  // ====================================================================
 
-  // ── drag-to-resize ─────────────────────────────────────────────────
-  // 右サイドバーは右側に貼り付いているので、ドラッグでサイドバー左端が
-  // 左に動く = 幅が増える。pointer の clientX とウィンドウ右端の差分が幅。
+  attach(): void {
+    this.canvas.on('selection:created', this.onSelectionEvent);
+    this.canvas.on('selection:updated', this.onSelectionEvent);
+    this.canvas.on('selection:cleared', this.onSelectionEvent);
+    this.canvas.on('object:rotating', this.onObjectRotating);
+  }
 
-  let dragging = false;
+  detach(): void {
+    this.canvas.off('selection:created', this.onSelectionEvent as never);
+    this.canvas.off('selection:updated', this.onSelectionEvent as never);
+    this.canvas.off('selection:cleared', this.onSelectionEvent as never);
+    this.canvas.off('object:rotating', this.onObjectRotating as never);
+  }
 
-  const onMouseMove = (e: MouseEvent): void => {
-    if (!dragging) return;
-    const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, window.innerWidth - e.clientX));
-    setWidthVar(next);
+  // ====================================================================
+  //  fabric event handlers (内→外の表示同期。冪等: 現在の選択を読むだけ)
+  // ====================================================================
+
+  private readonly onSelectionEvent = (): void => {
+    this.syncToSelection();
   };
 
-  const onMouseUp = (): void => {
-    if (!dragging) return;
-    dragging = false;
-    handle.classList.remove('is-dragging');
-    document.body.style.cursor = '';
-    // 現在の幅 (CSS variable) を LocalStorage に保存
-    const w = parseInt(
-      getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width'),
-      10,
+  private readonly onObjectRotating = (e: fabric.IEvent): void => {
+    if (e.target) this.rotationInput.value = String(Math.round(e.target.angle ?? 0));
+  };
+
+  /** 選択中 object の props をサイドバーへ反映し、フォント変更が効かない選択では
+   *  フォント系コントロールを disable にする。選択なし (cleared) は enable 復帰。 */
+  private syncToSelection(): void {
+    // outlined path のみの選択ではフォント変更が効かない (サイレント no-op) ので
+    // family / style / size を disable。activeSelection / 選択なし経路も含めて
+    // ここで一括更新するため、下の早期 return より前に置く。
+    const fontDisabled = shouldDisableFontControls(
+      this.canvas.getActiveObjects() as unknown as ReadonlyArray<FontEditableProbe>,
     );
-    if (Number.isFinite(w)) localStorage.setItem(LS_KEY_WIDTH, String(w));
-  };
+    fontFamilySel.disabled = fontDisabled;
+    fontStyleSel.disabled = fontDisabled;
+    this.fontSizeInput.disabled = fontDisabled;
 
-  const onHandleMouseDown = (e: MouseEvent): void => {
-    // 折りたたみ / hidden 中はドラッグ無効
-    if (sidebarRoot.classList.contains('is-collapsed')) return;
-    if (sidebarRoot.classList.contains('is-hidden')) return;
-    e.preventDefault();
-    dragging = true;
-    handle.classList.add('is-dragging');
-    document.body.style.cursor = 'ew-resize';
-  };
-
-  handle.addEventListener('mousedown', onHandleMouseDown);
-  window.addEventListener('mousemove', onMouseMove);
-  window.addEventListener('mouseup', onMouseUp);
-
-  // ── collapse toggle ────────────────────────────────────────────────
-
-  const onToggleClick = (): void => {
-    const next = !sidebarRoot.classList.contains('is-collapsed');
-    sidebarRoot.classList.toggle('is-collapsed', next);
-    toggle.setAttribute('aria-expanded', String(!next));
-    localStorage.setItem(LS_KEY_COLLAPSED, next ? '1' : '0');
-  };
-
-  toggle.addEventListener('click', onToggleClick);
-
-  // ── Tab で完全 hide / 復帰 (Photoshop 慣習) ───────────────────────
-
-  const onKeyDown = (e: KeyboardEvent): void => {
-    if (e.key !== 'Tab') return;
-    // IText 編集中 / input or select focus 中は素通し (タブ移動を維持)
-    const target = e.target as HTMLElement | null;
-    if (target) {
-      const tag = target.tagName;
-      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-      if (target.isContentEditable) return;
+    const active = this.canvas.getActiveObject() as (fabric.Object & Partial<fabric.Text>) | null;
+    if (!active || active.type === 'activeSelection') return;
+    if (active.fontFamily) {
+      if (fontFamilySel.value !== active.fontFamily) {
+        fontFamilySel.value = active.fontFamily;
+        populateStyleList(active.fontFamily);
+      }
+      const rawWeight = active.fontWeight;
+      const weight =
+        typeof rawWeight === 'number'
+          ? rawWeight
+          : String(rawWeight).toLowerCase() === 'bold'
+            ? 700
+            : 400;
+      const italic = active.fontStyle === 'italic';
+      fontStyleSel.value = styleValue(weight, italic);
     }
-    e.preventDefault();
-    const next = !sidebarRoot.classList.contains('is-hidden');
-    sidebarRoot.classList.toggle('is-hidden', next);
-    localStorage.setItem(LS_KEY_HIDDEN, next ? '1' : '0');
-  };
-
-  document.addEventListener('keydown', onKeyDown);
-
-  // ── detach ─────────────────────────────────────────────────────────
-
-  return (): void => {
-    handle.removeEventListener('mousedown', onHandleMouseDown);
-    window.removeEventListener('mousemove', onMouseMove);
-    window.removeEventListener('mouseup', onMouseUp);
-    toggle.removeEventListener('click', onToggleClick);
-    document.removeEventListener('keydown', onKeyDown);
-  };
+    if (active.fontSize) this.fontSizeInput.value = String(active.fontSize);
+    if (active.fill) this.fontColorInput.value = active.fill as string;
+    this.rotationInput.value = String(Math.round(active.angle ?? 0));
+  }
 }

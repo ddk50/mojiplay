@@ -2,7 +2,7 @@
 //
 // Mode には登録しない特殊ツール: CanvasInputController が中ボタン mousedown を
 // 現行モードに関係なくこのツールへ routing する (= 一時的な手ツール)。mode map 外
-// なので toolbar ボタンは生成されないが、Tool interface 上 descriptor は必須。
+// なので toolbar の mode ボタンは生成されないが、Tool interface 上 descriptor は必須。
 //
 // delta の座標系は screen px (PointerInput.screenX/Y)。worldX/Y は pan 中に
 // viewport 自体が動いて self-cancelling になるため使えない。また SelectCharTool の
