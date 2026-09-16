@@ -1,7 +1,7 @@
 // State の interface (= 抽象契約) と、State が出し入れする object/path 抽象の型定義。
 //
 // State は「mojiplay のドキュメント層全体への操作 IF」を提供する一級概念。
-// Tool / app.ts / menu / toolbar はみな State 経由で fabric.Canvas を読み書きする。
+// Tool / app.ts / menu / sidebar はみな State 経由で fabric.Canvas を読み書きする。
 // 実装は renderer/state.ts の `class State implements StateContract` (alias)。
 //
 // 設計方針:
@@ -75,7 +75,7 @@ export interface TextCreateProps {
  *  State (commitIText 時の selectable 判定 + canvas 設定) で共有する。 */
 export type Mode = 'select-group' | 'select-char' | 'text' | 'pen-add' | 'pen-remove';
 
-/** 選択中オブジェクトに一括適用するプロパティ (toolbar property 変更用)。
+/** 選択中オブジェクトに一括適用するプロパティ (サイドバーの property 変更用)。
  *  fabric 不知の型として core/ に置く。実装側 (renderer/state.ts) で fabric props にマップ。 */
 export interface SelectionProps {
   readonly fontFamily?: string;
@@ -181,7 +181,7 @@ export interface State {
   // ── 高レベル副作用 (= 旧 app.ts の business logic を State 内に閉じ込め) ──
 
   /**
-   * 選択中の object 群に property を一括適用 (toolbar property 変更用)。
+   * 選択中の object 群に property を一括適用 (サイドバーの property 変更用)。
    * 各 object の before/after snapshot を取って Command 化、no-op (差分ゼロ) の
    * object は skip、残りを compound として history に push する。
    */

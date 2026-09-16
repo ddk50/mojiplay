@@ -55,13 +55,15 @@
           <div id="drawing-canvas-container">
             <canvas id="drawing-main-canvas"></canvas>
 
-            <!-- 下中央フローティングツールバー (Figma 風 card)。
-                 親 #drawing-bottom-bar が card 装飾 / 位置決めを持ち、
-                 内側 #drawing-tool-buttons は buildToolbar() が動的 fill する
-                 領域 (mode button 群)。将来 .bottom-bar-divider + screen 切替
+            <!-- Toolbar = 下中央フローティングツールバー (Figma 風 card)。
+                 ツール (= mode) の選択だけを担う領域。右パネル (= Sidebar) と
+                 用語を混ぜないこと。
+                 #drawing-toolbar が card 装飾 / 位置決めを持ち、内側の
+                 #drawing-toolbar-modes は buildModeButtons() が動的 fill する
+                 mode button 群の置き場。将来 .toolbar-divider + screen 切替
                  ボタンをここに足す予定。 -->
-            <div id="drawing-bottom-bar" class="floating-toolbar">
-              <div id="drawing-tool-buttons"></div>
+            <div id="drawing-toolbar">
+              <div id="drawing-toolbar-modes"></div>
             </div>
           </div>
 

@@ -1,4 +1,4 @@
-// フォント系 toolbar コントロール (family / style / size) の affordance 判定。
+// サイドバーのフォント系コントロール (family / style / size) の affordance 判定。
 //
 // アウトライン化済み path はフォント変更が効かない (適用してもサイレント no-op) ため、
 // 選択中にフォント変更が効くオブジェクトが 1 つも無いときは UI を disable にする。

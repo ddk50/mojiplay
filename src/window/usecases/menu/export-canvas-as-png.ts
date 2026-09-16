@@ -1,6 +1,6 @@
 // canvas 全体を PNG ファイルとして保存する use case。
 //
-// 旧 ToolbarController.onExportClick に inline で書かれていた orchestration
+// 旧 sidebar の書き出しボタン handler に inline で書かれていた orchestration
 // (canvas.discardActiveObject / renderAll / toDataURL → host.savePng → toast 表示)
 // を free function として extract。
 //

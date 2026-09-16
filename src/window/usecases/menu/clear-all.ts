@@ -1,6 +1,6 @@
 // canvas 全消去 (確認 dialog 込み) の use case。
 //
-// 旧 ToolbarController.onClearClick に inline で書かれていた `if (confirm(...)) {
+// 旧 sidebar のクリアボタン handler に inline で書かれていた `if (confirm(...)) {
 // state.clearAll() }` を free function に extract。confirm() の browser native API
 // 直叩きを UIPort.confirmYesNo 経由に格上げすることで、test 時に dialog choice を
 // 制御できる + controller から raw browser API 依存が消える。

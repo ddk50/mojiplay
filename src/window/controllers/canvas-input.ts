@@ -5,7 +5,7 @@
 // 集約。Tool への dispatch、PointerInput 中立化、object:modified の e.action 判別
 // (二重 push 回避) はすべてこの 1 クラスに閉じる。
 //
-// 内→外 (toolbar 同期 / anchor overlay 描画) はここには無い — ToolbarPresenter /
+// 内→外 (sidebar 同期 / anchor overlay 描画) はここには無い — SidebarPresenter /
 // AnchorOverlayPresenter が fabric イベントを自分で購読する (Presenter self-wiring)。
 // この Controller は入力 (外→内) 専任。
 //

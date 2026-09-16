@@ -3,7 +3,7 @@
 //
 // shortcut 表は usecases/menu/key-binding.ts の KEY_BINDINGS (pure data + matcher) に
 // 移動。controller は:
-//   - IText 編集中 / IME composition / toolbar input focus 等の event filter
+//   - IText 編集中 / IME composition / 入力欄 focus 等の event filter
 //   - matchKeyBinding で binding を引いて menuActions に dispatch
 //   - 矢印キー (= parameterized で binding table に乗らない例外)
 // だけを行う。binding table 自体は単体 test 済 (test/key-binding.test.ts)。
@@ -74,7 +74,7 @@ export class KeyboardControllerImpl implements KeyboardController {
       !e.ctrlKey &&
       !e.metaKey &&
       !e.altKey &&
-      !this.isToolbarInput()
+      !this.isTextFieldFocused()
     ) {
       const dir = arrowKeyToDirection(e.key);
       if (dir) {
@@ -118,11 +118,12 @@ export class KeyboardControllerImpl implements KeyboardController {
   private buildContext(): BindingContext {
     return {
       hasActiveObject: this.state.getActiveObjects().length > 0,
-      isToolbarInput: this.isToolbarInput(),
+      isTextFieldFocused: this.isTextFieldFocused(),
     };
   }
 
-  private isToolbarInput(): boolean {
+  /** focus が入力系要素にあるか。UI 領域 (toolbar / sidebar / menu) は区別しない。 */
+  private isTextFieldFocused(): boolean {
     const el = document.activeElement;
     if (!el) return false;
     const tag = el.tagName;
