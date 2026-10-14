@@ -3,27 +3,29 @@
 //
 // TextTool (新規 IText 生成) と SidebarController (サイドバー変更時の
 // applyToSelection) の両方で同じ DOM source を使うため、ここに 1 か所集約する。
+//
+// DOM は module-level では触らず SidebarElements を引数で受け取る (import 時副作用なし)。
 
 import type { TextCreateProps } from '../core/state-interface';
-import { fontFamilySel, fontStyleSel } from './font-enumeration';
+import type { SidebarElements } from './sidebar-elements-interface';
 
-const fontSizeInput = document.getElementById('drawing-font-size') as HTMLInputElement;
-const fontColorInput = document.getElementById('drawing-font-color') as HTMLInputElement;
-
-export function currentFontStyle(): { fontWeight: number; fontStyle: 'normal' | 'italic' } {
-  const [weightStr, italicStr] = fontStyleSel.value.split('|');
+export function currentFontStyle(els: SidebarElements): {
+  fontWeight: number;
+  fontStyle: 'normal' | 'italic';
+} {
+  const [weightStr, italicStr] = els.font.style.value.split('|');
   const fontWeight = parseInt(weightStr, 10) || 400;
   const fontStyle = italicStr === 'italic' ? 'italic' : 'normal';
   return { fontWeight, fontStyle };
 }
 
-export function currentTextProps(): TextCreateProps {
-  const { fontWeight, fontStyle } = currentFontStyle();
+export function currentTextProps(els: SidebarElements): TextCreateProps {
+  const { fontWeight, fontStyle } = currentFontStyle(els);
   return {
-    fontFamily: fontFamilySel.value,
-    fontSize: parseInt(fontSizeInput.value, 10) || 72,
+    fontFamily: els.font.family.value,
+    fontSize: parseInt(els.font.size.value, 10) || 72,
     fontWeight,
     fontStyle,
-    fill: fontColorInput.value,
+    fill: els.font.color.value,
   };
 }

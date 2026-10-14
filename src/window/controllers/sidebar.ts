@@ -1,57 +1,36 @@
 // SidebarController: 右サイドバー上の入力 (font / size / color / rotation / snap /
 // 各種ボタン) を State / MenuAction に dispatch する Input Adapter (外→内)。
 //
-// 旧 ToolbarController から、担当領域の実体に合わせて改名・分離したもの
-// (下部フローティングツールバーではなく右パネルを触っている)。ツール選択
-// (mode button) は ToolbarController に残した。
-//
 // サイドバー入力は HTML メニューバー (= MenuController) よりも property-style な
 // 変更が多いので別 Controller として分離している。
 //
 // 内→外 (選択 → 表示同期) は presenter/sidebar.ts の SidebarPresenter が
 // fabric イベントを自分で購読して行う。ここからは蹴らない。
+//
+// DOM は SidebarElements を constructor で受け取る (自前の getElementById は持たない)。
 
 import type { State, SelectionProps } from '../core/state-interface';
+import type { FontCatalog } from '../core/font-catalog';
 import type { SelectCharTool } from '../usecases/tools/select-char-tool';
 import type { MenuActions } from '../menu-action-registry';
 import type { SidebarController, SidebarControllerDeps } from './sidebar-interface';
-import { fontFamilySel, fontStyleSel, populateStyleList } from '../presenter/font-enumeration';
+import type { SidebarElements } from '../presenter/sidebar-elements-interface';
+import { populateStyleList } from '../presenter/sidebar-font-list';
 import { currentFontStyle } from '../presenter/font-current';
 
 export class SidebarControllerImpl implements SidebarController {
   private readonly state: State;
   private readonly selectCharTool: SelectCharTool;
   private readonly menuActions: MenuActions;
-
-  // DOM 参照 (= drawing screen 配下の `drawing-*` prefix 付き ID)
-  private readonly fontSizeInput = document.getElementById('drawing-font-size') as HTMLInputElement;
-  private readonly fontColorInput = document.getElementById(
-    'drawing-font-color',
-  ) as HTMLInputElement;
-  private readonly rotationInput = document.getElementById('drawing-rotation') as HTMLInputElement;
-  private readonly snapEnabledInput = document.getElementById(
-    'drawing-snap-enabled',
-  ) as HTMLInputElement;
-  private readonly snapPitchInput = document.getElementById(
-    'drawing-snap-pitch',
-  ) as HTMLInputElement;
-  private readonly snapThresholdInput = document.getElementById(
-    'drawing-snap-threshold',
-  ) as HTMLInputElement;
-  private readonly btnApplyRotation = document.getElementById(
-    'drawing-btn-apply-rotation',
-  ) as HTMLButtonElement;
-  private readonly btnSelectAll = document.getElementById(
-    'drawing-btn-select-all',
-  ) as HTMLButtonElement;
-  private readonly btnClear = document.getElementById('drawing-btn-clear') as HTMLButtonElement;
-  private readonly btnExport = document.getElementById('drawing-btn-export') as HTMLButtonElement;
-  private readonly btnOutline = document.getElementById('drawing-btn-outline') as HTMLButtonElement;
+  private readonly els: SidebarElements;
+  private readonly catalog: FontCatalog;
 
   constructor(deps: SidebarControllerDeps) {
     this.state = deps.state;
     this.selectCharTool = deps.selectCharTool;
     this.menuActions = deps.menuActions;
+    this.els = deps.els;
+    this.catalog = deps.catalog;
 
     this.syncSnapConfigToTool();
   }
@@ -62,57 +41,59 @@ export class SidebarControllerImpl implements SidebarController {
 
   // ── font props ──────────────────────────────────────────────────────────
 
-  /** font-family select の change。populateStyleList も呼んでスタイル一覧を更新。 */
+  /** font-family select の change。
+   *  style 一覧を先に作り直してから読む (順序必須: 逆だと前 family の style が残る)。 */
   readonly onFontFamilyChange = (): void => {
-    populateStyleList(fontFamilySel.value);
+    const family = this.els.font.family.value;
+    populateStyleList(this.els, this.catalog, family);
     const props: SelectionProps = {
-      fontFamily: fontFamilySel.value,
-      ...currentFontStyle(),
+      fontFamily: family,
+      ...currentFontStyle(this.els),
     };
     this.state.applyPropsToSelection(props);
   };
 
   /** font-style select の change (= weight | italic 統合 select)。 */
   readonly onFontStyleChange = (): void => {
-    this.state.applyPropsToSelection(currentFontStyle());
+    this.state.applyPropsToSelection(currentFontStyle(this.els));
   };
 
   /** font-size input の change。 */
   readonly onFontSizeChange = (): void => {
     this.state.applyPropsToSelection({
-      fontSize: parseInt(this.fontSizeInput.value, 10) || 72,
+      fontSize: parseInt(this.els.font.size.value, 10) || 72,
     });
   };
 
   /** font-color input の input。 */
   readonly onFontColorChange = (): void => {
-    this.state.applyPropsToSelection({ fill: this.fontColorInput.value });
+    this.state.applyPropsToSelection({ fill: this.els.font.color.value });
   };
 
-  /** btn-apply-rotation click。 */
+  /** 変形→回転の適用ボタン click。 */
   readonly onApplyRotation = (): void => {
-    const angle = parseFloat(this.rotationInput.value) || 0;
+    const angle = parseFloat(this.els.transform.rotation.value) || 0;
     this.state.applyPropsToSelection({ angle });
   };
 
   // ── ボタン ───────────────────────────────────────────────────────────
 
-  /** btn-select-all click。 */
+  /** アクション→全選択 click。 */
   readonly onSelectAllClick = (): void => {
     void this.menuActions['select-all']();
   };
 
-  /** btn-clear click。 */
+  /** アクション→クリア click。 */
   readonly onClearClick = (): void => {
     void this.menuActions['clear-all']();
   };
 
-  /** btn-export click。 */
+  /** エクスポート→PNG書き出し click。 */
   readonly onExportClick = (): void => {
     void this.menuActions['export-canvas-png']();
   };
 
-  /** btn-outline click。 */
+  /** アクション→アウトライン化 click。 */
   readonly onOutlineClick = (): void => {
     void this.menuActions.outline();
   };
@@ -131,33 +112,35 @@ export class SidebarControllerImpl implements SidebarController {
   // ====================================================================
 
   attach(): void {
-    fontFamilySel.addEventListener('change', this.onFontFamilyChange);
-    fontStyleSel.addEventListener('change', this.onFontStyleChange);
-    this.fontSizeInput.addEventListener('change', this.onFontSizeChange);
-    this.fontColorInput.addEventListener('input', this.onFontColorChange);
-    this.btnApplyRotation.addEventListener('click', this.onApplyRotation);
-    this.btnSelectAll.addEventListener('click', this.onSelectAllClick);
-    this.btnClear.addEventListener('click', this.onClearClick);
-    this.btnExport.addEventListener('click', this.onExportClick);
-    this.btnOutline.addEventListener('click', this.onOutlineClick);
-    this.snapEnabledInput.addEventListener('change', this.onSnapConfigChange);
-    this.snapPitchInput.addEventListener('input', this.onSnapConfigChange);
-    this.snapThresholdInput.addEventListener('input', this.onSnapConfigChange);
+    const { font, transform, snap, actions, export: exp } = this.els;
+    font.family.addEventListener('change', this.onFontFamilyChange);
+    font.style.addEventListener('change', this.onFontStyleChange);
+    font.size.addEventListener('change', this.onFontSizeChange);
+    font.color.addEventListener('input', this.onFontColorChange);
+    transform.apply.addEventListener('click', this.onApplyRotation);
+    actions.selectAll.addEventListener('click', this.onSelectAllClick);
+    actions.clear.addEventListener('click', this.onClearClick);
+    actions.outline.addEventListener('click', this.onOutlineClick);
+    exp.png.addEventListener('click', this.onExportClick);
+    snap.enabled.addEventListener('change', this.onSnapConfigChange);
+    snap.pitch.addEventListener('input', this.onSnapConfigChange);
+    snap.threshold.addEventListener('input', this.onSnapConfigChange);
   }
 
   detach(): void {
-    fontFamilySel.removeEventListener('change', this.onFontFamilyChange);
-    fontStyleSel.removeEventListener('change', this.onFontStyleChange);
-    this.fontSizeInput.removeEventListener('change', this.onFontSizeChange);
-    this.fontColorInput.removeEventListener('input', this.onFontColorChange);
-    this.btnApplyRotation.removeEventListener('click', this.onApplyRotation);
-    this.btnSelectAll.removeEventListener('click', this.onSelectAllClick);
-    this.btnClear.removeEventListener('click', this.onClearClick);
-    this.btnExport.removeEventListener('click', this.onExportClick);
-    this.btnOutline.removeEventListener('click', this.onOutlineClick);
-    this.snapEnabledInput.removeEventListener('change', this.onSnapConfigChange);
-    this.snapPitchInput.removeEventListener('input', this.onSnapConfigChange);
-    this.snapThresholdInput.removeEventListener('input', this.onSnapConfigChange);
+    const { font, transform, snap, actions, export: exp } = this.els;
+    font.family.removeEventListener('change', this.onFontFamilyChange);
+    font.style.removeEventListener('change', this.onFontStyleChange);
+    font.size.removeEventListener('change', this.onFontSizeChange);
+    font.color.removeEventListener('input', this.onFontColorChange);
+    transform.apply.removeEventListener('click', this.onApplyRotation);
+    actions.selectAll.removeEventListener('click', this.onSelectAllClick);
+    actions.clear.removeEventListener('click', this.onClearClick);
+    actions.outline.removeEventListener('click', this.onOutlineClick);
+    exp.png.removeEventListener('click', this.onExportClick);
+    snap.enabled.removeEventListener('change', this.onSnapConfigChange);
+    snap.pitch.removeEventListener('input', this.onSnapConfigChange);
+    snap.threshold.removeEventListener('input', this.onSnapConfigChange);
   }
 
   // ====================================================================
@@ -165,10 +148,11 @@ export class SidebarControllerImpl implements SidebarController {
   // ====================================================================
 
   private syncSnapConfigToTool(): void {
+    const { snap } = this.els;
     this.selectCharTool.setSnapConfig({
-      enabled: this.snapEnabledInput.checked,
-      pitch: Math.max(1, parseInt(this.snapPitchInput.value, 10) || 8),
-      threshold: Math.max(1, parseInt(this.snapThresholdInput.value, 10) || 5),
+      enabled: snap.enabled.checked,
+      pitch: Math.max(1, parseInt(snap.pitch.value, 10) || 8),
+      threshold: Math.max(1, parseInt(snap.threshold.value, 10) || 5),
     });
   }
 }

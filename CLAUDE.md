@@ -43,7 +43,7 @@ src/
 ├── preload.ts                   # RENDERER / isolated world (contextBridge + ipcRenderer.invoke = IPC 出口)
 ├── window/                      # RENDERER / main world (アプリ本体)
 │   ├── renderer.ts              # entry / Composition Root (DI のみ)
-│   ├── core/                    # Entities: path/ history/ document/ state-interface.ts / object-id.ts
+│   ├── core/                    # Entities: path/ history/ document/ state-interface.ts / object-id.ts / font-catalog.ts
 │   ├── usecases/                # Use Case (Interactor + Port): tools/ menu/ document-interactor.ts / ui-port-interface.ts / host-shell-interface.ts / canvas-port-interface.ts
 │   ├── repository/              # Gateway: document-interface.ts + file-system-document.ts
 │   ├── controllers/             # Input Adapter (外→内): canvas-input / keyboard / menu / toolbar / sidebar / view
@@ -125,6 +125,23 @@ preload は `const api: ElectronIPC = {...}` で型強制 → 契約とずれた
 - Sidebar は **3 ファイルに分かれる**: 表示同期 (Presenter) / 入力 dispatch (Controller) / 枠の幅・折りたたみ・Tab hide (chrome helper)。「サイドバーのロジック」を探すときは chrome だけ見て終わらないこと
 - 現状 Sidebar は **選択 (fabric selection イベント) にしか反応しない**。mode 変更は誰にも通知されないので、mode に応じた出し分けを足すには State 側に通知経路を足すのが先 (Controller から Presenter を蹴らない)
 - `keyboard.ts` の `isTextFieldFocused()` は **領域を区別しない**「どこかの input/select/textarea に focus」判定 (旧名 `isToolbarInput` は誤称だった)
+
+**Sidebar の DOM 取得規約** (`window.electronIPC` の 4 ファイル規約と同型):
+
+- サイドバー配下の DOM を引いてよいのは **`presenter/sidebar-elements.ts` の `querySidebarElements(root)` だけ**。mount 時に 1 回だけ実行し、全要素を fail-fast 検証 (`as HTMLInputElement` の裸キャストを新規に書かない)
+- consumer (`controllers/sidebar.ts` / `presenter/sidebar.ts` / `presenter/font-current.ts` / `presenter/sidebar-font-list.ts`) は `SidebarElements` を **DI で受け取る**。自前で `getElementById` しない
+- `SidebarElements` は section 別ネスト (`font` / `transform` / `snap` / `actions` / `export`)。各 section は container 要素 (`.section`) を持つので、Step 3 の「mode / 選択に応じた section 出し分け」はここに乗る
+- **module-level で DOM を触らない** (import 時副作用禁止)。旧 `font-enumeration.ts` が module-level で `getElementById` + `populateFontList()` を実行しており、`testEnvironment: 'node'` の jest から import できない原因だった
+
+**フォント一覧の 3 分割** (旧 `presenter/font-enumeration.ts` の解体先):
+
+| ファイル                         | 責務                                                         | 依存           |
+| -------------------------------- | ------------------------------------------------------------ | -------------- |
+| `core/font-catalog.ts`           | `parseStyle` / `styleValue` / `FontCatalog` (family → style) | pure (test 済) |
+| `presenter/font-list-loader.ts`  | `window.queryLocalFonts` を叩いて catalog に詰める           | Web API        |
+| `presenter/sidebar-font-list.ts` | catalog の内容で family / style select を埋める              | DOM            |
+
+`populateStyleList` を free function のまま置いてあるのは、**SidebarController (family change 時) と SidebarPresenter (選択同期時) の両方から呼ぶため**。Presenter のメソッドにすると Controller → Presenter を蹴る経路ができてしまう。
 
 ### 6 Controllers (`window/controllers/`)
 
@@ -216,7 +233,7 @@ Jest + ts-jest、`test/` 配下。
 - **Pure data** (core/ + Adapter) は fabric / DOM 抜きで unit test
 - **Tool / Interactor / State business method** は **real `class State` + fabric 最小 stub** (`test/fabric-stub.ts`、`installFabricStub()`) で test。fixture 投入は `state.applySnapshot()` 経由、assertion は State の public API のみ (stub の internal field は peek しない)
 - **Controller は基本 test しない** (DOM event simulation コスト見合わず)
-- `presenter/outline-conversion` は top-level で `document.getElementById` を呼ぶので test 側で `jest.mock` で stub
+- **module-level の `document.getElementById` は src 全体でゼロ** (Step 2 で解消)。テスト側の `jest.mock` による DOM stub は不要
 
 ## 新規コード ガイドライン
 
