@@ -183,9 +183,9 @@ body {
   height: 100% !important;
 }
 
-/* ── Drawing Screen: Floating Tool Bar (下中央) ──────────────────────── */
+/* ── Drawing Screen: Toolbar (下中央フローティング / ツール選択のみ) ─── */
 
-.floating-toolbar {
+#drawing-toolbar {
   position: absolute;
   bottom: 24px;
   left: 50%;
@@ -202,20 +202,20 @@ body {
   user-select: none;
 }
 
-#drawing-tool-buttons {
+#drawing-toolbar-modes {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.bottom-bar-divider {
+.toolbar-divider {
   width: 1px;
   align-self: stretch;
   background: var(--border);
   margin: 0 4px;
 }
 
-/* ── Drawing Screen: Sidebar (右側、可変幅 + 折りたたみ) ────────────── */
+/* ── Drawing Screen: Sidebar (右側プロパティパネル / 可変幅 + 折りたたみ) ─ */
 
 #drawing-sidebar {
   position: relative;

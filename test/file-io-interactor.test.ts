@@ -144,8 +144,8 @@ async function loadCanvasContent(
   });
 }
 
-function makeController(): {
-  ctrl: FileIOInteractor;
+function makeInteractor(): {
+  interactor: FileIOInteractor;
   state: State;
   repo: FakeRepo;
   ui: FakeUI;
@@ -153,8 +153,8 @@ function makeController(): {
   const state = new State(new FakeFabricCanvas() as never, new NullFontProvider());
   const repo = new FakeRepo();
   const ui = new FakeUI();
-  const ctrl = new FileIOInteractorImpl(state, repo, ui, basename);
-  return { ctrl, state, repo, ui };
+  const interactor = new FileIOInteractorImpl(state, repo, ui, basename);
+  return { interactor, state, repo, ui };
 }
 
 // ── テスト ──────────────────────────────────────────────────────────────
@@ -162,26 +162,26 @@ function makeController(): {
 describe('FileIOInteractor', () => {
   describe('初期状態', () => {
     test('clean (dirty=false, fileName=null) になる', () => {
-      const { ctrl } = makeController();
-      expect(ctrl.getDocStatus()).toEqual({ fileName: null, dirty: false });
+      const { interactor } = makeInteractor();
+      expect(interactor.getDocStatus()).toEqual({ fileName: null, dirty: false });
     });
 
     test('state mutation で dirty=true になる', () => {
-      const { ctrl, state } = makeController();
+      const { interactor, state } = makeInteractor();
       simulateMutation(state);
-      expect(ctrl.getDocStatus().dirty).toBe(true);
+      expect(interactor.getDocStatus().dirty).toBe(true);
     });
   });
 
   describe('saveCurrent', () => {
     test('成功で dirty=false になり fileName を反映する', async () => {
-      const { ctrl, state, repo, ui } = makeController();
+      const { interactor, state, repo, ui } = makeInteractor();
       simulateMutation(state);
-      expect(ctrl.getDocStatus().dirty).toBe(true);
-      const ok = await ctrl.saveCurrent();
+      expect(interactor.getDocStatus().dirty).toBe(true);
+      const ok = await interactor.saveCurrent();
       expect(ok).toBe(true);
       expect(repo.saveCalled).toBe(1);
-      expect(ctrl.getDocStatus()).toEqual({ fileName: 'foo.mply', dirty: false });
+      expect(interactor.getDocStatus()).toEqual({ fileName: 'foo.mply', dirty: false });
       expect(ui.toasts.some((t) => !t.isError && t.message.includes('保存しました'))).toBe(true);
     });
 
@@ -189,7 +189,7 @@ describe('FileIOInteractor', () => {
       // IText 編集中で commit が要るシナリオ: 1 文字選択された IText をシード後、
       // active にして isEditing=true を立てる。saveCurrent が state.commitActiveText を
       // 経由して discardActiveObject を呼ぶことで isEditing=false に戻ることを観測する。
-      const { ctrl, state } = makeController();
+      const { interactor, state } = makeInteractor();
       simulateMutation(state);
 
       // active な i-text を seed (isEditing は手動で true にして編集中 simulate)
@@ -209,7 +209,7 @@ describe('FileIOInteractor', () => {
       const obj = (h as unknown as { _obj: { isEditing: boolean } })._obj;
       obj.isEditing = true;
 
-      await ctrl.saveCurrent();
+      await interactor.saveCurrent();
       // commitActiveText 内の discardActiveObject が走り、selection が外れる ⇒
       // commit の経路が実際に通った証拠
       expect(state.getActiveObjects()).toHaveLength(0);
@@ -218,7 +218,7 @@ describe('FileIOInteractor', () => {
     test('token を await 前に capture する (race regression 防止)', async () => {
       // fabric.js / IPC roundtrip の async 中にユーザが編集すると token が進む。
       // savedToken を await 前に capture することで、await 中の編集を dirty に残せる。
-      const { ctrl, state, repo } = makeController();
+      const { interactor, state, repo } = makeInteractor();
       simulateMutation(state); // token=1
 
       let resolveSave: (v: SaveResult) => void = () => {};
@@ -227,17 +227,17 @@ describe('FileIOInteractor', () => {
           resolveSave = res;
         });
 
-      const savePromise = ctrl.saveCurrent();
+      const savePromise = interactor.saveCurrent();
       simulateMutation(state); // await 中の編集 (token=2)
       resolveSave({ ok: true, filePath: '/tmp/foo.mply' });
       await savePromise;
 
       // savedToken は capture 時点 (=1) を採用、現 token (=2) と不一致 → dirty
-      expect(ctrl.getDocStatus().dirty).toBe(true);
+      expect(interactor.getDocStatus().dirty).toBe(true);
     });
 
     test('saving 中は再入を block する (連打抑止)', async () => {
-      const { ctrl, state, repo } = makeController();
+      const { interactor, state, repo } = makeInteractor();
       simulateMutation(state);
 
       let resolveSave: (v: SaveResult) => void = () => {};
@@ -246,9 +246,9 @@ describe('FileIOInteractor', () => {
           resolveSave = res;
         });
 
-      const p1 = ctrl.saveCurrent();
-      const p2 = ctrl.saveCurrent();
-      const p3 = ctrl.saveCurrent();
+      const p1 = interactor.saveCurrent();
+      const p2 = interactor.saveCurrent();
+      const p3 = interactor.saveCurrent();
       resolveSave({ ok: true, filePath: '/tmp/foo.mply' });
 
       expect(await p1).toBe(true);
@@ -258,20 +258,20 @@ describe('FileIOInteractor', () => {
     });
 
     test('cancel では toast を出さず dirty も維持する (silent)', async () => {
-      const { ctrl, state, repo, ui } = makeController();
+      const { interactor, state, repo, ui } = makeInteractor();
       simulateMutation(state);
       repo.saveResult = { ok: false, canceled: true };
-      const ok = await ctrl.saveCurrent();
+      const ok = await interactor.saveCurrent();
       expect(ok).toBe(false);
       expect(ui.toasts.length).toBe(0);
-      expect(ctrl.getDocStatus().dirty).toBe(true);
+      expect(interactor.getDocStatus().dirty).toBe(true);
     });
 
     test('error は toast に出す', async () => {
-      const { ctrl, state, repo, ui } = makeController();
+      const { interactor, state, repo, ui } = makeInteractor();
       simulateMutation(state);
       repo.saveResult = { ok: false, canceled: false, error: { message: 'disk full' } };
-      const ok = await ctrl.saveCurrent();
+      const ok = await interactor.saveCurrent();
       expect(ok).toBe(false);
       expect(ui.toasts.some((t) => t.isError && t.message.includes('disk full'))).toBe(true);
     });
@@ -279,98 +279,98 @@ describe('FileIOInteractor', () => {
 
   describe('saveAs', () => {
     test('currentPath を null にして保存 dialog を強制起動できる', async () => {
-      const { ctrl, repo } = makeController();
-      await ctrl.saveCurrent();
-      expect(ctrl.getDocStatus().fileName).toBe('foo.mply');
+      const { interactor, repo } = makeInteractor();
+      await interactor.saveCurrent();
+      expect(interactor.getDocStatus().fileName).toBe('foo.mply');
       expect(repo.lastSavedPath).toBe(null);
 
       repo.saveResult = { ok: true, filePath: '/tmp/foo.mply' };
-      await ctrl.saveCurrent();
+      await interactor.saveCurrent();
       expect(repo.lastSavedPath).toBe('/tmp/foo.mply');
 
       repo.saveResult = { ok: true, filePath: '/tmp/baz.mply' };
-      await ctrl.saveAs();
+      await interactor.saveAs();
       expect(repo.lastSavedPath).toBe(null);
-      expect(ctrl.getDocStatus().fileName).toBe('baz.mply');
+      expect(interactor.getDocStatus().fileName).toBe('baz.mply');
     });
 
     test('cancel すると前の currentPath を復元する', async () => {
-      const { ctrl, repo } = makeController();
-      await ctrl.saveCurrent();
-      expect(ctrl.getDocStatus().fileName).toBe('foo.mply');
+      const { interactor, repo } = makeInteractor();
+      await interactor.saveCurrent();
+      expect(interactor.getDocStatus().fileName).toBe('foo.mply');
 
       repo.saveResult = { ok: false, canceled: true };
-      const ok = await ctrl.saveAs();
+      const ok = await interactor.saveAs();
       expect(ok).toBe(false);
-      expect(ctrl.getDocStatus().fileName).toBe('foo.mply');
+      expect(interactor.getDocStatus().fileName).toBe('foo.mply');
     });
   });
 
   describe('openFile', () => {
     test('dirty 時に discard を選ぶと save をスキップして load する', async () => {
-      const { ctrl, state, repo, ui } = makeController();
+      const { interactor, state, repo, ui } = makeInteractor();
       simulateMutation(state);
       ui.discardAnswer = 'discard';
-      await ctrl.openFile();
+      await interactor.openFile();
       expect(repo.saveCalled).toBe(0);
       expect(repo.loadCalled).toBe(1);
       expect(state.getAllObjects()).toHaveLength(0); // loadResult のデフォルト
-      expect(ctrl.getDocStatus()).toEqual({ fileName: 'bar.mply', dirty: false });
+      expect(interactor.getDocStatus()).toEqual({ fileName: 'bar.mply', dirty: false });
     });
 
     test('dirty 時に cancel を選ぶと何もしない', async () => {
-      const { ctrl, state, repo, ui } = makeController();
+      const { interactor, state, repo, ui } = makeInteractor();
       simulateMutation(state);
       ui.discardAnswer = 'cancel';
-      await ctrl.openFile();
+      await interactor.openFile();
       expect(repo.saveCalled).toBe(0);
       expect(repo.loadCalled).toBe(0);
-      expect(ctrl.getDocStatus().dirty).toBe(true);
+      expect(interactor.getDocStatus().dirty).toBe(true);
     });
 
     test('dirty 時に save 成功なら save 後 load する', async () => {
-      const { ctrl, state, repo, ui } = makeController();
+      const { interactor, state, repo, ui } = makeInteractor();
       simulateMutation(state);
       ui.discardAnswer = 'save';
-      await ctrl.openFile();
+      await interactor.openFile();
       expect(repo.saveCalled).toBe(1);
       expect(repo.loadCalled).toBe(1);
     });
 
     test('dirty 時に save 失敗なら load しない', async () => {
-      const { ctrl, state, repo, ui } = makeController();
+      const { interactor, state, repo, ui } = makeInteractor();
       simulateMutation(state);
       ui.discardAnswer = 'save';
       repo.saveResult = { ok: false, canceled: true };
-      await ctrl.openFile();
+      await interactor.openFile();
       expect(repo.saveCalled).toBe(1);
       expect(repo.loadCalled).toBe(0);
     });
 
     test('load 後は dirty=false になる (savedToken を post-load に baseline 化)', async () => {
-      const { ctrl, state, ui } = makeController();
+      const { interactor, state, ui } = makeInteractor();
       simulateMutation(state);
       ui.discardAnswer = 'discard';
-      await ctrl.openFile();
-      expect(ctrl.getDocStatus().dirty).toBe(false);
-      expect(ctrl.getDocStatus().fileName).toBe('bar.mply');
+      await interactor.openFile();
+      expect(interactor.getDocStatus().dirty).toBe(false);
+      expect(interactor.getDocStatus().fileName).toBe('bar.mply');
     });
 
     test('cancel された load は何も変えない', async () => {
-      const { ctrl, repo } = makeController();
+      const { interactor, repo } = makeInteractor();
       repo.loadResult = { ok: false, canceled: true };
-      await ctrl.openFile();
-      expect(ctrl.getDocStatus()).toEqual({ fileName: null, dirty: false });
+      await interactor.openFile();
+      expect(interactor.getDocStatus()).toEqual({ fileName: null, dirty: false });
     });
 
     test('load エラーは toast に出す', async () => {
-      const { ctrl, repo, ui } = makeController();
+      const { interactor, repo, ui } = makeInteractor();
       repo.loadResult = {
         ok: false,
         canceled: false,
         error: { kind: 'invalid-json', message: 'unexpected token' },
       };
-      await ctrl.openFile();
+      await interactor.openFile();
       expect(ui.toasts.some((t) => t.isError && t.message.includes('不正なファイル形式'))).toBe(
         true,
       );
@@ -379,8 +379,8 @@ describe('FileIOInteractor', () => {
 
   describe('confirmDiscardIfDirty', () => {
     test('clean なら true を返して確認 dialog を出さない', async () => {
-      const { ctrl, ui } = makeController();
-      const ok = await ctrl.confirmDiscardIfDirty();
+      const { interactor, ui } = makeInteractor();
+      const ok = await interactor.confirmDiscardIfDirty();
       expect(ok).toBe(true);
       expect(ui.dirtyValues.length).toBe(0);
     });
@@ -388,9 +388,9 @@ describe('FileIOInteractor', () => {
 
   describe('subscribeDocStatus', () => {
     test('登録直後と mutation 時に通知し、unsub 後は通知しない', () => {
-      const { ctrl, state } = makeController();
+      const { interactor, state } = makeInteractor();
       const log: Array<{ fileName: string | null; dirty: boolean }> = [];
-      const unsub = ctrl.subscribeDocStatus((s) => log.push({ ...s }));
+      const unsub = interactor.subscribeDocStatus((s) => log.push({ ...s }));
       expect(log.length).toBe(1);
       expect(log[0]).toEqual({ fileName: null, dirty: false });
       simulateMutation(state);
@@ -404,10 +404,10 @@ describe('FileIOInteractor', () => {
 
   describe('setNativeDirty', () => {
     test('UIPort に dirty 値を push する (main の close guard 連動)', async () => {
-      const { ctrl, state, ui } = makeController();
+      const { interactor, state, ui } = makeInteractor();
       simulateMutation(state);
       expect(ui.dirtyValues).toEqual([true]);
-      await ctrl.saveCurrent();
+      await interactor.saveCurrent();
       expect(ui.dirtyValues[ui.dirtyValues.length - 1]).toBe(false);
     });
   });
@@ -442,22 +442,22 @@ describe('FileIOInteractor', () => {
 
       // インスタンス A: 内容を入れて保存
       const stateA = new State(new FakeFabricCanvas() as never, new NullFontProvider());
-      const ctrlA = new FileIOInteractorImpl(stateA, repo, new FakeUI(), basename);
+      const interactorA = new FileIOInteractorImpl(stateA, repo, new FakeUI(), basename);
       await loadCanvasContent(stateA, SAMPLE_OBJECTS);
       const savedSnapshot = stateA.toSnapshot();
-      expect(await ctrlA.saveCurrent()).toBe(true);
+      expect(await interactorA.saveCurrent()).toBe(true);
 
       // インスタンス B (= 別 process / 再起動相当): 同じ repo から開く
       const stateB = new State(new FakeFabricCanvas() as never, new NullFontProvider());
-      const ctrlB = new FileIOInteractorImpl(stateB, repo, new FakeUI(), basename);
-      await ctrlB.openFile();
+      const interactorB = new FileIOInteractorImpl(stateB, repo, new FakeUI(), basename);
+      await interactorB.openFile();
 
       // ロード後の State の snapshot が保存時点と完全一致
       expect(stateB.toSnapshot()).toEqual(savedSnapshot);
     });
 
     test('save → 編集 → openFile (discard) で保存時点の snapshot に戻る', async () => {
-      const { ctrl, state, ui } = makeController();
+      const { interactor, state, ui } = makeInteractor();
 
       await loadCanvasContent(state, [
         {
@@ -471,8 +471,8 @@ describe('FileIOInteractor', () => {
         },
       ]);
       const savedSnapshot = state.toSnapshot();
-      await ctrl.saveCurrent();
-      expect(ctrl.getDocStatus().dirty).toBe(false);
+      await interactor.saveCurrent();
+      expect(interactor.getDocStatus().dirty).toBe(false);
 
       // 保存後に別の content で上書き (= ユーザの編集相当)
       await loadCanvasContent(state, [
@@ -486,33 +486,33 @@ describe('FileIOInteractor', () => {
           data: { objectId: 'b' },
         },
       ]);
-      expect(ctrl.getDocStatus().dirty).toBe(true);
+      expect(interactor.getDocStatus().dirty).toBe(true);
 
       // 開き直す: 編集を破棄して保存版をロード
       ui.discardAnswer = 'discard';
-      await ctrl.openFile();
+      await interactor.openFile();
 
       expect(state.toSnapshot()).toEqual(savedSnapshot);
-      expect(ctrl.getDocStatus().dirty).toBe(false);
+      expect(interactor.getDocStatus().dirty).toBe(false);
     });
 
     test('複数回 save しても最新版が load される', async () => {
-      const { ctrl, state, ui } = makeController();
+      const { interactor, state, ui } = makeInteractor();
 
       await loadCanvasContent(state, [
         { type: 'i-text', text: 'v1', left: 0, top: 0, data: { objectId: 'a' } },
       ]);
-      await ctrl.saveCurrent();
+      await interactor.saveCurrent();
 
       await loadCanvasContent(state, [
         { type: 'i-text', text: 'v2', left: 0, top: 0, data: { objectId: 'b' } },
       ]);
-      await ctrl.saveCurrent();
+      await interactor.saveCurrent();
 
       await loadCanvasContent(state, [
         { type: 'i-text', text: 'v3', left: 0, top: 0, data: { objectId: 'c' } },
       ]);
-      await ctrl.saveCurrent();
+      await interactor.saveCurrent();
       const v3Snapshot = state.toSnapshot();
 
       // 適当に編集して discard で開き直す
@@ -520,7 +520,7 @@ describe('FileIOInteractor', () => {
         { type: 'i-text', text: 'unsaved', left: 0, top: 0, data: { objectId: 'd' } },
       ]);
       ui.discardAnswer = 'discard';
-      await ctrl.openFile();
+      await interactor.openFile();
 
       expect(state.toSnapshot()).toEqual(v3Snapshot);
     });
@@ -554,14 +554,14 @@ describe('FileIOInteractor', () => {
       test('outlined path のみの canvas が同一 snapshot で復元される', async () => {
         const repo = new FakeRepo();
         const stateA = new State(new FakeFabricCanvas() as never, new NullFontProvider());
-        const ctrlA = new FileIOInteractorImpl(stateA, repo, new FakeUI(), basename);
+        const interactorA = new FileIOInteractorImpl(stateA, repo, new FakeUI(), basename);
         await loadCanvasContent(stateA, SAMPLE_PATH_OBJECTS);
         const savedSnapshot = stateA.toSnapshot();
-        expect(await ctrlA.saveCurrent()).toBe(true);
+        expect(await interactorA.saveCurrent()).toBe(true);
 
         const stateB = new State(new FakeFabricCanvas() as never, new NullFontProvider());
-        const ctrlB = new FileIOInteractorImpl(stateB, repo, new FakeUI(), basename);
-        await ctrlB.openFile();
+        const interactorB = new FileIOInteractorImpl(stateB, repo, new FakeUI(), basename);
+        await interactorB.openFile();
 
         expect(stateB.toSnapshot()).toEqual(savedSnapshot);
       });
@@ -569,13 +569,13 @@ describe('FileIOInteractor', () => {
       test('open 後も data.outlined と data.groupId が保持される (アンカー編集可能性 / 単語性の維持)', async () => {
         const repo = new FakeRepo();
         const stateA = new State(new FakeFabricCanvas() as never, new NullFontProvider());
-        const ctrlA = new FileIOInteractorImpl(stateA, repo, new FakeUI(), basename);
+        const interactorA = new FileIOInteractorImpl(stateA, repo, new FakeUI(), basename);
         await loadCanvasContent(stateA, SAMPLE_PATH_OBJECTS);
-        await ctrlA.saveCurrent();
+        await interactorA.saveCurrent();
 
         const stateB = new State(new FakeFabricCanvas() as never, new NullFontProvider());
-        const ctrlB = new FileIOInteractorImpl(stateB, repo, new FakeUI(), basename);
-        await ctrlB.openFile();
+        const interactorB = new FileIOInteractorImpl(stateB, repo, new FakeUI(), basename);
+        await interactorB.openFile();
 
         const snap = stateB.toSnapshot() as {
           canvas: { objects: Array<{ data?: Record<string, unknown> }> };
@@ -596,13 +596,13 @@ describe('FileIOInteractor', () => {
       test('path commands 配列 (M/C/L/Z) が損失なく復元される', async () => {
         const repo = new FakeRepo();
         const stateA = new State(new FakeFabricCanvas() as never, new NullFontProvider());
-        const ctrlA = new FileIOInteractorImpl(stateA, repo, new FakeUI(), basename);
+        const interactorA = new FileIOInteractorImpl(stateA, repo, new FakeUI(), basename);
         await loadCanvasContent(stateA, [SAMPLE_PATH_OBJECTS[0]]);
-        await ctrlA.saveCurrent();
+        await interactorA.saveCurrent();
 
         const stateB = new State(new FakeFabricCanvas() as never, new NullFontProvider());
-        const ctrlB = new FileIOInteractorImpl(stateB, repo, new FakeUI(), basename);
-        await ctrlB.openFile();
+        const interactorB = new FileIOInteractorImpl(stateB, repo, new FakeUI(), basename);
+        await interactorB.openFile();
 
         const snap = stateB.toSnapshot() as {
           canvas: { objects: Array<{ path?: ReadonlyArray<ReadonlyArray<unknown>> }> };
@@ -618,7 +618,7 @@ describe('FileIOInteractor', () => {
       test('text と outlined path が混在する canvas も同一 snapshot で復元される', async () => {
         const repo = new FakeRepo();
         const stateA = new State(new FakeFabricCanvas() as never, new NullFontProvider());
-        const ctrlA = new FileIOInteractorImpl(stateA, repo, new FakeUI(), basename);
+        const interactorA = new FileIOInteractorImpl(stateA, repo, new FakeUI(), basename);
         await loadCanvasContent(stateA, [
           {
             type: 'i-text',
@@ -632,11 +632,11 @@ describe('FileIOInteractor', () => {
           ...SAMPLE_PATH_OBJECTS,
         ]);
         const savedSnapshot = stateA.toSnapshot();
-        await ctrlA.saveCurrent();
+        await interactorA.saveCurrent();
 
         const stateB = new State(new FakeFabricCanvas() as never, new NullFontProvider());
-        const ctrlB = new FileIOInteractorImpl(stateB, repo, new FakeUI(), basename);
-        await ctrlB.openFile();
+        const interactorB = new FileIOInteractorImpl(stateB, repo, new FakeUI(), basename);
+        await interactorB.openFile();
 
         expect(stateB.toSnapshot()).toEqual(savedSnapshot);
         expect(stateB.getAllObjects()).toHaveLength(3);

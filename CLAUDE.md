@@ -43,10 +43,10 @@ src/
 ├── preload.ts                   # RENDERER / isolated world (contextBridge + ipcRenderer.invoke = IPC 出口)
 ├── window/                      # RENDERER / main world (アプリ本体)
 │   ├── renderer.ts              # entry / Composition Root (DI のみ)
-│   ├── core/                    # Entities: path/ history/ document/ state-interface.ts / object-id.ts
+│   ├── core/                    # Entities: path/ history/ document/ state-interface.ts / object-id.ts / font-catalog.ts
 │   ├── usecases/                # Use Case (Interactor + Port): tools/ menu/ document-interactor.ts / ui-port-interface.ts / host-shell-interface.ts / canvas-port-interface.ts
 │   ├── repository/              # Gateway: document-interface.ts + file-system-document.ts
-│   ├── controllers/             # Input Adapter (外→内): canvas-input / keyboard / menu / toolbar / view
+│   ├── controllers/             # Input Adapter (外→内): canvas-input / keyboard / menu / toolbar / sidebar / view
 │   ├── presenter/               # Presenter + Frameworks 接触面 (内→外、fabric/DOM 癒着レイヤ)
 │   └── menu-action-registry.ts  # Composition Wiring: id → use case dispatch table
 ├── electron-ipc.ts              # IPC 契約 (ElectronIPC interface + Ipc* result types)
@@ -112,15 +112,47 @@ preload は `const api: ElectronIPC = {...}` で型強制 → 契約とずれた
 
 `host/ipc.ts` は close guard 用の `isDirty` / `allowClose` 状態も保持し、`isCloseBlocked()` で `host/main.ts` の `wireCloseGuard` に露出。
 
-### 5 Controllers (`window/controllers/`)
+### UI 領域の用語 (Toolbar / Sidebar)
 
-| Controller              | 入力                                                  | dispatch 先                                          |
-| ----------------------- | ----------------------------------------------------- | ---------------------------------------------------- |
-| `CanvasInputController` | DOM mousedown/move + fabric mouse/selection/object 系 | Tool, Alt+wheel zoom                                 |
-| `KeyboardController`    | document keydown                                      | MenuAction, Tool command, Enter で IText commit      |
-| `MenuController`        | HTML メニューバー click + `host.onCopyRequest`        | MenuAction                                           |
-| `ToolbarController`     | toolbar input/button + mode buttons                   | `state.applyPropsToSelection` / MenuAction / setMode |
-| `ViewController`        | window resize / close guard / docStatus               | canvas resize / title bar / close guard              |
+**混同しないこと**。旧 `#toolbar` (横並び 1 段) を Figma 風レイアウトに解体した名残で、
+以前は sidebar を触るコードが `Toolbar*` と名乗っていた。現在は実体に揃えてある。
+
+| 用語        | DOM                                           | 中身                                                   | 担当ファイル                                                                                           |
+| ----------- | --------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| **Toolbar** | `#drawing-toolbar` (画面下中央フローティング) | ツール (= mode) 選択ボタンのみ (`.mode-btn`)           | `presenter/toolbar.ts` (生成) / `controllers/toolbar.ts` (click → switchMode)                          |
+| **Sidebar** | `#drawing-sidebar` (右パネル)                 | フォント / 変形 / スナップ / アクション / エクスポート | `presenter/sidebar.ts` (内→外) / `controllers/sidebar.ts` (外→内) / `presenter/sidebar-chrome.ts` (枠) |
+
+- Sidebar は **3 ファイルに分かれる**: 表示同期 (Presenter) / 入力 dispatch (Controller) / 枠の幅・折りたたみ・Tab hide (chrome helper)。「サイドバーのロジック」を探すときは chrome だけ見て終わらないこと
+- 現状 Sidebar は **選択 (fabric selection イベント) にしか反応しない**。mode 変更は誰にも通知されないので、mode に応じた出し分けを足すには State 側に通知経路を足すのが先 (Controller から Presenter を蹴らない)
+- `keyboard.ts` の `isTextFieldFocused()` は **領域を区別しない**「どこかの input/select/textarea に focus」判定 (旧名 `isToolbarInput` は誤称だった)
+
+**Sidebar の DOM 取得規約** (`window.electronIPC` の 4 ファイル規約と同型):
+
+- サイドバー配下の DOM を引いてよいのは **`presenter/sidebar-elements.ts` の `querySidebarElements(root)` だけ**。mount 時に 1 回だけ実行し、全要素を fail-fast 検証 (`as HTMLInputElement` の裸キャストを新規に書かない)
+- consumer (`controllers/sidebar.ts` / `presenter/sidebar.ts` / `presenter/font-current.ts` / `presenter/sidebar-font-list.ts`) は `SidebarElements` を **DI で受け取る**。自前で `getElementById` しない
+- `SidebarElements` は section 別ネスト (`font` / `transform` / `snap` / `actions` / `export`)。各 section は container 要素 (`.section`) を持つので、Step 3 の「mode / 選択に応じた section 出し分け」はここに乗る
+- **module-level で DOM を触らない** (import 時副作用禁止)。旧 `font-enumeration.ts` が module-level で `getElementById` + `populateFontList()` を実行しており、`testEnvironment: 'node'` の jest から import できない原因だった
+
+**フォント一覧の 3 分割** (旧 `presenter/font-enumeration.ts` の解体先):
+
+| ファイル                         | 責務                                                         | 依存           |
+| -------------------------------- | ------------------------------------------------------------ | -------------- |
+| `core/font-catalog.ts`           | `parseStyle` / `styleValue` / `FontCatalog` (family → style) | pure (test 済) |
+| `presenter/font-list-loader.ts`  | `window.queryLocalFonts` を叩いて catalog に詰める           | Web API        |
+| `presenter/sidebar-font-list.ts` | catalog の内容で family / style select を埋める              | DOM            |
+
+`populateStyleList` を free function のまま置いてあるのは、**SidebarController (family change 時) と SidebarPresenter (選択同期時) の両方から呼ぶため**。Presenter のメソッドにすると Controller → Presenter を蹴る経路ができてしまう。
+
+### 6 Controllers (`window/controllers/`)
+
+| Controller              | 入力                                                  | dispatch 先                                     |
+| ----------------------- | ----------------------------------------------------- | ----------------------------------------------- |
+| `CanvasInputController` | DOM mousedown/move + fabric mouse/selection/object 系 | Tool, Alt+wheel zoom                            |
+| `KeyboardController`    | document keydown                                      | MenuAction, Tool command, Enter で IText commit |
+| `MenuController`        | HTML メニューバー click + `host.onCopyRequest`        | MenuAction                                      |
+| `ToolbarController`     | mode button click                                     | `switchMode` + is-active class 追従             |
+| `SidebarController`     | sidebar の input/button (font / 変形 / snap / action) | `state.applyPropsToSelection` / MenuAction      |
+| `ViewController`        | window resize / close guard / docStatus               | canvas resize / title bar / close guard         |
 
 各 Controller は `xxx-interface.ts` + `xxx.ts` の 2 ファイル組。consumer は interface 側に依存。`attach()` / `detach()` は self-wiring。
 
@@ -128,7 +160,7 @@ preload は `const api: ElectronIPC = {...}` で型強制 → 契約とずれた
 
 - `fabric.Canvas` を持ってよい Controller は **`canvas-input` (イベント配線 + 座標変換) と `view` (リサイズ) のみ**。用途もその 2 つに限定
 - 状態の読み取り・変更 (選択有無 / IText 編集中判定 / 編集確定など) は全 Controller が **State API 経由** (`getActiveObjects()` / `isEditingText()` / `exitTextEditing()` 等)。`canvas.getActiveObject()` の直接参照を新規に書かない
-- **内→外 (表示同期) は Controller の仕事ではない**: `ToolbarPresenter` / `AnchorOverlayPresenter` が fabric イベント (`selection:*` / `object:rotating` / `after:render`) を自分で購読する (Presenter self-wiring、canvas は constructor 注入)。Controller が Presenter を蹴る経路を新規に作らない
+- **内→外 (表示同期) は Controller の仕事ではない**: `SidebarPresenter` / `AnchorOverlayPresenter` が fabric イベント (`selection:*` / `object:rotating` / `after:render`) を自分で購読する (Presenter self-wiring、canvas は constructor 注入)。Controller が Presenter を蹴る経路を新規に作らない
 
 ### 文字モデル (コードからは見えにくい)
 
@@ -201,7 +233,7 @@ Jest + ts-jest、`test/` 配下。
 - **Pure data** (core/ + Adapter) は fabric / DOM 抜きで unit test
 - **Tool / Interactor / State business method** は **real `class State` + fabric 最小 stub** (`test/fabric-stub.ts`、`installFabricStub()`) で test。fixture 投入は `state.applySnapshot()` 経由、assertion は State の public API のみ (stub の internal field は peek しない)
 - **Controller は基本 test しない** (DOM event simulation コスト見合わず)
-- `presenter/outline-conversion` は top-level で `document.getElementById` を呼ぶので test 側で `jest.mock` で stub
+- **module-level の `document.getElementById` は src 全体でゼロ** (Step 2 で解消)。テスト側の `jest.mock` による DOM stub は不要
 
 ## 新規コード ガイドライン
 

@@ -2,22 +2,24 @@
 //
 // mojiplay の主要なドローイング機能 (文字配置 / アウトライン化 / アンカー編集 /
 // ペン操作 / pan/zoom 等) を担う画面。`#screen-drawing` wrapper 配下の DOM
-// (`drawing-*` prefix の全 ID) と Controller / State / Tool / sidebar を生成
+// (`drawing-*` prefix の全 ID) と Controller / State / Tool / Presenter を生成
 // して紐付ける。
 //
 // 別 screen (例: 将来追加予定の font-viewer) との切替は ScreenManager 経由。
 // 切替トリガを呼ぶために deps として ScreenManager を受け取っておく
-// (= 例: bottom-bar から「Font Viewer を開く」ボタンを足した時に
+// (= 例: toolbar から「Font Viewer を開く」ボタンを足した時に
 // `deps.screenManager.show('font-viewer')` を click handler から呼べる)。
 //
 // 起動シーケンス (mount):
-//   1. fabric.Canvas / State / HostShell / UIPort / Repository / FileIOInteractor 構築
-//   2. Tool インスタンスと ToolbarPresenter (modeButtons) 生成
-//   3. MenuActionRegistry 構築 + screen 内で wiring validate
-//   4. 5 個の Controller を構築して attach
-//   5. Presenter (Toolbar / AnchorOverlay) を self-wiring attach
-//   6. attachSidebar() でサイドバー operate を有効化
-// unmount で全 Presenter / Controller detach + sidebar detach。
+//   1. SidebarElements / FontCatalog を用意 (DOM 取得と font 一覧の器)
+//   2. fabric.Canvas / State / HostShell / UIPort / Repository / FileIOInteractor 構築
+//   3. Tool インスタンスと mode button (buildModeButtons) 生成
+//   4. MenuActionRegistry 構築 + screen 内で wiring validate
+//   5. 6 個の Controller を構築して attach
+//   6. Presenter (Sidebar / AnchorOverlay) を self-wiring attach
+//   7. attachSidebarChrome() でサイドバーの枠 (幅 / 折りたたみ) を有効化
+//   8. システムフォント列挙を fire-and-forget で開始 (失敗時は HTML の既定値のまま)
+// unmount で全 Presenter / Controller detach + sidebar chrome detach。
 
 import type { Tool } from '../../usecases/tools/tool-interface';
 import type { Mode } from '../../core/state-interface';
@@ -39,21 +41,28 @@ import {
   type MenuActions,
   validateMenuActionWiring,
 } from '../../menu-action-registry';
-import { ToolbarPresenter } from '../toolbar';
+import { buildModeButtons } from '../toolbar';
+import { SidebarPresenter } from '../sidebar';
 import { AnchorOverlayPresenter } from '../anchor-overlay';
 import { currentTextProps } from '../font-current';
-import { attachSidebar } from '../sidebar';
+import { attachSidebarChrome } from '../sidebar-chrome';
+import { querySidebarElements } from '../sidebar-elements';
+import { refreshFontLists } from '../sidebar-font-list';
+import { loadSystemFonts } from '../font-list-loader';
+import { FontCatalog } from '../../core/font-catalog';
 
 import type { CanvasInputController } from '../../controllers/canvas-input-interface';
 import type { KeyboardController } from '../../controllers/keyboard-interface';
 import type { MenuController } from '../../controllers/menu-interface';
 import type { ViewController } from '../../controllers/view-interface';
 import type { ToolbarController } from '../../controllers/toolbar-interface';
+import type { SidebarController } from '../../controllers/sidebar-interface';
 import { CanvasInputControllerImpl } from '../../controllers/canvas-input';
 import { KeyboardControllerImpl } from '../../controllers/keyboard';
 import { MenuControllerImpl } from '../../controllers/menu';
 import { ViewControllerImpl } from '../../controllers/view';
 import { ToolbarControllerImpl } from '../../controllers/toolbar';
+import { SidebarControllerImpl } from '../../controllers/sidebar';
 
 import type { Screen } from './screen-interface';
 import type { ScreenManager } from './screen-manager';
@@ -69,7 +78,7 @@ function basename(p: string): string {
 }
 
 export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
-  // deps.screenManager は将来 bottom-bar の screen 切替ボタンから呼ばれる予定。
+  // deps.screenManager は将来 toolbar の screen 切替ボタンから呼ばれる予定。
   // 現状は使用箇所が無いので unused suppress (`_deps`)。
 
   const root = document.getElementById('screen-drawing');
@@ -82,7 +91,12 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
     root,
 
     async mount(): Promise<void> {
-      // ── 1. fabric / State / Host / UI / Repo / FileIO ────────────────
+      // ── 1. Sidebar DOM / FontCatalog ─────────────────────────────────
+      // DOM 取得はここ 1 か所だけ (consumer は els を DI で受け取る)。
+      const els = querySidebarElements(root);
+      const catalog = new FontCatalog();
+
+      // ── 2. fabric / State / Host / UI / Repo / FileIO ────────────────
       const container = document.getElementById('drawing-canvas-container') as HTMLDivElement;
       if (!container) throw new Error('#drawing-canvas-container not found');
 
@@ -107,10 +121,10 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
       const repo = new FileSystemDocumentRepository();
       const fileIO = new FileIOInteractorImpl(state, repo, ui, basename);
 
-      // ── 2. Tool インスタンスと ToolbarPresenter ──────────────────────
+      // ── 3. Tool インスタンスと mode button ───────────────────────────
       const selectGroupTool = new SelectGroupTool();
       const selectCharTool = new SelectCharTool();
-      const textTool = new TextTool(currentTextProps);
+      const textTool = new TextTool(() => currentTextProps(els));
       const penAddTool = new PenAddTool();
       const penRemoveTool = new PenRemoveTool();
       // mode map 外の特殊ツール: 中ボタン drag で CanvasInputController が直接 routing
@@ -124,12 +138,11 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
         'pen-remove': penRemoveTool,
       };
 
-      const toolButtonsContainer = document.getElementById('drawing-tool-buttons');
-      if (!toolButtonsContainer) throw new Error('#drawing-tool-buttons not found');
-      const toolbarPresenter = new ToolbarPresenter(canvas);
-      const modeButtons = toolbarPresenter.buildModeButtons(
+      const modeButtonsContainer = document.getElementById('drawing-toolbar-modes');
+      if (!modeButtonsContainer) throw new Error('#drawing-toolbar-modes not found');
+      const modeButtons = buildModeButtons(
         Object.values(tools),
-        toolButtonsContainer,
+        modeButtonsContainer,
         // ToolbarController が attach 時に setMode を上書きで配線するため、ここの
         // onSelect は初期 placeholder (= 同期 init flow なので race 無し)。
         () => {
@@ -137,12 +150,12 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
         },
       );
 
-      // ── 3. MenuActionRegistry ────────────────────────────────────────
+      // ── 4. MenuActionRegistry ────────────────────────────────────────
       const menuActions: MenuActions = makeMenuActions({ state, ui, fileIO, host });
       // screen root を root として渡し、他 screen の data-action と混ざらない validation に
       validateMenuActionWiring(menuActions, root);
 
-      // ── 4. Controllers ───────────────────────────────────────────────
+      // ── 5. Controllers ───────────────────────────────────────────────
       const viewController: ViewController = new ViewControllerImpl({
         host,
         fileIO,
@@ -170,9 +183,14 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
       const toolbarController: ToolbarController = new ToolbarControllerImpl({
         state,
         tools,
+        modeButtons,
+      });
+      const sidebarController: SidebarController = new SidebarControllerImpl({
+        state,
         selectCharTool,
         menuActions,
-        modeButtons,
+        els,
+        catalog,
       });
 
       const controllers = [
@@ -181,27 +199,35 @@ export function createDrawingScreen(_deps: DrawingScreenDeps): Screen {
         keyboardController,
         menuController,
         toolbarController,
+        sidebarController,
       ] as const;
       controllers.forEach((c) => c.attach());
 
       // 内→外の Presenter self-wiring。Controller の後に attach することで、
-      // selection イベント時に Tool の選択処理 → toolbar 同期の順を保つ
+      // selection イベント時に Tool の選択処理 → sidebar 同期の順を保つ
       // (fabric の listener は購読順に発火する)。
       const presenters = [
-        toolbarPresenter,
+        new SidebarPresenter({ canvas, els, catalog }),
         new AnchorOverlayPresenter({ state, selectCharTool, canvas }),
       ] as const;
       presenters.forEach((p) => p.attach());
 
-      // ── 5. Sidebar (DOM-only helper) ─────────────────────────────────
+      // ── 7. Sidebar chrome (幅 / 折りたたみ / Tab hide。DOM-only helper) ──
       const sidebarRoot = document.getElementById('drawing-sidebar');
       if (!sidebarRoot) throw new Error('#drawing-sidebar not found');
-      const detachSidebar = attachSidebar(sidebarRoot);
+      const detachSidebarChrome = attachSidebarChrome(sidebarRoot);
+
+      // ── 8. システムフォント列挙 ───────────────────────────────────────
+      // 数百 ms かかるので await せず fire-and-forget。取得できたら select を
+      // 差し替え、失敗時は index.html の既定 (Arial / Regular) がそのまま残る。
+      void loadSystemFonts(catalog).then((loaded) => {
+        if (loaded) refreshFontLists(els, catalog);
+      });
 
       detach = (): void => {
         for (const p of presenters) p.detach();
         for (const c of controllers) c.detach();
-        detachSidebar();
+        detachSidebarChrome();
       };
     },
 
