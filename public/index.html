@@ -80,7 +80,7 @@
               </button>
             </div>
             <div class="sidebar-content">
-              <div class="sidebar-section">
+              <div id="drawing-section-font" class="sidebar-section">
                 <div class="sidebar-section-title">フォント</div>
                 <label for="drawing-font-family">ファミリー</label>
                 <select id="drawing-font-family">
@@ -96,7 +96,7 @@
                 <input id="drawing-font-color" type="color" value="#000000" />
               </div>
 
-              <div class="sidebar-section">
+              <div id="drawing-section-transform" class="sidebar-section">
                 <div class="sidebar-section-title">変形</div>
                 <label for="drawing-rotation">回転 (°)</label>
                 <div class="sidebar-row">
@@ -113,6 +113,7 @@
               </div>
 
               <div
+                id="drawing-section-snap"
                 class="sidebar-section"
                 title="白矢印モードでの移動時、グリッドに吸着します (Alt で一時バイパス)"
               >
@@ -134,7 +135,7 @@
                 />
               </div>
 
-              <div class="sidebar-section">
+              <div id="drawing-section-actions" class="sidebar-section">
                 <div class="sidebar-section-title">アクション</div>
                 <button id="drawing-btn-select-all">全選択</button>
                 <button id="drawing-btn-clear">クリア</button>
@@ -143,7 +144,7 @@
                 </button>
               </div>
 
-              <div class="sidebar-section">
+              <div id="drawing-section-export" class="sidebar-section">
                 <div class="sidebar-section-title">エクスポート</div>
                 <button id="drawing-btn-export" class="btn-primary">PNG書き出し</button>
               </div>
