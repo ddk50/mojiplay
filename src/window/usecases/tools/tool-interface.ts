@@ -48,7 +48,7 @@ export interface CanvasMouseDownInput {
   readonly hasTarget: boolean;
 }
 
-// ツール自身が UI に表示するメタ情報。toolbar が tools 配列を iterate して
+// ツール自身が UI に表示するメタ情報。toolbar (下部フローティング) が tools 配列を iterate して
 // 動的にボタンを生成する際に使う。
 //
 // - id:      currentMode キーと同じ識別子 ('select-group' 等)
@@ -58,7 +58,7 @@ export interface CanvasMouseDownInput {
 //            するのは許容 (public/style.css 側で定義済の package である前提)
 //
 // 依存方向: tool → renderer の一方通行。tool が UI 表現の文字列を自己完結で
-// 宣言し、renderer (toolbar.ts) は受け取った文字列をそのまま innerHTML に
+// 宣言し、presenter (toolbar.ts) は受け取った文字列をそのまま innerHTML に
 // 流す pure sink として振る舞う。中間 registry は使わない (key と registry
 // 双方の維持コストを避けるため)。
 //

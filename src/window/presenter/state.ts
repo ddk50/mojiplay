@@ -292,10 +292,10 @@ export class State implements StateContract {
 
     if (cmds.length === 1) {
       this.pushCommand(cmds[0]);
-      logger.debug('[history] push toolbar property change');
+      logger.debug('[history] push sidebar property change');
     } else if (cmds.length > 1) {
       this.pushCommand({ kind: 'compound', commands: cmds });
-      logger.debug(`[history] push compound (toolbar) ${cmds.length} changes`);
+      logger.debug(`[history] push compound (sidebar) ${cmds.length} changes`);
     }
   }
 
@@ -343,10 +343,10 @@ export class State implements StateContract {
 
     if (cmds.length === 1) {
       this.pushCommand(cmds[0]);
-      logger.debug('[history] push toolbar group rotation');
+      logger.debug('[history] push sidebar group rotation');
     } else if (cmds.length > 1) {
       this.pushCommand({ kind: 'compound', commands: cmds });
-      logger.debug(`[history] push compound (toolbar rotation) ${cmds.length} changes`);
+      logger.debug(`[history] push compound (sidebar rotation) ${cmds.length} changes`);
     }
   }
 

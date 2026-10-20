@@ -20,10 +20,6 @@
 //   実装の peek (= leakage) になる。fixture も assertion も全て State の public
 //   API 経由で行う。
 
-// State は outline-conversion 経由で font-enumeration を import し、後者は top-level で
-// document.getElementById を呼ぶため testEnvironment: 'node' で爆発する。SelectGroup
-// path では outline-conversion を一切触らないので module ごと stub する。
-
 import { installFabricStub, FakeFabricCanvas } from './fabric-stub';
 
 installFabricStub();

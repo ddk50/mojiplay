@@ -20,8 +20,9 @@ import type { MenuActionId } from '../../menu-action-registry';
 export interface BindingContext {
   /** canvas に active object (selection) があるか。 */
   readonly hasActiveObject: boolean;
-  /** focus が toolbar の input 系要素にあるか (= browser の標準動作を妨げないため)。 */
-  readonly isToolbarInput: boolean;
+  /** focus が入力系要素 (input / select / textarea) にあるか。
+   *  UI 領域 (toolbar / sidebar / menu) は問わない = browser の標準動作を妨げないため。 */
+  readonly isTextFieldFocused: boolean;
 }
 
 /** どの key + modifier の組合せにマッチさせるか (`undefined` は don't care)。 */
@@ -44,14 +45,14 @@ export interface KeyBinding {
    * 抑止するとフォーム上で副作用がある場合があるので false。
    */
   readonly preventDefault?: boolean;
-  /** 追加の発火条件 (selection 必要 / toolbar input でない 等)。 */
+  /** 追加の発火条件 (selection 必要 / 入力欄に focus が無い 等)。 */
   readonly precondition?: (ctx: BindingContext) => boolean;
 }
 
-const requireSelectionAndNotToolbar = (ctx: BindingContext): boolean =>
-  !ctx.isToolbarInput && ctx.hasActiveObject;
+const requireSelectionAndNotTextField = (ctx: BindingContext): boolean =>
+  !ctx.isTextFieldFocused && ctx.hasActiveObject;
 
-const notToolbarInput = (ctx: BindingContext): boolean => !ctx.isToolbarInput;
+const notTextFieldFocused = (ctx: BindingContext): boolean => !ctx.isTextFieldFocused;
 
 export const KEY_BINDINGS: ReadonlyArray<KeyBinding> = [
   // ── capture phase ─────────────────────────────────────────────────────
@@ -86,12 +87,12 @@ export const KEY_BINDINGS: ReadonlyArray<KeyBinding> = [
 
   // ── bubble phase ───────────────────────────────────────────────────────
 
-  /** Cmd+C: 選択を PNG copy。toolbar input focus 中は browser 標準コピーを優先。 */
+  /** Cmd+C: 選択を PNG copy。入力欄に focus 中は browser 標準コピーを優先。 */
   {
     match: { meta: true, shift: false, alt: false, keys: ['c', 'C'] },
     phase: 'bubble',
     action: 'copy',
-    precondition: requireSelectionAndNotToolbar,
+    precondition: requireSelectionAndNotTextField,
   },
 
   /** Delete / Backspace: 選択削除。preventDefault 無し (browser 標準を妨げない)。 */
@@ -100,7 +101,7 @@ export const KEY_BINDINGS: ReadonlyArray<KeyBinding> = [
     phase: 'bubble',
     action: 'delete',
     preventDefault: false,
-    precondition: notToolbarInput,
+    precondition: notTextFieldFocused,
   },
 
   /** Cmd+D: 選択を複製 (Affinity / Sketch 慣例)。 */
@@ -108,7 +109,7 @@ export const KEY_BINDINGS: ReadonlyArray<KeyBinding> = [
     match: { meta: true, shift: false, alt: false, keys: ['d', 'D'] },
     phase: 'bubble',
     action: 'duplicate',
-    precondition: requireSelectionAndNotToolbar,
+    precondition: requireSelectionAndNotTextField,
   },
 
   /** Cmd+Shift+O: 選択中テキストをアウトライン化 (Illustrator 慣例)。 */
