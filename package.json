@@ -30,7 +30,7 @@
     "@types/fabric": "^5.3.11",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.9.9",
-    "electron": "^43.8.0",
+    "electron": "^43.8.1",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
     "eslint": "^10.12.0",
