@@ -30,10 +30,10 @@
     "@types/fabric": "^5.3.11",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.9.9",
-    "electron": "^43.8.0",
-    "electron-builder": "^26.15.3",
+    "electron": "^43.8.3",
+    "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2",
-    "eslint": "^10.12.0",
+    "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "fabric": "5.5.2",
     "fontkit": "^2.0.4",
@@ -42,7 +42,7 @@
     "prettier": "^3.9.10",
     "ts-jest": "^29.4.15",
     "typescript": "^6.0.2",
-    "typescript-eslint": "^8.71.2"
+    "typescript-eslint": "^8.72.0"
   },
   "build": {
     "appId": "com.kazushi.mojiplay",
