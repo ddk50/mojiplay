@@ -12,7 +12,7 @@ import type {
   GlyphQuery,
   GlyphPathResult,
 } from '../usecases/font-provider-interface';
-import { parseStyle } from './font-enumeration';
+import { parseStyle } from '../core/font-catalog';
 import { logger } from './logger';
 
 export class FontkitFontProvider implements FontProvider {
