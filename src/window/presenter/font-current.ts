@@ -1,4 +1,4 @@
-// 現在のサイドバー入力 (font / weight / italic / size / color) から TextCreateProps /
+// 現在のサイドバー入力 (font / weight / italic / size / color / 組み方向) から TextCreateProps /
 // SelectionProps を組み立てるヘルパ。
 //
 // TextTool (新規 IText 生成) と SidebarController (サイドバー変更時の
@@ -27,5 +27,6 @@ export function currentTextProps(els: SidebarElements): TextCreateProps {
     fontWeight,
     fontStyle,
     fill: els.font.color.value,
+    writingMode: els.font.writingMode.value === 'vertical' ? 'vertical' : 'horizontal',
   };
 }

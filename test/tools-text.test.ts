@@ -20,6 +20,7 @@ const PROPS: TextCreateProps = {
   fontWeight: 400,
   fontStyle: 'normal',
   fill: '#000000',
+  writingMode: 'horizontal',
 };
 
 function setup() {
@@ -50,6 +51,21 @@ describe('TextTool', () => {
       fontStyle: 'normal',
       fill: '#000000',
     });
+  });
+
+  test('縦書き指定では 1 文字 1 行折り返しの Textbox (列中央揃え) が生成される', () => {
+    const { state } = setup();
+    const tool = new TextTool(() => ({ ...PROPS, writingMode: 'vertical' }));
+
+    tool.onCanvasMouseDown({ worldX: 50, worldY: 100, hasTarget: false }, state);
+
+    expect(snapshotObjects(state)[0]).toMatchObject({
+      type: 'textbox',
+      left: 50,
+      top: 100,
+      fontSize: 72,
+    });
+    expect(state.isEditingText()).toBe(true);
   });
 
   test('既存オブジェクト上のクリック (hasTarget=true) では IText を生成しない', () => {

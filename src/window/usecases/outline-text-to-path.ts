@@ -77,10 +77,20 @@ export async function outlineTextToPath(
   });
   if (!glyph) return null;
 
-  const { left: pathLeft, top: pathTop } = computeOutlinePathPosition(
+  // computeOutlinePathPosition は angle=0 / scale=1 の座標系での Path 左上を返す。
+  // fabric は left/top を原点に scale → rotate を掛けるので、Text 原点からのオフセットを
+  // 同じ変換で world に写さないと回転 / 拡大済み文字 (縦書きの「ー」等) がずれる。
+  const local = computeOutlinePathPosition(
     { left: text.left, top: text.top, fontSize: text.fontSize },
     { minX: glyph.bbox.minX, minY: glyph.bbox.minY },
   );
+  const ox = (local.left - text.left) * text.scaleX;
+  const oy = (local.top - text.top) * text.scaleY;
+  const rad = (text.angle * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const pathLeft = text.left + ox * cos - oy * sin;
+  const pathTop = text.top + ox * sin + oy * cos;
 
   // 元 Text の data から objectId / type を除外して outlined: true を付与
   // (型変更 Text → Path は新 ID 発行する規約。CLAUDE.md「ID と type の分離」参照)

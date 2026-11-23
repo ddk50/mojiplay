@@ -13,8 +13,8 @@
  * access を不要にしている。fabric 6 で値が変わったら CI で位置回帰テストが落ちる
  * (test/outline-position.test.ts)。
  */
-const FABRIC_FONT_SIZE_MULT = 1.13;
-const FABRIC_FONT_SIZE_FRACTION = 0.222;
+export const FABRIC_FONT_SIZE_MULT = 1.13;
+export const FABRIC_FONT_SIZE_FRACTION = 0.222;
 
 export interface OutlineTextAnchor {
   readonly left: number;

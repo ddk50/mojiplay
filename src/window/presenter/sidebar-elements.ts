@@ -29,6 +29,7 @@ export function querySidebarElements(root: ParentNode): SidebarElements {
     style: req<HTMLSelectElement>(root, 'drawing-font-style'),
     size: req<HTMLInputElement>(root, 'drawing-font-size'),
     color: req<HTMLInputElement>(root, 'drawing-font-color'),
+    writingMode: req<HTMLSelectElement>(root, 'drawing-text-writing-mode'),
   };
   const transform: TransformSectionElements = {
     section: req(root, 'drawing-section-transform'),

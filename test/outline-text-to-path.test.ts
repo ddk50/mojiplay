@@ -114,6 +114,20 @@ describe('outlineTextToPath', () => {
     expect(spec!.angle).toBe(45);
   });
 
+  test('回転 / 拡大済み Text では Text 原点からのオフセットも同じ変換で world に写す', async () => {
+    const fp = new FakeFontProvider();
+    fp.result = { pathData: 'M0 0', bbox: { minX: 5, minY: -50, maxX: 10, maxY: 0 } };
+    const base = { ...defaultProps(), left: 100, top: 200, fontSize: 72 };
+    const flat = (await outlineTextToPath(base, fp))!;
+    const dx = flat.left - 100;
+    const dy = flat.top - 200;
+
+    const rotated = (await outlineTextToPath({ ...base, angle: 90, scaleX: 2, scaleY: 3 }, fp))!;
+    // R(90°)·(2dx, 3dy) = (-3dy, 2dx)
+    expect(rotated.left).toBeCloseTo(100 - 3 * dy);
+    expect(rotated.top).toBeCloseTo(200 + 2 * dx);
+  });
+
   test('data: 元の objectId / type を捨て、outlined: true を付与、groupId は引き継ぎ', async () => {
     const fp = new FakeFontProvider();
     const spec = await outlineTextToPath(defaultProps(), fp);

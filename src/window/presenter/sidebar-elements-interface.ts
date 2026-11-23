@@ -16,6 +16,8 @@ export interface FontSectionElements {
   readonly style: HTMLSelectElement;
   readonly size: HTMLInputElement;
   readonly color: HTMLInputElement;
+  /** 新規テキストの組み方向 (horizontal / vertical)。生成時に読むだけ。 */
+  readonly writingMode: HTMLSelectElement;
 }
 
 export interface TransformSectionElements {
