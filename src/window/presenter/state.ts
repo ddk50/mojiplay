@@ -62,7 +62,15 @@ import {
   getPathOffset,
   markPathDirty,
   recomputePathDimensions,
+  forceOneGraphemePerLine,
+  installGlyphTransform,
 } from './fabric-internals';
+import {
+  pivotAboveBaseline,
+  placeVerticalChar,
+  verticalGlyphTransform,
+} from '../core/vertical-text';
+import { FABRIC_FONT_SIZE_MULT } from '../core/outline-position';
 
 export interface CreateStateOptions {
   /** History 上限。default 100 */
@@ -105,6 +113,10 @@ export class State implements StateContract {
   // 現在のツールモード。setMode で更新、commitActiveText の selectable 判定で参照。
   // Controller 側の Tool dispatch / button class 切替は依然 Controller の責務。
   private currentMode: Mode = 'select-group';
+
+  // 縦書きで生成した編集中 Textbox。commit (handleTextEditingExited) で縦組み配置に
+  // 分岐するための印。data には載せない (編集中の ephemeral 状態なので)。
+  private readonly verticalDrafts = new WeakSet<fabric.Object>();
 
   constructor(canvas: fabric.Canvas, fontProvider: FontProvider, options: CreateStateOptions = {}) {
     this.canvas = canvas;
@@ -173,7 +185,7 @@ export class State implements StateContract {
   }
 
   createTextAt(x: number, y: number, props: TextCreateProps): void {
-    const it = new fabric.IText('', {
+    const opts = {
       left: x,
       top: y,
       fontFamily: props.fontFamily,
@@ -183,11 +195,39 @@ export class State implements StateContract {
       fill: props.fill,
       selectable: true,
       evented: true,
-    });
+    };
+    const it =
+      props.writingMode === 'vertical'
+        ? this.createVerticalDraft(opts)
+        : new fabric.IText('', opts);
     this.canvas.add(it);
     this.canvas.setActiveObject(it);
     it.enterEditing();
     focusITextTextarea(it);
+  }
+
+  /**
+   * 縦書き編集用の Textbox。1 grapheme = 1 行に強制折り返しして縦 1 列に並べ、
+   * 行送りを 1em (= lineHeight * 1.13 = 1) にする。文字は列中央揃え。
+   * 回転 / 約物寄せは確定後と同じ規則 (core/vertical-text) で描画時に差し込む。
+   */
+  private createVerticalDraft(opts: fabric.ITextboxOptions): fabric.Textbox {
+    const tb = new fabric.Textbox('', {
+      ...opts,
+      // 列幅の初期値は 1em。全角より広い字が入れば fabric が dynamicMinWidth で広げる
+      width: opts.fontSize,
+      splitByGrapheme: true,
+      textAlign: 'center',
+      lineHeight: 1 / FABRIC_FONT_SIZE_MULT,
+    });
+    forceOneGraphemePerLine(tb);
+    installGlyphTransform(tb, pivotAboveBaseline, (ch) => {
+      const t = verticalGlyphTransform(ch);
+      return t.angle === 0 && t.dx === 0 && t.dy === 0 ? null : t;
+    });
+    initITextDimensions(tb);
+    this.verticalDrafts.add(tb);
+    return tb;
   }
 
   pushCommand(cmd: Command): void {
@@ -252,12 +292,12 @@ export class State implements StateContract {
 
   isEditingText(): boolean {
     const active = this.canvas.getActiveObject();
-    return active?.type === 'i-text' && (active as fabric.IText).isEditing === true;
+    return isEditableText(active) && (active as fabric.IText).isEditing === true;
   }
 
   exitTextEditing(): void {
     const active = this.canvas.getActiveObject();
-    if (active?.type === 'i-text' && (active as fabric.IText).isEditing) {
+    if (isEditableText(active) && (active as fabric.IText).isEditing) {
       // → 'text:editing:exited' → handleTextEditingExited が文字分割 commit
       (active as fabric.IText).exitEditing();
     }
@@ -893,6 +933,10 @@ export class State implements StateContract {
     const lines = getITextLines(it);
     const bounds = getITextCharBounds(it);
     const lineHeightPx = fontSize * ((it.lineHeight as number) || 1.16);
+    const vertical = this.verticalDrafts.has(it);
+    // 縦書き: Textbox の 1 行 = 1 文字。行送りは fabric の getHeightOfLine と同式
+    const rowPitch = fontSize * FABRIC_FONT_SIZE_MULT * ((it.lineHeight as number) || 1);
+    const columnWidth = (it.width as number) || fontSize;
 
     const newSelectable = this.currentMode !== 'text';
 
@@ -905,14 +949,26 @@ export class State implements StateContract {
         const char = line[ci];
         // 空白は fabric.Text を生成しない (既存挙動踏襲)。bounds[li][ci].left は
         // 空白を含んだ座標なので、スキップしても次文字の left はズレない。
-        if (char === ' ') {
+        if (char === ' ' || (vertical && char === '\u3000')) {
           charIndex++;
           continue;
         }
 
+        const placement = vertical
+          ? placeVerticalChar({
+              char,
+              columnLeft: startX,
+              columnWidth,
+              rowTop: startY + li * rowPitch,
+              charWidth: bounds[li][ci].width,
+              fontSize,
+            })
+          : { left: startX + bounds[li][ci].left, top: startY + li * lineHeightPx, angle: 0 };
+
         const obj = new fabric.Text(char, {
-          left: startX + bounds[li][ci].left,
-          top: startY + li * lineHeightPx,
+          left: placement.left,
+          top: placement.top,
+          angle: placement.angle,
           fontFamily,
           fontSize,
           fontWeight,
@@ -962,6 +1018,11 @@ export class State implements StateContract {
 /** outlined path の path 配列を正規形 (Q 無し、曲線は全て C) に書き換える。
  *  Q→C は曲線形状が完全一致するため bbox / pathOffset の再計算は不要。
  *  Q が無ければ何もしない (再描画フラグも立てない)。 */
+/** IText 系 (横書き IText / 縦書き Textbox) か。Textbox は IText の subclass。 */
+function isEditableText(o: fabric.Object | null | undefined): boolean {
+  return o?.type === 'i-text' || o?.type === 'textbox';
+}
+
 function normalizeOutlinedPathInPlace(p: fabric.Path): void {
   const pp = p as unknown as { path: PathCommandArray };
   const commands = fromFabricPath(pp.path);

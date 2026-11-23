@@ -23,6 +23,7 @@ import type { Path } from './path/path';
 import type { Command, ObjectSnapshot } from './history/types';
 import type { ObjectId } from './object-id';
 import type { DocumentSnapshot } from './document/snapshot';
+import type { WritingMode } from './vertical-text';
 
 // ── object / path / text 抽象 ─────────────────────────────────────────────
 
@@ -69,6 +70,8 @@ export interface TextCreateProps {
   readonly fontWeight: number | string;
   readonly fontStyle: 'normal' | 'italic';
   readonly fill: string;
+  /** 組み方向 (サイドバーで切替、default 横書き)。 */
+  readonly writingMode: WritingMode;
 }
 
 /** ツールモード識別子。Controller (KeyboardController / CanvasInputController) と

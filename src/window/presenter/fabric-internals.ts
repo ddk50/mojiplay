@@ -63,6 +63,24 @@ interface ITextInternal {
   _textLines?: ReadonlyArray<ReadonlyArray<string>>;
   __charBounds?: ReadonlyArray<ReadonlyArray<{ left: number; width: number }>>;
   initDimensions(): void;
+  calcTextWidth?(): number;
+}
+
+// Textbox の折り返し / 1 文字描画 (縦書き編集用の per-instance override 対象)
+type WrapText = (lines: ReadonlyArray<string>, desiredWidth: number) => string[][];
+type RenderChar = (
+  method: string,
+  ctx: CanvasRenderingContext2D,
+  lineIndex: number,
+  charIndex: number,
+  ch: string,
+  left: number,
+  top: number,
+) => void;
+interface TextboxInternal {
+  _wrapText: WrapText;
+  _renderChar: RenderChar;
+  __charBounds?: ReadonlyArray<ReadonlyArray<{ left: number; width: number }>>;
 }
 
 interface PathInternal {
@@ -94,9 +112,13 @@ export function focusITextTextarea(it: fabric.IText): void {
   (it as unknown as ITextInternal).hiddenTextarea?.focus();
 }
 
-/** IText の width/height/__charBounds を再算出させる。 */
+/** IText の width/height/__charBounds を再算出させる。
+ *  Textbox の initDimensions は (Text と違い) calcTextWidth を呼ばず __charBounds が
+ *  描画時まで空のままなので、全行を明示的に measure させる (IText では冪等)。 */
 export function initITextDimensions(it: fabric.IText): void {
-  (it as unknown as ITextInternal).initDimensions();
+  const t = it as unknown as ITextInternal;
+  t.initDimensions();
+  t.calcTextWidth?.();
 }
 
 /** IText の行分割済み文字列を取得。initDimensions 後に呼ぶこと。 */
@@ -109,6 +131,55 @@ export function getITextCharBounds(
   it: fabric.IText,
 ): ReadonlyArray<ReadonlyArray<{ left: number; width: number }>> {
   return (it as unknown as ITextInternal).__charBounds ?? [];
+}
+
+// ── Textbox (縦書き編集) ──────────────────────────────────────────────
+
+/**
+ * Textbox を「1 grapheme = 1 行」に強制折り返しする (= 縦 1 列表示)。
+ *
+ * splitByGrapheme + 小さい width だけだと、fabric は width を最大 grapheme 幅
+ * (dynamicMinWidth) まで広げた上で再折り返しするため、半角 2 文字が全角 1 文字幅に
+ * 収まって 1 行に並んでしまう。desiredWidth を常に 0 にすると _wrapLine は
+ * 先頭以外の全 grapheme で改行するので 1 行 1 grapheme になる (width は
+ * dynamicMinWidth = 最大字幅に自動で広がる)。splitByGrapheme: true 前提。
+ */
+export function forceOneGraphemePerLine(tb: fabric.Textbox): void {
+  const t = tb as unknown as TextboxInternal;
+  const orig = Object.getPrototypeOf(tb)._wrapText as WrapText;
+  t._wrapText = function (this: fabric.Textbox, lines) {
+    return orig.call(this, lines, 0);
+  };
+}
+
+/**
+ * Textbox の 1 文字描画に字形変形 (回転 / 寄せ) を差し込む。transformFor が null を
+ * 返す文字は fabric 既定の描画のまま。
+ *
+ * fabric の _renderChar に渡る top は baseline (textBaseline='alphabetic')。
+ * 回転中心は baseline から pivotAboveBaseline(fontSize) 上 (core/vertical-text の
+ * placeVerticalChar と同じ点) にする。
+ * forceOneGraphemePerLine 前提 (1 行 1 grapheme なので charIndex 0 の bounds を使う)。
+ */
+export function installGlyphTransform(
+  tb: fabric.Textbox,
+  pivotAboveBaseline: (fontSize: number) => number,
+  transformFor: (ch: string) => { angle: number; dx: number; dy: number } | null,
+): void {
+  const t = tb as unknown as TextboxInternal;
+  const orig = Object.getPrototypeOf(tb)._renderChar as RenderChar;
+  t._renderChar = function (this: fabric.Textbox, method, ctx, li, ci, ch, left, top) {
+    const tr = transformFor(ch);
+    if (!tr) return orig.call(this, method, ctx, li, ci, ch, left, top);
+    const fs = (this.fontSize as number) || 0;
+    const w = t.__charBounds?.[li]?.[ci]?.width ?? 0;
+    const toBaseline = pivotAboveBaseline(fs);
+    ctx.save();
+    ctx.translate(left + w / 2 + tr.dx * fs, top - toBaseline + tr.dy * fs);
+    ctx.rotate((tr.angle * Math.PI) / 180);
+    orig.call(this, method, ctx, li, ci, ch, -w / 2, toBaseline);
+    ctx.restore();
+  };
 }
 
 // ── Path ──────────────────────────────────────────────────────────────────

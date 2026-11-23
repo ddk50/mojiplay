@@ -373,6 +373,68 @@ describe('State.handleTextEditingExited (IText splitting)', () => {
   });
 });
 
+describe('State.handleTextEditingExited (縦書き)', () => {
+  test('縦書き Textbox は 1 行 = 1 文字として列中央・1em 送りで配置、長音は 90° 回転', () => {
+    const { state, canvas } = setupWithText();
+    state.createTextAt(100, 50, {
+      fontFamily: 'Arial',
+      fontSize: 100,
+      fontWeight: 400,
+      fontStyle: 'normal',
+      fill: '#000',
+      writingMode: 'vertical',
+    });
+    const tb = canvas.getActiveObject() as any;
+    expect(tb.type).toBe('textbox');
+
+    // production の forceOneGraphemePerLine + initDimensions 後の状態を simulate
+    tb.text = 'あiー';
+    tb.width = 100;
+    tb.lineHeight = 1 / 1.13; // createVerticalDraft の設定値 (stub の field 初期化で潰れるため再設定)
+    tb._textLines = [['あ'], ['i'], ['ー']];
+    tb.__charBounds = [
+      [{ left: 0, width: 100 }],
+      [{ left: 0, width: 30 }],
+      [{ left: 0, width: 100 }],
+    ];
+
+    canvas.fire('text:editing:exited', { target: tb });
+
+    const snap = state.toSnapshot() as { canvas: { objects: any[] } };
+    const [a, i, bar] = snap.canvas.objects;
+    expect(snap.canvas.objects).toHaveLength(3);
+    // 行送り = fontSize (1em)、列中央揃え
+    expect(a).toMatchObject({ text: 'あ', angle: 0 });
+    expect(a.left).toBeCloseTo(100);
+    expect(a.top).toBeCloseTo(50);
+    expect(i).toMatchObject({ text: 'i', angle: 0 });
+    expect(i.left).toBeCloseTo(100 + (100 - 30) / 2);
+    expect(i.top).toBeCloseTo(150);
+    // 長音は字面中心 (150, 250 + 50) 周りに 90° 回転
+    expect(bar).toMatchObject({ text: 'ー', angle: 90 });
+    expect(bar.left).toBeCloseTo(150 + 50);
+    expect(bar.top).toBeCloseTo(250 + 50 - 50);
+    // groupId は共通、charIndex は通し
+    expect(new Set(snap.canvas.objects.map((o) => o.data.groupId)).size).toBe(1);
+    expect(snap.canvas.objects.map((o) => o.data.charIndex)).toEqual([0, 1, 2]);
+  });
+
+  test('isEditingText / exitTextEditing は縦書き Textbox も対象', () => {
+    const { state, canvas } = setupWithText();
+    state.createTextAt(0, 0, {
+      fontFamily: 'Arial',
+      fontSize: 72,
+      fontWeight: 400,
+      fontStyle: 'normal',
+      fill: '#000',
+      writingMode: 'vertical',
+    });
+    expect(state.isEditingText()).toBe(true);
+    state.exitTextEditing();
+    expect((canvas.getActiveObject() as any)?.isEditing).toBe(false);
+  });
+});
+
 describe('State.clearOverlay', () => {
   test('clearOverlay は contextTop を取れない場合でもエラーにならない', () => {
     const { state } = setupWithText();

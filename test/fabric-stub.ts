@@ -151,7 +151,7 @@ function parseAbsoluteSvgPath(d: string): unknown[][] {
 
 // ── Text ──────────────────────────────────────────────────────────────────
 class FakeFabricText {
-  readonly type: 'text' | 'i-text' = 'text';
+  readonly type: 'text' | 'i-text' | 'textbox' = 'text';
   text: string;
   left = 0;
   top = 0;
@@ -217,7 +217,7 @@ class FakeFabricText {
 }
 
 class FakeFabricIText extends FakeFabricText {
-  override readonly type = 'i-text';
+  override readonly type: 'i-text' | 'textbox' = 'i-text';
   isEditing = false;
   // State.handleTextEditingExited は __charBounds / _textLines / lineHeight を読む。
   // production fabric は initDimensions() で populate するが、stub では test 側が
@@ -234,6 +234,14 @@ class FakeFabricIText extends FakeFabricText {
   initDimensions(): void {
     /* no-op (test 側で事前 populate) */
   }
+}
+
+// 縦書き編集用 (State.createVerticalDraft)。production では 1 grapheme = 1 行に
+// 折り返すが、stub では test 側が _textLines / __charBounds を直接セットする。
+class FakeFabricTextbox extends FakeFabricIText {
+  override readonly type = 'textbox' as const;
+  splitByGrapheme = false;
+  textAlign = 'left';
 }
 
 // ── ActiveSelection ──────────────────────────────────────────────────────
@@ -268,6 +276,7 @@ type FabricObjectLike =
   | FakeFabricPath
   | FakeFabricText
   | FakeFabricIText
+  | FakeFabricTextbox
   | { type: string; data?: { [k: string]: unknown }; [k: string]: unknown };
 
 type CanvasActive = FabricObjectLike | FakeActiveSelection | null;
@@ -479,6 +488,7 @@ export function installFabricStub(): void {
     Path: FakeFabricPath,
     Text: FakeFabricText,
     IText: FakeFabricIText,
+    Textbox: FakeFabricTextbox,
     Point: FakePoint,
     Polyline: { prototype: fakePolylinePrototype },
   };
